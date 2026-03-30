@@ -1,5 +1,3 @@
-# SnakeCharmer
-
 ![SnakeCharmer Logo](logo.webp)
 
 [![CI](https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml/badge.svg)](https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml)
@@ -8,7 +6,7 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 **SnakeCharmer watches your [Trakt](https://trakt.tv) lists and automatically adds missing
-shows to [Medusa](https://pymedusa.com) --- clean, automated, and Sonarr-free.**
+shows to [Medusa](https://pymedusa.com).**
 
 ---
 
