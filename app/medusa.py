@@ -6,15 +6,19 @@ from app.config import MedusaConfig
 
 log = logging.getLogger(__name__)
 
+REQUEST_TIMEOUT = 30
+
 
 class MedusaClient:
     def __init__(self, config: MedusaConfig):
         self.base_url = f"{config.url}/api/v2"
         self.session = requests.Session()
-        self.session.headers.update({
-            "Content-Type": "application/json",
-            "x-api-key": config.api_key,
-        })
+        self.session.headers.update(
+            {
+                "Content-Type": "application/json",
+                "x-api-key": config.api_key,
+            }
+        )
 
     def get_existing_tvdb_ids(self) -> set[int]:
         """Fetch all existing show TVDB IDs from Medusa."""
@@ -36,9 +40,13 @@ class MedusaClient:
         Returns True if added, False if already exists.
         """
         try:
-            self._request("POST", "/series", json={
-                "id": {"tvdb": tvdb_id},
-            })
+            self._request(
+                "POST",
+                "/series",
+                json={
+                    "id": {"tvdb": tvdb_id},
+                },
+            )
             log.info("Added: %s (tvdb:%d)", title, tvdb_id)
             return True
         except requests.HTTPError as e:
@@ -51,6 +59,7 @@ class MedusaClient:
         """Make an HTTP request to the Medusa API."""
         url = f"{self.base_url}{path}"
         try:
+            kwargs.setdefault("timeout", REQUEST_TIMEOUT)
             resp = self.session.request(method, url, **kwargs)
             resp.raise_for_status()
             return resp

@@ -21,11 +21,26 @@ Docker: `docker build -t snakecharmer . && docker run -v $(pwd)/config.yaml:/app
 
 ## Testing
 
-No test suite exists yet. When adding tests:
-- Use pytest with a `tests/` directory mirroring `app/` structure
-- Mock all HTTP calls (requests.Session) — never hit real APIs in tests
-- Config tests: test YAML loading, env var overrides (SNAKECHARMER_* prefix), and validation errors
-- Sync tests: test the diff logic in `run_sync` with mocked Trakt/Medusa clients
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
+
+- Tests live in `tests/` mirroring the `app/` structure
+- All HTTP calls are mocked (requests.Session) — never hit real APIs in tests
+- Use `tmp_path` for config file tests, `monkeypatch` for env var tests
+- Use `patch.object` on client methods or `session.request` for API tests
+
+## Linting
+
+```bash
+pip install ruff
+ruff check .          # lint
+ruff format --check . # format check
+ruff check --fix .    # auto-fix
+```
+
+Config is in `pyproject.toml`. CI runs both lint and format checks.
 
 ## Architecture
 
@@ -41,7 +56,7 @@ Data flow: `main.py` loads config, calls `run_sync()` which instantiates both AP
 
 ## Code Conventions
 
-- Python 3.9+ with type hints (use `str | None` style, not `Optional`)
+- Python 3.10+ with type hints (use `str | None` style, not `Optional`)
 - Dataclasses for config (`AppConfig`, `TraktConfig`, `MedusaConfig`, `SyncConfig`) and data models (`TraktShow`)
 - `requests.Session` per client for connection reuse and shared headers
 - Module-level `log = logging.getLogger(__name__)` in every file
@@ -51,8 +66,5 @@ Data flow: `main.py` loads config, calls `run_sync()` which instantiates both AP
 
 ## Known Gaps
 
-- No HTTP request timeouts on any `requests` call — add `timeout=` param
 - No retry logic in MedusaClient (TraktClient has basic rate-limit retry)
-- No linter/formatter configured — use ruff when adding
-- No dependency lockfile — add `requirements-lock.txt` or switch to pyproject.toml
 - Token refresh in trakt.py can silently fail and fall through to device auth

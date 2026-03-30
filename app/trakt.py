@@ -6,12 +6,13 @@ from dataclasses import dataclass
 
 import requests
 
-from app.config import TraktConfig, PUBLIC_LISTS
+from app.config import TraktConfig
 
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://api.trakt.tv"
 TOKEN_FILE = "trakt_token.json"
+REQUEST_TIMEOUT = 30
 
 
 @dataclass
@@ -27,11 +28,13 @@ class TraktClient:
         self.config = config
         self.token_path = os.path.join(config_dir, TOKEN_FILE)
         self.session = requests.Session()
-        self.session.headers.update({
-            "Content-Type": "application/json",
-            "trakt-api-version": "2",
-            "trakt-api-key": config.client_id,
-        })
+        self.session.headers.update(
+            {
+                "Content-Type": "application/json",
+                "trakt-api-version": "2",
+                "trakt-api-key": config.client_id,
+            }
+        )
 
     def get_shows(self) -> list[TraktShow]:
         """Fetch shows from the configured Trakt list."""
@@ -80,7 +83,7 @@ class TraktClient:
                 break
             params["page"] += 1
 
-        shows = shows[:self.config.limit]
+        shows = shows[: self.config.limit]
         log.info("Fetched %d shows from Trakt [%s]", len(shows), self.config.list)
         return shows
 
@@ -161,13 +164,17 @@ class TraktClient:
     def _refresh_token(self, token: dict) -> dict | None:
         """Refresh an expired OAuth token."""
         try:
-            resp = self.session.post(f"{BASE_URL}/oauth/token", json={
-                "refresh_token": token.get("refresh_token"),
-                "client_id": self.config.client_id,
-                "client_secret": self.config.client_secret,
-                "redirect_uri": "urn:ietf:wg:oauth:2.0:oob",
-                "grant_type": "refresh_token",
-            })
+            resp = self.session.post(
+                f"{BASE_URL}/oauth/token",
+                timeout=REQUEST_TIMEOUT,
+                json={
+                    "refresh_token": token.get("refresh_token"),
+                    "client_id": self.config.client_id,
+                    "client_secret": self.config.client_secret,
+                    "redirect_uri": "urn:ietf:wg:oauth:2.0:oob",
+                    "grant_type": "refresh_token",
+                },
+            )
             resp.raise_for_status()
             new_token = resp.json()
             self._save_token(new_token)
@@ -182,9 +189,13 @@ class TraktClient:
         log.info("Starting Trakt device authentication...")
 
         # Step 1: Get device code
-        resp = self._request("POST", "/oauth/device/code", json={
-            "client_id": self.config.client_id,
-        })
+        resp = self._request(
+            "POST",
+            "/oauth/device/code",
+            json={
+                "client_id": self.config.client_id,
+            },
+        )
         device = resp.json()
 
         user_code = device["user_code"]
@@ -206,11 +217,15 @@ class TraktClient:
         while time.time() < deadline:
             time.sleep(interval)
             try:
-                poll_resp = self.session.post(f"{BASE_URL}/oauth/device/token", json={
-                    "code": device["device_code"],
-                    "client_id": self.config.client_id,
-                    "client_secret": self.config.client_secret,
-                })
+                poll_resp = self.session.post(
+                    f"{BASE_URL}/oauth/device/token",
+                    timeout=REQUEST_TIMEOUT,
+                    json={
+                        "code": device["device_code"],
+                        "client_id": self.config.client_id,
+                        "client_secret": self.config.client_secret,
+                    },
+                )
 
                 if poll_resp.status_code == 200:
                     token = poll_resp.json()
@@ -255,6 +270,7 @@ class TraktClient:
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
         """Make an HTTP request to the Trakt API with rate limit handling."""
         url = f"{BASE_URL}{path}"
+        kwargs.setdefault("timeout", REQUEST_TIMEOUT)
         resp = self.session.request(method, url, **kwargs)
 
         if resp.status_code == 429:

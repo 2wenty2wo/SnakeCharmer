@@ -38,7 +38,9 @@ def main() -> None:
     if args.dry_run:
         config.sync.dry_run = True
 
-    log.info("SnakeCharmer starting (list: %s, dry_run: %s)", config.trakt.list, config.sync.dry_run)
+    log.info(
+        "SnakeCharmer starting (list: %s, dry_run: %s)", config.trakt.list, config.sync.dry_run
+    )
 
     try:
         if config.sync.interval > 0:
