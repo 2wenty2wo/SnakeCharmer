@@ -305,13 +305,9 @@ def _validate(config: AppConfig) -> None:
 
         quality = source.medusa.quality
         if quality is not None and not isinstance(quality, (str, list)):
-            errors.append(
-                "trakt.sources[].medusa.quality must be a string or list of strings"
-            )
+            errors.append("trakt.sources[].medusa.quality must be a string or list of strings")
         if isinstance(quality, list) and any(not isinstance(item, str) for item in quality):
-            errors.append(
-                "trakt.sources[].medusa.quality must be a string or list of strings"
-            )
+            errors.append("trakt.sources[].medusa.quality must be a string or list of strings")
 
         required_words = source.medusa.required_words
         if not isinstance(required_words, list):
