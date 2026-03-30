@@ -69,3 +69,21 @@ class TestMain:
         assert mock_run_sync.call_count == 2
         mock_sleep.assert_has_calls([call(60)])
         mock_exit.assert_called_once_with(0)
+
+    def test_config_load_failure_propagates(self):
+        with (
+            patch("main.parse_args", return_value=MagicMock(config="missing.yaml", dry_run=False)),
+            patch("main.load_config", side_effect=FileNotFoundError("missing.yaml")),
+            pytest.raises(FileNotFoundError),
+        ):
+            main.main()
+
+    def test_interval_mode_sync_exception_propagates(self, base_config):
+        base_config.sync.interval = 30
+        with (
+            patch("main.parse_args", return_value=MagicMock(config="config.yaml", dry_run=False)),
+            patch("main.load_config", return_value=base_config),
+            patch("main.run_sync", side_effect=RuntimeError("unexpected crash")),
+            pytest.raises(RuntimeError, match="unexpected crash"),
+        ):
+            main.main()
