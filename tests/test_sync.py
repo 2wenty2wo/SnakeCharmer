@@ -147,3 +147,58 @@ class TestRunSync:
             "Show A",
             add_options={"quality": "hd"},
         )
+
+    def test_duplicate_precedence_deterministic_with_different_medusa_options(
+        self, config, mock_trakt, mock_medusa
+    ):
+        config.trakt.sources = [
+            TraktSource(type="popular"),
+            TraktSource(type="trending"),
+        ]
+        config.trakt.sources[0].medusa.quality = ["uhd"]
+        config.trakt.sources[0].medusa.required_words = ["remux"]
+        config.trakt.sources[1].medusa.quality = ["sd"]
+        config.trakt.sources[1].medusa.required_words = ["internal"]
+
+        mock_trakt.get_shows.side_effect = [
+            [TraktShow(title="Show A (popular)", tvdb_id=1)],
+            [TraktShow(title="Show A (trending)", tvdb_id=1)],
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        mock_medusa.add_show.return_value = True
+
+        run_sync(config)
+
+        mock_medusa.add_show.assert_called_once_with(
+            1,
+            "Show A (popular)",
+            add_options={"quality": ["uhd"], "required_words": ["remux"]},
+        )
+
+    def test_passes_source_specific_add_options_into_medusa_client(
+        self, config, mock_trakt, mock_medusa
+    ):
+        config.trakt.sources = [TraktSource(type="trending"), TraktSource(type="popular")]
+        config.trakt.sources[0].medusa.quality = "hd"
+        config.trakt.sources[1].medusa.required_words = ["proper", "repack"]
+
+        mock_trakt.get_shows.side_effect = [
+            [TraktShow(title="Show With Quality", tvdb_id=10)],
+            [TraktShow(title="Show With Words", tvdb_id=20)],
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        mock_medusa.add_show.return_value = True
+
+        run_sync(config)
+
+        assert mock_medusa.add_show.call_count == 2
+        mock_medusa.add_show.assert_any_call(
+            10,
+            "Show With Quality",
+            add_options={"quality": "hd"},
+        )
+        mock_medusa.add_show.assert_any_call(
+            20,
+            "Show With Words",
+            add_options={"required_words": ["proper", "repack"]},
+        )

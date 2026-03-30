@@ -260,6 +260,21 @@ class TestLoadConfig:
         assert source.medusa.quality == ["hd", "uhd"]
         assert source.medusa.required_words == ["web"]
 
+    def test_source_medusa_options_ignored_for_non_object(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [{"type": "trending", "medusa": "not-a-dict"}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+
+        source = config.trakt.sources[0]
+        assert source.medusa.quality is None
+        assert source.medusa.required_words == []
+
     def test_source_medusa_options_defaults_when_not_provided(self, tmp_path, minimal_config):
         path = _write_config(tmp_path, minimal_config)
         config = load_config(path)
@@ -301,6 +316,19 @@ class TestLoadConfig:
             "trakt": {
                 "client_id": "id",
                 "sources": [{"type": "trending", "medusa": {"required_words": "web"}}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_source_medusa_required_words_non_list_number_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [{"type": "trending", "medusa": {"required_words": 123}}],
             },
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
         }
