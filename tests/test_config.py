@@ -240,6 +240,75 @@ class TestLoadConfig:
         assert config.trakt.client_id == "env-id"
         assert config.medusa.api_key == "env-key"
 
+    def test_source_medusa_options_parse(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {
+                        "type": "trending",
+                        "medusa": {"quality": ["hd", "uhd"], "required_words": ["web"]},
+                    }
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+
+        source = config.trakt.sources[0]
+        assert source.medusa.quality == ["hd", "uhd"]
+        assert source.medusa.required_words == ["web"]
+
+    def test_source_medusa_options_defaults_when_not_provided(self, tmp_path, minimal_config):
+        path = _write_config(tmp_path, minimal_config)
+        config = load_config(path)
+
+        source = config.trakt.sources[0]
+        assert source.medusa.quality is None
+        assert source.medusa.required_words == []
+
+    def test_source_medusa_quality_invalid_type_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [{"type": "trending", "medusa": {"quality": 1080}}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_source_medusa_required_words_must_be_non_empty_strings(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {"type": "trending", "medusa": {"required_words": ["web", "  ", 123]}}
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_source_medusa_required_words_invalid_type_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [{"type": "trending", "medusa": {"required_words": "web"}}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+
+        with pytest.raises(SystemExit):
+            load_config(path)
+
 
 class TestToBool:
     @pytest.mark.parametrize(

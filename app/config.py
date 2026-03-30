@@ -12,11 +12,18 @@ SOURCE_TYPES = PUBLIC_LISTS | {"watchlist", "user_list"}
 
 
 @dataclass
+class MedusaAddOptions:
+    quality: str | list[str] | None = None
+    required_words: list[str] = field(default_factory=list)
+
+
+@dataclass
 class TraktSource:
     type: str
     owner: str = ""
     list_slug: str = ""
     auth: bool | None = None
+    medusa: MedusaAddOptions = field(default_factory=MedusaAddOptions)
 
     @property
     def requires_auth(self) -> bool:
@@ -222,15 +229,28 @@ def _normalize_trakt_sources(trakt_raw: dict) -> list[TraktSource]:
         list_slug = str(item.get("list_slug", "")).strip()
         auth_raw = item.get("auth")
         auth = None if auth_raw is None else _to_bool(auth_raw)
+        medusa_raw = item.get("medusa", {})
+        medusa = _parse_medusa_add_options(medusa_raw)
         sources.append(
             TraktSource(
                 type=source_type,
                 owner=owner,
                 list_slug=list_slug,
                 auth=auth,
+                medusa=medusa,
             )
         )
     return sources
+
+
+def _parse_medusa_add_options(raw_options) -> MedusaAddOptions:
+    if not isinstance(raw_options, dict):
+        return MedusaAddOptions()
+    quality = raw_options.get("quality")
+    return MedusaAddOptions(
+        quality=quality,
+        required_words=raw_options.get("required_words", []),
+    )
 
 
 def _validate(config: AppConfig) -> None:
@@ -282,6 +302,25 @@ def _validate(config: AppConfig) -> None:
                         "trakt.client_secret is required when trakt.sources[].auth=true "
                         "for source type 'user_list'"
                     )
+
+        quality = source.medusa.quality
+        if quality is not None and not isinstance(quality, (str, list)):
+            errors.append(
+                "trakt.sources[].medusa.quality must be a string or list of strings"
+            )
+        if isinstance(quality, list) and any(not isinstance(item, str) for item in quality):
+            errors.append(
+                "trakt.sources[].medusa.quality must be a string or list of strings"
+            )
+
+        required_words = source.medusa.required_words
+        if not isinstance(required_words, list):
+            errors.append("trakt.sources[].medusa.required_words must be a list of non-empty strings")
+        else:
+            if any(not isinstance(word, str) or not word.strip() for word in required_words):
+                errors.append(
+                    "trakt.sources[].medusa.required_words must be a list of non-empty strings"
+                )
 
     if errors:
         for err in errors:

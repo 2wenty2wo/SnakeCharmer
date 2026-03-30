@@ -22,14 +22,25 @@ trakt:
   #   set auth: true for private/self lists that require OAuth
   sources:
     - type: watchlist
+      # Optional per-source Medusa add options:
+      # medusa:
+      #   quality: "any"
+      #   required_words: ["2160p", "x265"]
     - type: trending
+      # medusa:
+      #   quality: ["sd", "hd", "uhd"]
+      #   required_words: ["web-dl"]
     - type: user_list
       owner: giladg
       list_slug: weekly-shows
+      # medusa:
+      #   required_words: ["proper"]
     - type: user_list
       owner: YOUR_TRAKT_USERNAME
       list_slug: private-favorites
       auth: true
+      # medusa:
+      #   quality: "hd"
 
   # Max number of shows to fetch from public lists (trending/popular/watched)
   limit: 50
