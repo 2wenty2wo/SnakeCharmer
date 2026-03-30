@@ -1,4 +1,4 @@
-![SnakeCharmer Logo](logo.webp)
+<img src="logo.webp" alt="SnakeCharmer Logo" width="50%" />
 
 [![CI](https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml/badge.svg)](https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://github.com/2wenty2wo/SnakeCharmer)
