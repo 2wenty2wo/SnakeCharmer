@@ -13,7 +13,7 @@ def trakt_config():
         client_id="test-client-id",
         client_secret="test-secret",
         username="testuser",
-        list="trending",
+        lists=["trending"],
         limit=10,
     )
 
@@ -66,29 +66,27 @@ class TestGetShows:
             {"show": {"title": "Show B", "ids": {"tvdb": 2}}},
         ]
         with patch.object(client, "_request", return_value=_mock_response(items)):
-            shows = client.get_shows()
+            shows = client.get_shows("trending")
 
         assert len(shows) == 2
         assert shows[0].title == "Show A"
         assert shows[1].title == "Show B"
 
     def test_fetch_popular(self, client):
-        client.config.list = "popular"
         items = [{"title": "Popular Show", "ids": {"tvdb": 99}}]
         with patch.object(client, "_request", return_value=_mock_response(items)):
-            shows = client.get_shows()
+            shows = client.get_shows("popular")
 
         assert len(shows) == 1
         assert shows[0].title == "Popular Show"
 
     def test_fetch_watchlist(self, client):
-        client.config.list = "watchlist"
         items = [{"show": {"title": "My Show", "ids": {"tvdb": 42}}}]
         with (
             patch.object(client, "_ensure_auth"),
             patch.object(client, "_request", return_value=_mock_response(items)),
         ):
-            shows = client.get_shows()
+            shows = client.get_shows("watchlist")
 
         assert len(shows) == 1
         assert shows[0].tvdb_id == 42
@@ -97,7 +95,7 @@ class TestGetShows:
         client.config.limit = 2
         items = [{"show": {"title": f"Show {i}", "ids": {"tvdb": i}}} for i in range(5)]
         with patch.object(client, "_request", return_value=_mock_response(items)):
-            shows = client.get_shows()
+            shows = client.get_shows("trending")
 
         assert len(shows) == 2
 

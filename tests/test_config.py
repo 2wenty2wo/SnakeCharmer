@@ -26,7 +26,7 @@ class TestLoadConfig:
         config = load_config(path)
 
         assert config.trakt.client_id == "test-client-id"
-        assert config.trakt.list == "trending"
+        assert config.trakt.lists == ["trending"]
         assert config.medusa.url == "http://localhost:8081"
         assert config.medusa.api_key == "test-api-key"
 
@@ -120,7 +120,22 @@ class TestLoadConfig:
         config = load_config(path)
 
         assert config.trakt.username == "user"
-        assert config.trakt.list == "watchlist"
+        assert config.trakt.lists == ["watchlist"]
+
+    def test_lists_accepts_multiple_values(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "client_secret": "secret",
+                "username": "user",
+                "lists": ["watchlist", "trending"],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+
+        assert config.trakt.lists == ["watchlist", "trending"]
 
     def test_missing_file_uses_env_only(self, tmp_path, monkeypatch):
         monkeypatch.setenv("SNAKECHARMER_TRAKT_CLIENT_ID", "env-id")

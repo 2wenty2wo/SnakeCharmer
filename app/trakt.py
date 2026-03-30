@@ -36,20 +36,21 @@ class TraktClient:
             }
         )
 
-    def get_shows(self) -> list[TraktShow]:
-        """Fetch shows from the configured Trakt list."""
-        list_name = self.config.list
+    def get_shows(self, target_list: str) -> list[TraktShow]:
+        """Fetch shows from a target Trakt list."""
+        list_name = target_list
 
         if list_name == "trending":
-            return self._fetch_public("/shows/trending", nested_key="show")
+            return self._fetch_public("/shows/trending", list_name, nested_key="show")
         elif list_name == "popular":
-            return self._fetch_public("/shows/popular")
+            return self._fetch_public("/shows/popular", list_name)
         elif list_name == "watched":
-            return self._fetch_public("/shows/watched/weekly", nested_key="show")
+            return self._fetch_public("/shows/watched/weekly", list_name, nested_key="show")
         elif list_name == "watchlist":
             self._ensure_auth()
             return self._fetch_user_list(
                 f"/users/{self.config.username}/watchlist/shows",
+                list_name,
                 nested_key="show",
             )
         else:
@@ -57,10 +58,13 @@ class TraktClient:
             self._ensure_auth()
             return self._fetch_user_list(
                 f"/users/{self.config.username}/lists/{list_name}/items/shows",
+                list_name,
                 nested_key="show",
             )
 
-    def _fetch_public(self, path: str, nested_key: str | None = None) -> list[TraktShow]:
+    def _fetch_public(
+        self, path: str, source_list: str, nested_key: str | None = None
+    ) -> list[TraktShow]:
         """Fetch shows from a public Trakt endpoint with limit support."""
         page_size = min(self.config.limit, 100)
         params = {"limit": page_size, "page": 1}
@@ -84,10 +88,12 @@ class TraktClient:
             params["page"] += 1
 
         shows = shows[: self.config.limit]
-        log.info("Fetched %d shows from Trakt [%s]", len(shows), self.config.list)
+        log.info("Fetched %d shows from Trakt list '%s'", len(shows), source_list)
         return shows
 
-    def _fetch_user_list(self, path: str, nested_key: str | None = None) -> list[TraktShow]:
+    def _fetch_user_list(
+        self, path: str, source_list: str, nested_key: str | None = None
+    ) -> list[TraktShow]:
         """Fetch shows from a user-specific Trakt endpoint with pagination."""
         params = {"page": 1, "limit": 100}
         shows = []
@@ -109,7 +115,7 @@ class TraktClient:
                 break
             params["page"] += 1
 
-        log.info("Fetched %d shows from Trakt [%s]", len(shows), self.config.list)
+        log.info("Fetched %d shows from Trakt list '%s'", len(shows), source_list)
         return shows
 
     def _parse_show(self, data: dict) -> TraktShow | None:

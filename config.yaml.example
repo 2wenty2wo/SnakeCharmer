@@ -9,13 +9,16 @@ trakt:
   # Not needed for public lists (trending, popular, watched)
   username: YOUR_TRAKT_USERNAME
 
-  # List to sync from. Options:
+  # Lists to sync from. Each item can be:
   #   watchlist  - Your personal Trakt watchlist (requires OAuth)
   #   trending   - Currently trending shows (public)
   #   popular    - Most popular shows (public)
   #   watched    - Most watched shows this week (public)
   #   <slug>     - Any custom Trakt list by slug (requires OAuth)
-  list: watchlist
+  # Backward compatible: a single `list: watchlist` value also works.
+  lists:
+    - watchlist
+    - trending
 
   # Max number of shows to fetch from public lists (trending/popular/watched)
   limit: 50
