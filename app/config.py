@@ -18,6 +18,16 @@ class TraktConfig:
     lists: list[str] = field(default_factory=lambda: ["watchlist"])
     limit: int = 50
 
+    @property
+    def list(self) -> str:
+        """Backward-compatible alias for legacy single-list config access."""
+        return self.lists[0] if self.lists else "watchlist"
+
+    @list.setter
+    def list(self, value: str) -> None:
+        normalized = str(value).strip()
+        self.lists = [normalized] if normalized else ["watchlist"]
+
 
 @dataclass
 class MedusaConfig:
@@ -119,6 +129,8 @@ def _normalize_trakt_lists(trakt_raw: dict) -> list[str]:
     raw_lists = trakt_raw.get("lists", trakt_raw.get("list", "watchlist"))
     if isinstance(raw_lists, list):
         parsed_lists = [str(item).strip() for item in raw_lists if str(item).strip()]
+    elif isinstance(raw_lists, str):
+        parsed_lists = [item.strip() for item in raw_lists.split(",") if item.strip()]
     else:
         parsed_lists = [str(raw_lists).strip()]
 

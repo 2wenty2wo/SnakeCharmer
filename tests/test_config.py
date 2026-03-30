@@ -121,6 +121,7 @@ class TestLoadConfig:
 
         assert config.trakt.username == "user"
         assert config.trakt.lists == ["watchlist"]
+        assert config.trakt.list == "watchlist"
 
     def test_lists_accepts_multiple_values(self, tmp_path):
         data = {
@@ -136,6 +137,25 @@ class TestLoadConfig:
         config = load_config(path)
 
         assert config.trakt.lists == ["watchlist", "trending"]
+
+    def test_env_var_lists_splits_commas(self, tmp_path, minimal_config, monkeypatch):
+        path = _write_config(tmp_path, minimal_config)
+        monkeypatch.setenv("SNAKECHARMER_TRAKT_CLIENT_SECRET", "secret")
+        monkeypatch.setenv("SNAKECHARMER_TRAKT_USERNAME", "user")
+        monkeypatch.setenv("SNAKECHARMER_TRAKT_LISTS", "watchlist, trending")
+
+        config = load_config(path)
+
+        assert config.trakt.lists == ["watchlist", "trending"]
+
+    def test_legacy_list_alias_setter_updates_lists(self, tmp_path, minimal_config):
+        path = _write_config(tmp_path, minimal_config)
+        config = load_config(path)
+
+        config.trakt.list = "popular"
+
+        assert config.trakt.list == "popular"
+        assert config.trakt.lists == ["popular"]
 
     def test_missing_file_uses_env_only(self, tmp_path, monkeypatch):
         monkeypatch.setenv("SNAKECHARMER_TRAKT_CLIENT_ID", "env-id")
