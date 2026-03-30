@@ -4,7 +4,7 @@ import pytest
 import requests
 
 from app.config import MedusaConfig
-from app.medusa import REQUEST_TIMEOUT, MedusaClient
+from app.medusa import REQUEST_TIMEOUT, MedusaClient, resolve_quality
 
 
 @pytest.fixture
@@ -59,9 +59,8 @@ class TestAddShow:
                 12345,
                 "Test Show",
                 add_options={
-                    "quality": "hd",
+                    "quality": "hd720p",
                     "required_words": ["proper"],
-                    "ignored": "value",
                 },
             )
 
@@ -69,8 +68,13 @@ class TestAddShow:
         _, kwargs = mock_request.call_args
         assert kwargs["json"] == {
             "id": {"tvdb": 12345},
-            "quality": "hd",
-            "requiredWords": ["proper"],
+            "config": {
+                "qualities": {
+                    "allowed": [8, 64, 256],
+                    "preferred": [],
+                },
+                "release": {"requiredWords": ["proper"]},
+            },
         }
 
     def test_post_payload_includes_quality_and_required_words_when_provided(self, client):
@@ -79,17 +83,23 @@ class TestAddShow:
                 777,
                 "Configured Show",
                 add_options={
-                    "quality": ["uhd", "hd"],
+                    "quality": ["uhd4k", "hd1080p"],
                     "required_words": ["remux", "proper"],
                 },
             )
 
         assert result is True
         _, kwargs = mock_request.call_args
+        # uhd4k=[1024,2048,4096] + hd1080p=[32,128,512] combined
         assert kwargs["json"] == {
             "id": {"tvdb": 777},
-            "quality": ["uhd", "hd"],
-            "requiredWords": ["remux", "proper"],
+            "config": {
+                "qualities": {
+                    "allowed": [32, 128, 512, 1024, 2048, 4096],
+                    "preferred": [],
+                },
+                "release": {"requiredWords": ["remux", "proper"]},
+            },
         }
 
     def test_post_payload_is_minimal_when_no_options_provided(self, client):
@@ -120,6 +130,30 @@ class TestAddShow:
             pytest.raises(requests.HTTPError),
         ):
             client.add_show(12345, "Test Show")
+
+
+class TestResolveQuality:
+    def test_preset_hd720p(self):
+        assert resolve_quality("hd720p") == [8, 64, 256]
+
+    def test_preset_hd1080p(self):
+        assert resolve_quality("hd1080p") == [32, 128, 512]
+
+    def test_preset_uhd4k(self):
+        assert resolve_quality("uhd4k") == [1024, 2048, 4096]
+
+    def test_individual_quality(self):
+        assert resolve_quality("hdtv") == [8]
+
+    def test_list_of_names(self):
+        assert resolve_quality(["hdtv", "fullhdwebdl"]) == [8, 128]
+
+    def test_case_insensitive(self):
+        assert resolve_quality("HD720p") == [8, 64, 256]
+
+    def test_unknown_quality_raises(self):
+        with pytest.raises(ValueError, match="Unknown Medusa quality 'bogus'"):
+            resolve_quality("bogus")
 
 
 class TestRequest:
