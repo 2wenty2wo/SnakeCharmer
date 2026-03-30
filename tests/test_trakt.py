@@ -106,6 +106,14 @@ class TestGetShows:
         assert len(shows) == 1
         assert shows[0].tvdb_id == 42
 
+    def test_fetch_watched(self, client):
+        items = [{"show": {"title": "Watched Show", "ids": {"tvdb": 7}}}]
+        with patch.object(client, "_request", return_value=_mock_response(items)):
+            shows = client.get_shows("watched")
+
+        assert len(shows) == 1
+        assert shows[0].tvdb_id == 7
+
     def test_fetch_public_user_list_without_oauth(self, client):
         items = [{"show": {"title": "List Show", "ids": {"tvdb": 50}}}]
         source = TraktSource(type="user_list", owner="otheruser", list_slug="public-list")
@@ -182,6 +190,17 @@ class TestGetShows:
             )
 
         assert [show.tvdb_id for show in shows] == [1, 2]
+
+    def test_fetch_user_list_stops_on_empty_page(self, client):
+        with patch.object(client, "_request", return_value=_mock_response([])) as mock_request:
+            shows = client._fetch_user_list("/users/test/list/items/shows", "list", nested_key="show")
+
+        assert shows == []
+        mock_request.assert_called_once()
+
+    def test_get_shows_unsupported_source_type_raises(self, client):
+        with pytest.raises(ValueError, match="Unsupported Trakt source type"):
+            client.get_shows(TraktSource(type="unknown"))
 
 
 class TestAuth:
@@ -334,6 +353,63 @@ class TestAuth:
             pytest.raises(SystemExit),
         ):
             client._authenticate()
+
+    def test_authenticate_429_slow_down_retries(self, client):
+        device_resp = _mock_response(
+            {
+                "user_code": "AAAA",
+                "verification_url": "https://trakt.tv/activate",
+                "expires_in": 60,
+                "interval": 2,
+                "device_code": "device-1",
+            }
+        )
+        slow_down = _mock_response({}, status_code=429)
+        poll_success = _mock_response({"access_token": "token-123"}, status_code=200)
+
+        with (
+            patch.object(client, "_request", return_value=device_resp),
+            patch.object(client.session, "post", side_effect=[slow_down, poll_success]),
+            patch.object(client, "_save_token") as mock_save,
+            patch("app.trakt.time.sleep") as mock_sleep,
+            patch("app.trakt.time.time", side_effect=[0, 1, 3]),
+        ):
+            client._authenticate()
+
+        assert client.session.headers["Authorization"] == "Bearer token-123"
+        assert mock_sleep.call_count == 3
+        mock_sleep.assert_any_call(2)
+        mock_save.assert_called_once_with({"access_token": "token-123"})
+
+    def test_authenticate_request_exception_retries(self, client):
+        device_resp = _mock_response(
+            {
+                "user_code": "AAAA",
+                "verification_url": "https://trakt.tv/activate",
+                "expires_in": 60,
+                "interval": 1,
+                "device_code": "device-1",
+            }
+        )
+        poll_success = _mock_response({"access_token": "token-123"}, status_code=200)
+
+        with (
+            patch.object(client, "_request", return_value=device_resp),
+            patch.object(
+                client.session,
+                "post",
+                side_effect=[requests.RequestException("boom"), poll_success],
+            ),
+            patch.object(client, "_save_token") as mock_save,
+            patch("app.trakt.time.sleep"),
+            patch("app.trakt.time.time", side_effect=[0, 1, 2]),
+            patch("app.trakt.log.warning") as mock_warning,
+        ):
+            client._authenticate()
+
+        assert client.session.headers["Authorization"] == "Bearer token-123"
+        mock_warning.assert_called_once()
+        mock_save.assert_called_once_with({"access_token": "token-123"})
 
 
 class TestRequest:
