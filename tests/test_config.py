@@ -3,6 +3,8 @@ import yaml
 
 from app.config import (
     PUBLIC_LISTS,
+    TraktConfig,
+    TraktSource,
     _normalize_trakt_lists,
     _normalize_trakt_sources,
     _to_bool,
@@ -246,6 +248,13 @@ class TestLoadConfig:
         assert config.trakt.client_id == "env-id"
         assert config.medusa.api_key == "env-key"
 
+    def test_invalid_yaml_exits(self, tmp_path):
+        path = tmp_path / "config.yaml"
+        path.write_text("trakt: [broken")
+
+        with pytest.raises(SystemExit):
+            load_config(str(path))
+
     def test_source_medusa_options_parse(self, tmp_path):
         data = {
             "trakt": {
@@ -389,6 +398,67 @@ class TestNormalizeHelpers:
         assert len(parsed) == 1
         assert parsed[0].type == "user_list"
         assert parsed[0].list_slug == "my-custom-list"
+
+    def test_normalize_trakt_sources_string_known_type(self):
+        parsed = _normalize_trakt_sources({"sources": ["popular"]})
+        assert len(parsed) == 1
+        assert parsed[0].type == "popular"
+
+    def test_legacy_lists_to_sources_custom_list_sets_user_list_fields(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "client_secret": "secret",
+                "username": "alice",
+                "lists": ["my-private-list"],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+
+        config = load_config(path)
+
+        assert config.trakt.sources[0].type == "user_list"
+        assert config.trakt.sources[0].owner == "alice"
+        assert config.trakt.sources[0].list_slug == "my-private-list"
+        assert config.trakt.sources[0].requires_auth is True
+
+    def test_invalid_source_type_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [{"type": "invalid-type"}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_source_medusa_quality_list_must_only_contain_strings(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [{"type": "trending", "medusa": {"quality": ["hd", 1080]}}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_trakt_source_user_list_label_and_legacy_name_properties(self):
+        source = TraktSource(type="user_list", owner="alice", list_slug="top-tv", auth=True)
+
+        assert source.label == "user_list:alice/top-tv (auth)"
+        assert source.legacy_name == "top-tv"
+
+    def test_trakt_config_list_property_falls_back_to_watchlist(self):
+        config = TraktConfig(lists=[], sources=[])
+
+        assert config.list == "watchlist"
 
     def test_user_list_auth_true_requires_username_and_client_secret(self, tmp_path):
         data = {

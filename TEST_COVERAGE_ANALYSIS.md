@@ -10,61 +10,51 @@ python -m pytest --cov=. --cov-report=term-missing
 
 Results:
 
-- Total line coverage: **98%**
+- Total line coverage: **99%**
 - Production modules:
+  - `app/config.py`: **100%**
   - `app/medusa.py`: **100%**
   - `app/sync.py`: **100%**
-  - `app/config.py`: **95%**
-  - `app/trakt.py`: **95%**
-  - `main.py`: **97%**
+  - `app/trakt.py`: **100%**
+  - `main.py`: **97%** (`if __name__ == "__main__"` execution line)
 
 ## Implemented in this update
 
-### 1) Added `main.py` coverage
+### 1) Completed remaining `app/trakt.py` gaps
 
-Implemented tests now cover:
-- `parse_args()` defaults and `--dry-run`.
-- Single-run mode (`interval == 0`) runs sync once.
-- Interval mode (`interval > 0`) loops, sleeps, and exits on `KeyboardInterrupt`.
-- Dry-run CLI flag overriding config value.
+Added tests for:
+- `get_shows("watched")` path.
+- Unsupported source type raising `ValueError`.
+- `_fetch_user_list(...)` early exit on empty page.
+- `_authenticate(...)` `429` slow-down branch.
+- `_authenticate(...)` poll `RequestException` retry branch.
 
-### 2) Expanded `app/trakt.py` branch coverage
+Outcome: `app/trakt.py` is now fully covered at **100%**.
 
-Implemented tests now cover:
-- `_normalize_source` aliases and custom list normalization.
-- `_fetch_public` / `_fetch_user_list` pagination and empty-page exits.
-- `_load_token` for missing, invalid, valid, and expired token paths.
-- `_refresh_token` success and failure paths.
-- `_ensure_auth` load-token and authenticate branches.
-- `_authenticate` success, terminal status exits, and timeout exit.
-- `_save_token` persistence smoke test.
+### 2) Completed remaining `app/config.py` gaps
 
-### 3) Added config normalization/validation edge tests
+Added tests for:
+- YAML parse failure (`yaml.YAMLError`) exit path.
+- `_normalize_trakt_sources(...)` string source matching known public type.
+- Legacy list-to-source conversion for custom lists (`user_list` with owner/auth).
+- Validation failure for invalid source type.
+- Validation failure for `medusa.quality` list containing non-string items.
+- `TraktSource` user-list property accessors (`label`, `legacy_name`).
+- `TraktConfig.list` fallback when both `sources` and `lists` are empty.
 
-Implemented tests now cover:
-- `_normalize_trakt_lists` numeric and empty-string fallback inputs.
-- `_normalize_trakt_sources` with non-list input, invalid item entries, and string custom list mapping.
-- Validation for `user_list` with `auth=true` missing OAuth prerequisites.
+Outcome: `app/config.py` is now fully covered at **100%**.
 
-### 4) Completed uncovered `app/sync.py` branches
+## Remaining miss
 
-Implemented tests now cover:
-- `_medusa_add_options_from_source(None) -> None`.
-- `add_show(...)` false return path (already existed count path).
+Only one production line remains uncovered:
+- `main.py` direct module execution guard (`if __name__ == "__main__":`).
 
-## Remaining low-risk misses
-
-Current uncovered production lines are small and mostly defensive branches:
-- `app/config.py`: dataclass accessors and specific validation branches not hit by current fixtures.
-- `app/trakt.py`: unsupported-source `ValueError` branch and `429 slow-down` sub-branch in device auth polling.
-- `main.py`: direct `if __name__ == "__main__"` execution line.
+This is expected in unit tests because test suites import modules rather than executing files as scripts.
 
 ## Suggested quality gate
 
-After adding the above tests, enforce in CI:
+Given the current baseline, this gate is realistic and protects against regressions:
 
 ```bash
-python -m pytest --cov=app --cov=main --cov-report=term-missing --cov-fail-under=95
+python -m pytest --cov=app --cov=main --cov-report=term-missing --cov-fail-under=98
 ```
-
-A 95% threshold is now realistic given current baseline and protects against regression in high-risk paths.
