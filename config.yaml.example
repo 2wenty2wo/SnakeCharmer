@@ -1,0 +1,32 @@
+# SnakeCharmer Configuration
+# Copy this file to config.yaml and fill in your credentials.
+
+trakt:
+  client_id: YOUR_TRAKT_CLIENT_ID
+  client_secret: YOUR_TRAKT_CLIENT_SECRET
+
+  # Username is required for personal lists (watchlist, custom lists)
+  # Not needed for public lists (trending, popular, watched)
+  username: YOUR_TRAKT_USERNAME
+
+  # List to sync from. Options:
+  #   watchlist  - Your personal Trakt watchlist (requires OAuth)
+  #   trending   - Currently trending shows (public)
+  #   popular    - Most popular shows (public)
+  #   watched    - Most watched shows this week (public)
+  #   <slug>     - Any custom Trakt list by slug (requires OAuth)
+  list: watchlist
+
+  # Max number of shows to fetch from public lists (trending/popular/watched)
+  limit: 50
+
+medusa:
+  url: http://localhost:8081
+  api_key: YOUR_MEDUSA_API_KEY
+
+sync:
+  # Set to true to preview changes without adding shows
+  dry_run: true
+
+  # Seconds between sync cycles (0 = run once and exit)
+  interval: 600

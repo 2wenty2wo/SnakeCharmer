@@ -1,0 +1,9 @@
+config.yaml
+trakt_token.json
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
