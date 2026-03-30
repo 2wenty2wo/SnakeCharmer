@@ -247,11 +247,9 @@ def _parse_medusa_add_options(raw_options) -> MedusaAddOptions:
     if not isinstance(raw_options, dict):
         return MedusaAddOptions()
     quality = raw_options.get("quality")
-    required_words_raw = raw_options.get("required_words", [])
-    required_words = required_words_raw if isinstance(required_words_raw, list) else []
     return MedusaAddOptions(
         quality=quality,
-        required_words=required_words,
+        required_words=raw_options.get("required_words", []),
     )
 
 
