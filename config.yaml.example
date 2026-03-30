@@ -20,15 +20,22 @@ trakt:
   #   owner/list_slug are required
   #   auth is optional, default false
   #   set auth: true for private/self lists that require OAuth
+  # Optional per-source Medusa add options:
+  #   quality: Medusa quality preset or individual quality name(s).
+  #     Presets: any, sd, hd, hd720p, hd1080p, uhd, uhd4k, uhd8k
+  #     Individual: sdtv, sddvd, hdtv, rawhdtv, fullhdtv, hdwebdl,
+  #       fullhdwebdl, hdbluray, fullhdbluray, uhd4ktv, uhd4kwebdl,
+  #       uhd4kbluray, uhd8ktv, uhd8kwebdl, uhd8kbluray
+  #     Can be a single string or a list to combine multiple.
+  #   required_words: list of release keywords that must be present.
   sources:
     - type: watchlist
-      # Optional per-source Medusa add options:
       # medusa:
       #   quality: "any"
       #   required_words: ["2160p", "x265"]
     - type: trending
       # medusa:
-      #   quality: ["sd", "hd", "uhd"]
+      #   quality: ["hd1080p", "uhd4k"]
       #   required_words: ["web-dl"]
     - type: user_list
       owner: giladg
@@ -40,7 +47,7 @@ trakt:
       list_slug: private-favorites
       auth: true
       # medusa:
-      #   quality: "hd"
+      #   quality: "hd720p"
 
   # Max number of shows to fetch from public lists (trending/popular/watched)
   limit: 50
