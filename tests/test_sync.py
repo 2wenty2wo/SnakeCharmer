@@ -212,7 +212,52 @@ class TestRunSync:
 
         mock_medusa.add_show.assert_called_once_with(1, "Show A", add_options=None)
 
+    def test_second_source_failure_aborts_sync(self, config, mock_trakt, mock_medusa):
+        config.trakt.sources = [TraktSource(type="trending"), TraktSource(type="popular")]
+        mock_trakt.get_shows.side_effect = [
+            [TraktShow(title="Show A", tvdb_id=1)],
+            Exception("API error on second source"),
+        ]
+
+        run_sync(config)
+
+        mock_medusa.get_existing_tvdb_ids.assert_not_called()
+        mock_medusa.add_show.assert_not_called()
+
+    def test_dry_run_counts_and_skips_add(self, config, mock_trakt, mock_medusa):
+        config.sync.dry_run = True
+        config.trakt.sources = [TraktSource(type="trending")]
+        mock_trakt.get_shows.side_effect = [
+            [
+                TraktShow(title="Show A", tvdb_id=1),
+                TraktShow(title="Show B", tvdb_id=2),
+            ]
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+
+        run_sync(config)
+
+        mock_medusa.add_show.assert_not_called()
+
 
 class TestMedusaAddOptionsFromSource:
     def test_returns_none_for_missing_source(self):
         assert _medusa_add_options_from_source(None) is None
+
+    def test_returns_none_for_source_with_no_options_set(self):
+        source = TraktSource(type="trending")
+        assert _medusa_add_options_from_source(source) is None
+
+    def test_returns_quality_only(self):
+        source = TraktSource(type="trending")
+        source.medusa.quality = "hd"
+        result = _medusa_add_options_from_source(source)
+        assert result == {"quality": "hd"}
+        assert "required_words" not in result
+
+    def test_returns_required_words_only(self):
+        source = TraktSource(type="trending")
+        source.medusa.required_words = ["proper"]
+        result = _medusa_add_options_from_source(source)
+        assert result == {"required_words": ["proper"]}
+        assert "quality" not in result

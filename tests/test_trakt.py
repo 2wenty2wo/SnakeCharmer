@@ -58,6 +58,13 @@ class TestParseShow:
         assert show.imdb_id is None
         assert show.year is None
 
+    def test_missing_title_defaults_to_unknown(self, client):
+        data = {"ids": {"tvdb": 99999}}
+        show = client._parse_show(data)
+
+        assert show.title == "Unknown"
+        assert show.tvdb_id == 99999
+
 
 class TestGetShows:
     def test_normalize_source_alias(self, client):
@@ -200,6 +207,16 @@ class TestGetShows:
         assert shows == []
         mock_request.assert_called_once()
 
+    def test_fetch_public_stops_when_limit_reached_mid_page(self, client):
+        client.config.limit = 2
+        items = [{"show": {"title": f"Show {i}", "ids": {"tvdb": i}}} for i in range(1, 4)]
+        resp = _mock_response(items, headers={"X-Pagination-Page-Count": "3"})
+        with patch.object(client, "_request", return_value=resp) as mock_request:
+            shows = client._fetch_public("/shows/trending", "trending", nested_key="show")
+
+        assert len(shows) == 2
+        mock_request.assert_called_once()
+
     def test_get_shows_unsupported_source_type_raises(self, client):
         with pytest.raises(ValueError, match="Unsupported Trakt source type"):
             client.get_shows(TraktSource(type="unknown"))
@@ -215,6 +232,15 @@ class TestAuth:
         client.token_path = str(token_file)
 
         assert client._load_token() is None
+
+    def test_load_token_oserror_returns_none(self, client, tmp_path):
+        token_file = tmp_path / "trakt_token.json"
+        token_file.write_text('{"access_token":"abc"}')
+        token_file.chmod(0o000)
+        client.token_path = str(token_file)
+
+        assert client._load_token() is None
+        token_file.chmod(0o644)  # restore for cleanup
 
     def test_load_token_returns_valid_non_expired_token(self, client, tmp_path):
         token = {"access_token": "abc", "created_at": 1000, "expires_in": 100000}
@@ -433,3 +459,24 @@ class TestRequest:
             resp = client._request("GET", "/test")
 
         assert resp.status_code == 200
+
+    def test_double_429_raises(self, client):
+        rate_limited_1 = _mock_response([], status_code=429, headers={"Retry-After": "1"})
+        rate_limited_2 = _mock_response([], status_code=429, headers={"Retry-After": "1"})
+        rate_limited_2.raise_for_status.side_effect = requests.HTTPError(response=rate_limited_2)
+
+        with (
+            patch.object(client.session, "request", side_effect=[rate_limited_1, rate_limited_2]),
+            patch("app.trakt.time.sleep"),
+            pytest.raises(requests.HTTPError),
+        ):
+            client._request("GET", "/test")
+
+    def test_non_integer_retry_after_header_raises(self, client):
+        rate_limited = _mock_response([], status_code=429, headers={"Retry-After": "not-a-number"})
+
+        with (
+            patch.object(client.session, "request", return_value=rate_limited),
+            pytest.raises(ValueError),
+        ):
+            client._request("GET", "/test")

@@ -131,6 +131,34 @@ class TestAddShow:
         ):
             client.add_show(12345, "Test Show")
 
+    def test_raises_when_http_error_has_no_response(self, client):
+        http_error = requests.HTTPError(response=None)
+
+        with (
+            patch.object(client, "_request", side_effect=http_error),
+            pytest.raises(requests.HTTPError),
+        ):
+            client.add_show(12345, "Test Show")
+
+    def test_required_words_only_no_quality_in_payload(self, client):
+        with patch.object(client, "_request", return_value=_mock_response({})) as mock_request:
+            result = client.add_show(555, "Words Only", add_options={"required_words": ["proper"]})
+
+        assert result is True
+        _, kwargs = mock_request.call_args
+        payload = kwargs["json"]
+        assert "options" in payload
+        assert "quality" not in payload["options"]
+        assert payload["options"]["release"] == {"requiredWords": ["proper"]}
+
+    def test_empty_add_options_dict_produces_minimal_payload(self, client):
+        with patch.object(client, "_request", return_value=_mock_response({})) as mock_request:
+            result = client.add_show(666, "Empty Options", add_options={})
+
+        assert result is True
+        _, kwargs = mock_request.call_args
+        assert kwargs["json"] == {"id": {"tvdb": 666}}
+
 
 class TestResolveQuality:
     def test_preset_hd720p(self):
@@ -154,6 +182,12 @@ class TestResolveQuality:
     def test_unknown_quality_raises(self):
         with pytest.raises(ValueError, match="Unknown Medusa quality 'bogus'"):
             resolve_quality("bogus")
+
+    def test_empty_list_returns_empty(self):
+        assert resolve_quality([]) == []
+
+    def test_duplicate_names_deduplicated(self):
+        assert resolve_quality(["hdtv", "hdtv"]) == [8]
 
 
 class TestRequest:
