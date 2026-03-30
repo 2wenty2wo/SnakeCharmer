@@ -68,8 +68,8 @@ class TestAddShow:
         _, kwargs = mock_request.call_args
         assert kwargs["json"] == {
             "id": {"tvdb": 12345},
-            "config": {
-                "qualities": {
+            "options": {
+                "quality": {
                     "allowed": [8, 64, 256],
                     "preferred": [],
                 },
@@ -93,8 +93,8 @@ class TestAddShow:
         # uhd4k=[1024,2048,4096] + hd1080p=[32,128,512] combined
         assert kwargs["json"] == {
             "id": {"tvdb": 777},
-            "config": {
-                "qualities": {
+            "options": {
+                "quality": {
                     "allowed": [32, 128, 512, 1024, 2048, 4096],
                     "preferred": [],
                 },

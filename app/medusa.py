@@ -103,18 +103,18 @@ class MedusaClient:
         payload: dict = {"id": {"tvdb": tvdb_id}}
 
         if add_options:
-            config: dict = {}
+            options: dict = {}
             quality = add_options.get("quality")
             if quality is not None:
-                config["qualities"] = {
+                options["quality"] = {
                     "allowed": resolve_quality(quality),
                     "preferred": [],
                 }
             required_words = add_options.get("required_words")
             if required_words:
-                config["release"] = {"requiredWords": required_words}
-            if config:
-                payload["config"] = config
+                options["release"] = {"requiredWords": required_words}
+            if options:
+                payload["options"] = options
 
         try:
             self._request(
