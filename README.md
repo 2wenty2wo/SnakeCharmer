@@ -1,41 +1,60 @@
-# 🐍 SnakeCharmer
+# SnakeCharmer
 
-**SnakeCharmer watches your Trakt lists and automatically adds missing
-shows to Medusa --- clean, automated, and Sonarr-free.**
+[![CI](https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml/badge.svg)](https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://github.com/2wenty2wo/SnakeCharmer)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/2wenty2wo/SnakeCharmer)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-------------------------------------------------------------------------
+**SnakeCharmer watches your [Trakt](https://trakt.tv) lists and automatically adds missing
+shows to [Medusa](https://pymedusa.com) --- clean, automated, and Sonarr-free.**
 
-## 🚀 Features
+---
 
--   🔄 Sync one or more Trakt watchlists/custom lists
--   ➕ Automatically add missing shows to Medusa
--   🧠 Smart duplicate detection (no double adds)
--   🧪 Dry-run mode (see what would be added)
--   📜 Simple logging for visibility
--   🐳 Docker-ready
+## Features
 
-------------------------------------------------------------------------
+- Sync one or more Trakt watchlists/custom lists
+- Automatically add missing shows to Medusa
+- Smart duplicate detection (no double adds)
+- Per-source Medusa quality presets and required words
+- Dry-run mode (see what would be added)
+- Simple logging for visibility
+- Docker-ready
 
-## ⚙️ How It Works
+---
 
-SnakeCharmer acts as a bridge between Trakt and Medusa:
+## How It Works
 
-1.  Fetch shows from your configured Trakt list(s)
-2.  Fetch your existing Medusa library
-3.  Compare both
-4.  Add any missing shows to Medusa automatically
+SnakeCharmer acts as a bridge between [Trakt](https://trakt.tv) and [Medusa](https://pymedusa.com):
 
-------------------------------------------------------------------------
+1. Fetch shows from your configured Trakt list(s)
+2. Deduplicate across sources by TVDB ID
+3. Fetch your existing Medusa library
+4. Compare both
+5. Add any missing shows to Medusa automatically
 
-## 🧰 Requirements
+---
 
--   Python 3.9+
--   Medusa instance with API enabled
--   Trakt account + API credentials
+## Requirements
 
-------------------------------------------------------------------------
+- Python 3.10+
+- [Medusa](https://pymedusa.com) instance with API enabled
+- [Trakt](https://trakt.tv) account + API credentials
 
-## 🔑 Configuration
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/2wenty2wo/SnakeCharmer.git
+cd SnakeCharmer
+pip install -r requirements.txt
+cp config.yaml.example config.yaml   # edit with your credentials
+python main.py --dry-run              # preview what would be synced
+```
+
+---
+
+## Configuration
 
 Create a `config.yaml` file in the root directory:
 
@@ -73,7 +92,7 @@ sync:
   - public user lists do **not** require OAuth
   - set `auth: true` for private/self lists that require OAuth
 
-### Example: sync multiple users’ public lists
+### Example: sync multiple users' public lists
 
 ```yaml
 trakt:
@@ -108,9 +127,9 @@ trakt:
       auth: true
 ```
 
-------------------------------------------------------------------------
+---
 
-## ▶️ Usage
+## Usage
 
 ### Run manually
 
@@ -124,57 +143,87 @@ python main.py
 python main.py --dry-run
 ```
 
-------------------------------------------------------------------------
+### Custom config path
 
-## 🐳 Docker
+``` bash
+python main.py --config /path/to/config.yaml
+```
+
+---
+
+## Docker
 
 ``` bash
 docker build -t snakecharmer .
 docker run -v $(pwd)/config.yaml:/app/config.yaml snakecharmer
 ```
 
-------------------------------------------------------------------------
+Environment variable overrides work with Docker:
 
-## 📁 Project Structure
+```bash
+docker run -e SNAKECHARMER_SYNC_DRY_RUN=true \
+  -v $(pwd)/config.yaml:/app/config.yaml snakecharmer
+```
 
-    snakecharmer/
-    ├── app/
-    │   ├── trakt.py
-    │   ├── medusa.py
-    │   ├── sync.py
-    │   └── config.py
-    ├── config.yaml
-    ├── main.py
-    ├── requirements.txt
-    └── Dockerfile
+---
 
-------------------------------------------------------------------------
+## Project Structure
 
-## 🛣️ Roadmap
+```
+snakecharmer/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── app/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── medusa.py
+│   ├── sync.py
+│   └── trakt.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_config.py
+│   ├── test_medusa.py
+│   ├── test_sync.py
+│   └── test_trakt.py
+├── .gitignore
+├── CLAUDE.md
+├── Dockerfile
+├── config.yaml.example
+├── main.py
+├── pyproject.toml
+├── README.md
+└── requirements.txt
+```
 
--   [x] Multiple Trakt lists
--   [ ] Show removal (sync down)
--   [ ] Tag / category support
--   [ ] Overseerr integration
--   [ ] Web UI
--   [ ] Notifications
+---
 
-------------------------------------------------------------------------
+## Roadmap
 
-## ⚠️ Disclaimer
+- [x] Multiple Trakt lists
+- [x] Per-source Medusa quality presets
+- [ ] Show removal (sync down)
+- [ ] Tag / category support
+- [ ] Overseerr integration
+- [ ] Web UI
+- [ ] Notifications
 
-SnakeCharmer is not affiliated with Medusa or Trakt.\
-Use at your own risk --- always test with dry_run first.
+---
 
-------------------------------------------------------------------------
+## Disclaimer
 
-## ❤️ Why?
+SnakeCharmer is not affiliated with Medusa or Trakt.
+Use at your own risk --- always test with `dry_run` first.
 
-Medusa is powerful, but lacks clean list automation.\
+---
+
+## Why?
+
+Medusa is powerful, but lacks clean list automation.
 SnakeCharmer fills that gap without adding bloat.
 
-------------------------------------------------------------------------
+---
 
-## 🐍 License
+## License
 
 MIT License
