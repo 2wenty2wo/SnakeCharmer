@@ -193,7 +193,9 @@ class TestGetShows:
 
     def test_fetch_user_list_stops_on_empty_page(self, client):
         with patch.object(client, "_request", return_value=_mock_response([])) as mock_request:
-            shows = client._fetch_user_list("/users/test/list/items/shows", "list", nested_key="show")
+            shows = client._fetch_user_list(
+                "/users/test/list/items/shows", "list", nested_key="show"
+            )
 
         assert shows == []
         mock_request.assert_called_once()
