@@ -8,6 +8,32 @@ import yaml
 log = logging.getLogger(__name__)
 
 PUBLIC_LISTS = {"trending", "popular", "watched"}
+SOURCE_TYPES = PUBLIC_LISTS | {"watchlist", "user_list"}
+
+
+@dataclass
+class TraktSource:
+    type: str
+    owner: str = ""
+    list_slug: str = ""
+    auth: bool | None = None
+
+    @property
+    def requires_auth(self) -> bool:
+        return bool(self.auth)
+
+    @property
+    def label(self) -> str:
+        if self.type == "user_list":
+            suffix = " (auth)" if self.requires_auth else ""
+            return f"user_list:{self.owner}/{self.list_slug}{suffix}"
+        return self.type
+
+    @property
+    def legacy_name(self) -> str:
+        if self.type == "user_list":
+            return self.list_slug
+        return self.type
 
 
 @dataclass
@@ -16,17 +42,21 @@ class TraktConfig:
     client_secret: str = ""
     username: str = ""
     lists: list[str] = field(default_factory=lambda: ["watchlist"])
+    sources: list[TraktSource] = field(default_factory=lambda: [TraktSource(type="watchlist")])
     limit: int = 50
 
     @property
     def list(self) -> str:
         """Backward-compatible alias for legacy single-list config access."""
+        if self.sources:
+            return self.sources[0].legacy_name
         return self.lists[0] if self.lists else "watchlist"
 
     @list.setter
     def list(self, value: str) -> None:
         normalized = str(value).strip()
         self.lists = [normalized] if normalized else ["watchlist"]
+        self.sources = _legacy_lists_to_sources(self.lists, self.username)
 
 
 @dataclass
@@ -89,12 +119,16 @@ def load_config(path: str) -> AppConfig:
 
     # Build config objects
     trakt_lists = _normalize_trakt_lists(trakt_raw)
+    trakt_sources = _normalize_trakt_sources(trakt_raw)
+    if not trakt_sources:
+        trakt_sources = _legacy_lists_to_sources(trakt_lists, str(trakt_raw.get("username", "")))
 
     trakt = TraktConfig(
         client_id=str(trakt_raw.get("client_id", "")),
         client_secret=str(trakt_raw.get("client_secret", "")),
         username=str(trakt_raw.get("username", "")),
         lists=trakt_lists,
+        sources=trakt_sources,
         limit=int(trakt_raw.get("limit", 50)),
     )
 
@@ -137,6 +171,58 @@ def _normalize_trakt_lists(trakt_raw: dict) -> list[str]:
     return parsed_lists or ["watchlist"]
 
 
+def _legacy_lists_to_sources(lists: list[str], username: str) -> list[TraktSource]:
+    sources: list[TraktSource] = []
+    for list_name in lists:
+        if list_name in SOURCE_TYPES:
+            sources.append(TraktSource(type=list_name))
+            continue
+        sources.append(
+            TraktSource(
+                type="user_list",
+                owner=username,
+                list_slug=list_name,
+                auth=True,
+            )
+        )
+    return sources
+
+
+def _normalize_trakt_sources(trakt_raw: dict) -> list[TraktSource]:
+    raw_sources = trakt_raw.get("sources", [])
+    if not isinstance(raw_sources, list):
+        return []
+
+    sources: list[TraktSource] = []
+    for item in raw_sources:
+        if isinstance(item, str):
+            normalized = item.strip()
+            if normalized:
+                if normalized in SOURCE_TYPES:
+                    sources.append(TraktSource(type=normalized))
+                else:
+                    sources.append(TraktSource(type="user_list", list_slug=normalized))
+            continue
+        if not isinstance(item, dict):
+            continue
+        source_type = str(item.get("type", "")).strip()
+        if not source_type:
+            continue
+        owner = str(item.get("owner", "")).strip()
+        list_slug = str(item.get("list_slug", "")).strip()
+        auth_raw = item.get("auth")
+        auth = None if auth_raw is None else _to_bool(auth_raw)
+        sources.append(
+            TraktSource(
+                type=source_type,
+                owner=owner,
+                list_slug=list_slug,
+                auth=auth,
+            )
+        )
+    return sources
+
+
 def _validate(config: AppConfig) -> None:
     """Validate required configuration fields."""
     errors = []
@@ -150,21 +236,42 @@ def _validate(config: AppConfig) -> None:
     if not config.medusa.api_key:
         errors.append("medusa.api_key is required")
 
-    if not config.trakt.lists:
-        errors.append("trakt.lists must include at least one list")
+    if not config.trakt.sources:
+        errors.append("trakt.sources must include at least one source")
 
-    for list_name in config.trakt.lists:
-        is_public = list_name in PUBLIC_LISTS
-        if not is_public and not config.trakt.username:
+    for source in config.trakt.sources:
+        if source.type not in SOURCE_TYPES:
             errors.append(
-                f"trakt.username is required for list '{list_name}' "
-                f"(only {', '.join(sorted(PUBLIC_LISTS))} work without a username)"
+                f"trakt.sources.type '{source.type}' is invalid "
+                f"(expected one of: {', '.join(sorted(SOURCE_TYPES))})"
             )
-        if not is_public and not config.trakt.client_secret:
-            errors.append(
-                f"trakt.client_secret is required for list '{list_name}' "
-                "(OAuth is required for personal lists)"
-            )
+            continue
+
+        if source.type == "watchlist":
+            if not config.trakt.username:
+                errors.append("trakt.username is required for source type 'watchlist'")
+            if not config.trakt.client_secret:
+                errors.append(
+                    "trakt.client_secret is required for source type 'watchlist' "
+                    "(OAuth is required for personal lists)"
+                )
+
+        if source.type == "user_list":
+            if not source.owner:
+                errors.append("trakt.sources[].owner is required for source type 'user_list'")
+            if not source.list_slug:
+                errors.append("trakt.sources[].list_slug is required for source type 'user_list'")
+            if source.requires_auth:
+                if not config.trakt.username:
+                    errors.append(
+                        "trakt.username is required when trakt.sources[].auth=true "
+                        "for source type 'user_list'"
+                    )
+                if not config.trakt.client_secret:
+                    errors.append(
+                        "trakt.client_secret is required when trakt.sources[].auth=true "
+                        "for source type 'user_list'"
+                    )
 
     if errors:
         for err in errors:

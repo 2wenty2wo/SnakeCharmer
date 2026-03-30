@@ -16,27 +16,28 @@ def run_sync(config: AppConfig) -> None:
     source_lists: dict[int, list[str]] = {}
     list_counts: dict[str, int] = {}
 
-    # Fetch shows from Trakt lists and dedupe by TVDB ID
-    for list_name in config.trakt.lists:
+    # Fetch shows from Trakt sources and dedupe by TVDB ID
+    for source in config.trakt.sources:
+        source_name = source.label
         try:
-            list_shows = trakt_client.get_shows(list_name)
+            list_shows = trakt_client.get_shows(source)
         except Exception as e:
-            log.error("Failed to fetch Trakt list '%s': %s", list_name, e)
+            log.error("Failed to fetch Trakt source '%s': %s", source_name, e)
             return
 
-        list_counts[list_name] = len(list_shows)
-        log.info("List '%s' returned %d show(s)", list_name, len(list_shows))
+        list_counts[source_name] = len(list_shows)
+        log.info("Source '%s' returned %d show(s)", source_name, len(list_shows))
 
         for show in list_shows:
             if show.tvdb_id not in trakt_shows_by_tvdb:
                 trakt_shows_by_tvdb[show.tvdb_id] = show
-            source_lists.setdefault(show.tvdb_id, []).append(list_name)
+            source_lists.setdefault(show.tvdb_id, []).append(source_name)
 
     trakt_shows = list(trakt_shows_by_tvdb.values())
 
     if not trakt_shows:
-        joined_lists = ", ".join(config.trakt.lists)
-        log.info("No shows found across configured Trakt lists: %s", joined_lists)
+        joined_sources = ", ".join(source.label for source in config.trakt.sources)
+        log.info("No shows found across configured Trakt sources: %s", joined_sources)
         return
 
     # Fetch existing Medusa library
@@ -58,7 +59,7 @@ def run_sync(config: AppConfig) -> None:
         return
 
     log.info(
-        "%d unique show(s) to add to Medusa from lists: %s",
+        "%d unique show(s) to add to Medusa from sources: %s",
         len(missing),
         ", ".join(f"{name}={count}" for name, count in list_counts.items()),
     )

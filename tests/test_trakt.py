@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from app.config import TraktConfig
+from app.config import TraktConfig, TraktSource
 from app.trakt import REQUEST_TIMEOUT, TraktClient, TraktShow
 
 
@@ -90,6 +90,37 @@ class TestGetShows:
 
         assert len(shows) == 1
         assert shows[0].tvdb_id == 42
+
+    def test_fetch_public_user_list_without_oauth(self, client):
+        items = [{"show": {"title": "List Show", "ids": {"tvdb": 50}}}]
+        source = TraktSource(type="user_list", owner="otheruser", list_slug="public-list")
+        with (
+            patch.object(client, "_ensure_auth") as mock_auth,
+            patch.object(client, "_request", return_value=_mock_response(items)),
+        ):
+            shows = client.get_shows(source)
+
+        assert len(shows) == 1
+        assert shows[0].tvdb_id == 50
+        mock_auth.assert_not_called()
+
+    def test_fetch_private_user_list_with_oauth(self, client):
+        items = [{"show": {"title": "Private Show", "ids": {"tvdb": 88}}}]
+        source = TraktSource(
+            type="user_list",
+            owner="testuser",
+            list_slug="private-list",
+            auth=True,
+        )
+        with (
+            patch.object(client, "_ensure_auth") as mock_auth,
+            patch.object(client, "_request", return_value=_mock_response(items)),
+        ):
+            shows = client.get_shows(source)
+
+        assert len(shows) == 1
+        assert shows[0].tvdb_id == 88
+        mock_auth.assert_called_once()
 
     def test_respects_limit(self, client):
         client.config.limit = 2

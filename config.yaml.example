@@ -5,20 +5,31 @@ trakt:
   client_id: YOUR_TRAKT_CLIENT_ID
   client_secret: YOUR_TRAKT_CLIENT_SECRET
 
-  # Username is required for personal lists (watchlist, custom lists)
-  # Not needed for public lists (trending, popular, watched)
+  # Username is required for personal/private endpoints (watchlist, auth=true sources)
   username: YOUR_TRAKT_USERNAME
 
-  # Lists to sync from. Each item can be:
-  #   watchlist  - Your personal Trakt watchlist (requires OAuth)
+  # Sources to sync from.
+  # type values:
+  #   watchlist  - Your personal Trakt watchlist (OAuth required)
   #   trending   - Currently trending shows (public)
   #   popular    - Most popular shows (public)
   #   watched    - Most watched shows this week (public)
-  #   <slug>     - Any custom Trakt list by slug (requires OAuth)
-  # Backward compatible: a single `list: watchlist` value also works.
-  lists:
-    - watchlist
-    - trending
+  #   user_list  - /users/{owner}/lists/{list_slug}/items/shows
+  #
+  # For type=user_list:
+  #   owner/list_slug are required
+  #   auth is optional, default false
+  #   set auth: true for private/self lists that require OAuth
+  sources:
+    - type: watchlist
+    - type: trending
+    - type: user_list
+      owner: giladg
+      list_slug: weekly-shows
+    - type: user_list
+      owner: YOUR_TRAKT_USERNAME
+      list_slug: private-favorites
+      auth: true
 
   # Max number of shows to fetch from public lists (trending/popular/watched)
   limit: 50

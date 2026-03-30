@@ -44,9 +44,15 @@ trakt:
   client_id: YOUR_TRAKT_CLIENT_ID
   client_secret: YOUR_TRAKT_CLIENT_SECRET
   username: YOUR_TRAKT_USERNAME
-  lists:
-    - watchlist
-    - trending
+  sources:
+    - type: watchlist
+    - type: trending
+    - type: user_list
+      owner: giladg
+      list_slug: weekly-shows
+    - type: user_list
+      owner: traktuser2
+      list_slug: scifi-picks
 
 medusa:
   url: http://localhost:8081
@@ -55,6 +61,51 @@ medusa:
 sync:
   dry_run: true
   interval: 600
+```
+
+### Trakt source types
+
+- `watchlist` (OAuth required; uses `trakt.username`)
+- `trending` (public)
+- `popular` (public)
+- `watched` (public weekly watched)
+- `user_list` (`owner` + `list_slug` required)
+  - public user lists do **not** require OAuth
+  - set `auth: true` for private/self lists that require OAuth
+
+### Example: sync multiple users’ public lists
+
+```yaml
+trakt:
+  client_id: YOUR_TRAKT_CLIENT_ID
+  sources:
+    - type: user_list
+      owner: alice
+      list_slug: must-watch
+    - type: user_list
+      owner: bob
+      list_slug: weekend-tv
+    - type: user_list
+      owner: carol
+      list_slug: hidden-gems
+```
+
+### Example: mix public lists + private self lists
+
+```yaml
+trakt:
+  client_id: YOUR_TRAKT_CLIENT_ID
+  client_secret: YOUR_TRAKT_CLIENT_SECRET
+  username: YOUR_TRAKT_USERNAME
+  sources:
+    - type: trending
+    - type: user_list
+      owner: otheruser
+      list_slug: top-100-shows
+    - type: user_list
+      owner: YOUR_TRAKT_USERNAME
+      list_slug: private-favorites
+      auth: true
 ```
 
 ------------------------------------------------------------------------
