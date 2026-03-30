@@ -119,9 +119,19 @@ def load_config(path: str) -> AppConfig:
 
     # Build config objects
     trakt_lists = _normalize_trakt_lists(trakt_raw)
-    trakt_sources = _normalize_trakt_sources(trakt_raw)
-    if not trakt_sources:
-        trakt_sources = _legacy_lists_to_sources(trakt_lists, str(trakt_raw.get("username", "")))
+    username = str(trakt_raw.get("username", ""))
+    has_sources_key = "sources" in trakt_raw
+    env_list_override = any(
+        os.environ.get(env_var) is not None
+        for env_var in ("SNAKECHARMER_TRAKT_LIST", "SNAKECHARMER_TRAKT_LISTS")
+    )
+
+    if env_list_override:
+        trakt_sources = _legacy_lists_to_sources(trakt_lists, username)
+    elif has_sources_key:
+        trakt_sources = _normalize_trakt_sources(trakt_raw)
+    else:
+        trakt_sources = _legacy_lists_to_sources(trakt_lists, username)
 
     trakt = TraktConfig(
         client_id=str(trakt_raw.get("client_id", "")),
