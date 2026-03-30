@@ -1,8 +1,8 @@
 import logging
 
 from app.config import AppConfig
-from app.trakt import TraktClient
 from app.medusa import MedusaClient
+from app.trakt import TraktClient
 
 log = logging.getLogger(__name__)
 
@@ -63,5 +63,9 @@ def run_sync(config: AppConfig) -> None:
     prefix = "[DRY RUN] " if config.sync.dry_run else ""
     log.info(
         "%sSync complete: %d added, %d already existed, %d failed (out of %d missing)",
-        prefix, added, skipped, failed, len(missing),
+        prefix,
+        added,
+        skipped,
+        failed,
+        len(missing),
     )
