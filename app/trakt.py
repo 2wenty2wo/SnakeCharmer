@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import requests
 
-from app.config import TraktConfig
+from app.config import TraktConfig, TraktSource
 
 log = logging.getLogger(__name__)
 
@@ -36,31 +36,47 @@ class TraktClient:
             }
         )
 
-    def get_shows(self, target_list: str) -> list[TraktShow]:
-        """Fetch shows from a target Trakt list."""
-        list_name = target_list
+    def get_shows(self, source: TraktSource | str) -> list[TraktShow]:
+        """Fetch shows from a configured Trakt source."""
+        normalized = self._normalize_source(source)
+        source_name = normalized.label
 
-        if list_name == "trending":
-            return self._fetch_public("/shows/trending", list_name, nested_key="show")
-        elif list_name == "popular":
-            return self._fetch_public("/shows/popular", list_name)
-        elif list_name == "watched":
-            return self._fetch_public("/shows/watched/weekly", list_name, nested_key="show")
-        elif list_name == "watchlist":
+        if normalized.type == "trending":
+            return self._fetch_public("/shows/trending", source_name, nested_key="show")
+        if normalized.type == "popular":
+            return self._fetch_public("/shows/popular", source_name)
+        if normalized.type == "watched":
+            return self._fetch_public("/shows/watched/weekly", source_name, nested_key="show")
+        if normalized.type == "watchlist":
             self._ensure_auth()
             return self._fetch_user_list(
                 f"/users/{self.config.username}/watchlist/shows",
-                list_name,
+                source_name,
                 nested_key="show",
             )
-        else:
-            # Custom user list
-            self._ensure_auth()
+        if normalized.type == "user_list":
+            if normalized.requires_auth:
+                self._ensure_auth()
             return self._fetch_user_list(
-                f"/users/{self.config.username}/lists/{list_name}/items/shows",
-                list_name,
+                f"/users/{normalized.owner}/lists/{normalized.list_slug}/items/shows",
+                source_name,
                 nested_key="show",
             )
+
+        raise ValueError(f"Unsupported Trakt source type: {normalized.type}")
+
+    def _normalize_source(self, source: TraktSource | str) -> TraktSource:
+        if isinstance(source, TraktSource):
+            return source
+        list_name = str(source).strip()
+        if list_name in {"trending", "popular", "watched", "watchlist"}:
+            return TraktSource(type=list_name)
+        return TraktSource(
+            type="user_list",
+            owner=self.config.username,
+            list_slug=list_name,
+            auth=True,
+        )
 
     def _fetch_public(
         self, path: str, source_list: str, nested_key: str | None = None
