@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from app.config import AppConfig, MedusaConfig, SyncConfig, TraktConfig, TraktSource
-from app.sync import run_sync
+from app.sync import _medusa_add_options_from_source, run_sync
 from app.trakt import TraktShow
 
 
@@ -202,3 +202,17 @@ class TestRunSync:
             "Show With Words",
             add_options={"required_words": ["proper", "repack"]},
         )
+
+    def test_add_show_false_counts_as_already_exists(self, config, mock_trakt, mock_medusa):
+        mock_trakt.get_shows.return_value = [TraktShow(title="Show A", tvdb_id=1)]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        mock_medusa.add_show.return_value = False
+
+        run_sync(config)
+
+        mock_medusa.add_show.assert_called_once_with(1, "Show A", add_options=None)
+
+
+class TestMedusaAddOptionsFromSource:
+    def test_returns_none_for_missing_source(self):
+        assert _medusa_add_options_from_source(None) is None

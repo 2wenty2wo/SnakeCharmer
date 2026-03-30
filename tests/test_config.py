@@ -1,7 +1,13 @@
 import pytest
 import yaml
 
-from app.config import PUBLIC_LISTS, _to_bool, load_config
+from app.config import (
+    PUBLIC_LISTS,
+    _normalize_trakt_lists,
+    _normalize_trakt_sources,
+    _to_bool,
+    load_config,
+)
 
 
 def _write_config(tmp_path, data):
@@ -358,3 +364,48 @@ class TestToBool:
 class TestPublicLists:
     def test_contains_expected(self):
         assert {"trending", "popular", "watched"} == PUBLIC_LISTS
+
+
+class TestNormalizeHelpers:
+    def test_normalize_trakt_lists_from_numeric_value(self):
+        parsed = _normalize_trakt_lists({"lists": 123})
+        assert parsed == ["123"]
+
+    def test_normalize_trakt_lists_falls_back_to_watchlist_for_empty_values(self):
+        parsed = _normalize_trakt_lists({"lists": " , "})
+        assert parsed == ["watchlist"]
+
+    def test_normalize_trakt_sources_returns_empty_for_non_list(self):
+        parsed = _normalize_trakt_sources({"sources": "trending"})
+        assert parsed == []
+
+    def test_normalize_trakt_sources_skips_invalid_item_types(self):
+        parsed = _normalize_trakt_sources({"sources": [123, None, {"type": "trending"}]})
+        assert len(parsed) == 1
+        assert parsed[0].type == "trending"
+
+    def test_normalize_trakt_sources_string_custom_list_maps_to_user_list(self):
+        parsed = _normalize_trakt_sources({"sources": ["my-custom-list"]})
+        assert len(parsed) == 1
+        assert parsed[0].type == "user_list"
+        assert parsed[0].list_slug == "my-custom-list"
+
+    def test_user_list_auth_true_requires_username_and_client_secret(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {
+                        "type": "user_list",
+                        "owner": "alice",
+                        "list_slug": "private-list",
+                        "auth": True,
+                    }
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+
+        with pytest.raises(SystemExit):
+            load_config(path)
