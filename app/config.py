@@ -132,6 +132,11 @@ def _validate(config: AppConfig) -> None:
             f"trakt.username is required for list '{config.trakt.list}' "
             f"(only {', '.join(sorted(PUBLIC_LISTS))} work without a username)"
         )
+    if not is_public and not config.trakt.client_secret:
+        errors.append(
+            f"trakt.client_secret is required for list '{config.trakt.list}' "
+            "(OAuth is required for personal lists)"
+        )
 
     if errors:
         for err in errors:

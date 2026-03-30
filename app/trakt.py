@@ -59,12 +59,11 @@ class TraktClient:
 
     def _fetch_public(self, path: str, nested_key: str | None = None) -> list[TraktShow]:
         """Fetch shows from a public Trakt endpoint with limit support."""
-        params = {"limit": self.config.limit, "page": 1}
+        page_size = min(self.config.limit, 100)
+        params = {"limit": page_size, "page": 1}
         shows = []
-        remaining = self.config.limit
 
-        while remaining > 0:
-            params["limit"] = min(remaining, 100)
+        while len(shows) < self.config.limit:
             resp = self._request("GET", path, params=params)
             items = resp.json()
             if not items:
@@ -80,8 +79,8 @@ class TraktClient:
             if params["page"] >= page_count:
                 break
             params["page"] += 1
-            remaining -= len(items)
 
+        shows = shows[:self.config.limit]
         log.info("Fetched %d shows from Trakt [%s]", len(shows), self.config.list)
         return shows
 
