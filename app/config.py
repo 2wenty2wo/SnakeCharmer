@@ -15,8 +15,18 @@ class TraktConfig:
     client_id: str = ""
     client_secret: str = ""
     username: str = ""
-    list: str = "watchlist"
+    lists: list[str] = field(default_factory=lambda: ["watchlist"])
     limit: int = 50
+
+    @property
+    def list(self) -> str:
+        """Backward-compatible alias for legacy single-list config access."""
+        return self.lists[0] if self.lists else "watchlist"
+
+    @list.setter
+    def list(self, value: str) -> None:
+        normalized = str(value).strip()
+        self.lists = [normalized] if normalized else ["watchlist"]
 
 
 @dataclass
@@ -44,6 +54,7 @@ ENV_MAP = {
     "SNAKECHARMER_TRAKT_CLIENT_SECRET": ("trakt", "client_secret"),
     "SNAKECHARMER_TRAKT_USERNAME": ("trakt", "username"),
     "SNAKECHARMER_TRAKT_LIST": ("trakt", "list"),
+    "SNAKECHARMER_TRAKT_LISTS": ("trakt", "lists"),
     "SNAKECHARMER_TRAKT_LIMIT": ("trakt", "limit"),
     "SNAKECHARMER_MEDUSA_URL": ("medusa", "url"),
     "SNAKECHARMER_MEDUSA_API_KEY": ("medusa", "api_key"),
@@ -77,11 +88,13 @@ def load_config(path: str) -> AppConfig:
             target[key] = value
 
     # Build config objects
+    trakt_lists = _normalize_trakt_lists(trakt_raw)
+
     trakt = TraktConfig(
         client_id=str(trakt_raw.get("client_id", "")),
         client_secret=str(trakt_raw.get("client_secret", "")),
         username=str(trakt_raw.get("username", "")),
-        list=str(trakt_raw.get("list", "watchlist")),
+        lists=trakt_lists,
         limit=int(trakt_raw.get("limit", 50)),
     )
 
@@ -112,6 +125,18 @@ def _to_bool(value) -> bool:
     return str(value).lower() in ("true", "1", "yes")
 
 
+def _normalize_trakt_lists(trakt_raw: dict) -> list[str]:
+    raw_lists = trakt_raw.get("lists", trakt_raw.get("list", "watchlist"))
+    if isinstance(raw_lists, list):
+        parsed_lists = [str(item).strip() for item in raw_lists if str(item).strip()]
+    elif isinstance(raw_lists, str):
+        parsed_lists = [item.strip() for item in raw_lists.split(",") if item.strip()]
+    else:
+        parsed_lists = [str(raw_lists).strip()]
+
+    return parsed_lists or ["watchlist"]
+
+
 def _validate(config: AppConfig) -> None:
     """Validate required configuration fields."""
     errors = []
@@ -125,18 +150,21 @@ def _validate(config: AppConfig) -> None:
     if not config.medusa.api_key:
         errors.append("medusa.api_key is required")
 
-    # Username is required for personal lists
-    is_public = config.trakt.list in PUBLIC_LISTS
-    if not is_public and not config.trakt.username:
-        errors.append(
-            f"trakt.username is required for list '{config.trakt.list}' "
-            f"(only {', '.join(sorted(PUBLIC_LISTS))} work without a username)"
-        )
-    if not is_public and not config.trakt.client_secret:
-        errors.append(
-            f"trakt.client_secret is required for list '{config.trakt.list}' "
-            "(OAuth is required for personal lists)"
-        )
+    if not config.trakt.lists:
+        errors.append("trakt.lists must include at least one list")
+
+    for list_name in config.trakt.lists:
+        is_public = list_name in PUBLIC_LISTS
+        if not is_public and not config.trakt.username:
+            errors.append(
+                f"trakt.username is required for list '{list_name}' "
+                f"(only {', '.join(sorted(PUBLIC_LISTS))} work without a username)"
+            )
+        if not is_public and not config.trakt.client_secret:
+            errors.append(
+                f"trakt.client_secret is required for list '{list_name}' "
+                "(OAuth is required for personal lists)"
+            )
 
     if errors:
         for err in errors:

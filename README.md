@@ -7,7 +7,7 @@ shows to Medusa --- clean, automated, and Sonarr-free.**
 
 ## 🚀 Features
 
--   🔄 Sync Trakt watchlists or custom lists
+-   🔄 Sync one or more Trakt watchlists/custom lists
 -   ➕ Automatically add missing shows to Medusa
 -   🧠 Smart duplicate detection (no double adds)
 -   🧪 Dry-run mode (see what would be added)
@@ -20,7 +20,7 @@ shows to Medusa --- clean, automated, and Sonarr-free.**
 
 SnakeCharmer acts as a bridge between Trakt and Medusa:
 
-1.  Fetch shows from your Trakt list
+1.  Fetch shows from your configured Trakt list(s)
 2.  Fetch your existing Medusa library
 3.  Compare both
 4.  Add any missing shows to Medusa automatically
@@ -44,7 +44,9 @@ trakt:
   client_id: YOUR_TRAKT_CLIENT_ID
   client_secret: YOUR_TRAKT_CLIENT_SECRET
   username: YOUR_TRAKT_USERNAME
-  list: watchlist
+  lists:
+    - watchlist
+    - trending
 
 medusa:
   url: http://localhost:8081
@@ -99,7 +101,7 @@ docker run -v $(pwd)/config.yaml:/app/config.yaml snakecharmer
 
 ## 🛣️ Roadmap
 
--   [ ] Multiple Trakt lists
+-   [x] Multiple Trakt lists
 -   [ ] Show removal (sync down)
 -   [ ] Tag / category support
 -   [ ] Overseerr integration
