@@ -83,7 +83,7 @@ Data flow: `main.py` loads config, calls `run_sync()` which instantiates both AP
 
 ## Environment Variable Overrides
 
-All config values can be overridden via environment variables with the `SNAKECHARMER_` prefix:
+Only the config keys listed below can be overridden via environment variables with the `SNAKECHARMER_` prefix. Structured keys (for example `trakt.sources` and per-source `medusa` options) must be set in YAML:
 
 | Variable | Config path |
 |---|---|
