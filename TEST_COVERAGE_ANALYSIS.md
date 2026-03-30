@@ -10,93 +10,61 @@ python -m pytest --cov=. --cov-report=term-missing
 
 Results:
 
-- Total line coverage: **86%**
+- Total line coverage: **98%**
 - Production modules:
   - `app/medusa.py`: **100%**
-  - `app/sync.py`: **97%**
-  - `app/config.py`: **89%**
-  - `app/trakt.py`: **54%**
-  - `main.py`: **0%**
+  - `app/sync.py`: **100%**
+  - `app/config.py`: **95%**
+  - `app/trakt.py`: **95%**
+  - `main.py`: **97%**
 
-## High-priority gaps
+## Implemented in this update
 
-### 1) `main.py` has no automated test coverage
+### 1) Added `main.py` coverage
 
-Why this matters:
-- It contains CLI argument parsing and the interval loop behavior, which are user-facing entrypoints.
-- Regressions here could break normal runtime without being caught by tests.
+Implemented tests now cover:
+- `parse_args()` defaults and `--dry-run`.
+- Single-run mode (`interval == 0`) runs sync once.
+- Interval mode (`interval > 0`) loops, sleeps, and exits on `KeyboardInterrupt`.
+- Dry-run CLI flag overriding config value.
 
-Suggested tests:
-- `parse_args()` defaults and `--dry-run` parsing.
-- Single-run path (`sync.interval == 0`) calls `run_sync` exactly once.
-- Interval path (`sync.interval > 0`) loops and sleeps (with `time.sleep` patched), and exits cleanly on `KeyboardInterrupt`.
-- Logging/bootstrap smoke test to verify startup does not raise.
+### 2) Expanded `app/trakt.py` branch coverage
 
-### 2) `app/trakt.py` coverage is low (54%)
+Implemented tests now cover:
+- `_normalize_source` aliases and custom list normalization.
+- `_fetch_public` / `_fetch_user_list` pagination and empty-page exits.
+- `_load_token` for missing, invalid, valid, and expired token paths.
+- `_refresh_token` success and failure paths.
+- `_ensure_auth` load-token and authenticate branches.
+- `_authenticate` success, terminal status exits, and timeout exit.
+- `_save_token` persistence smoke test.
 
-Why this matters:
-- This module owns OAuth device auth, token refresh, pagination, and rate-limit behavior.
-- It is the most failure-prone integration surface in the project.
+### 3) Added config normalization/validation edge tests
 
-Suggested tests:
-- `_normalize_source`:
-  - string aliases (`trending`, `watchlist`, etc.)
-  - custom list name normalization to `user_list` with `auth=True`
-- `_fetch_public` / `_fetch_user_list` pagination edge cases:
-  - empty page exits loop
-  - multi-page traversal using `X-Pagination-Page-Count`
-  - list truncation to `config.limit`
-- `_load_token` / `_refresh_token`:
-  - token file missing
-  - unreadable/invalid JSON token file
-  - non-expired token accepted
-  - expired token triggers refresh success/failure paths
-- `_ensure_auth`:
-  - token loaded path sets `Authorization`
-  - no token path invokes `_authenticate`
-- `_authenticate` device flow:
-  - 200 success path sets token and `Authorization`
-  - poll status handling (400 pending, 404/409/410/418 terminal failures, 429 slow-down)
-  - timeout path raises `SystemExit(1)`
-- `_save_token` write smoke test with `tmp_path`.
+Implemented tests now cover:
+- `_normalize_trakt_lists` numeric and empty-string fallback inputs.
+- `_normalize_trakt_sources` with non-list input, invalid item entries, and string custom list mapping.
+- Validation for `user_list` with `auth=true` missing OAuth prerequisites.
 
-### 3) `app/config.py` has targeted misses in parsing/validation edges
+### 4) Completed uncovered `app/sync.py` branches
 
-Why this matters:
-- Configuration parsing determines runtime safety before any network calls.
+Implemented tests now cover:
+- `_medusa_add_options_from_source(None) -> None`.
+- `add_show(...)` false return path (already existed count path).
 
-Suggested tests:
-- `_normalize_trakt_lists` non-list, non-string inputs (e.g. numeric values) and empty-value fallback.
-- `_normalize_trakt_sources` handling for:
-  - non-list `sources`
-  - invalid item types in `sources`
-  - string custom list entries becoming `user_list`
-- Validation for `medusa.quality` list containing non-string items.
-- Validation around OAuth-required `user_list` with `auth=true` but missing username/client_secret.
+## Remaining low-risk misses
 
-## Lower-priority gaps
-
-### 4) Small uncovered branches in `app/sync.py`
-
-Current misses are limited, but useful to complete:
-- `_medusa_add_options_from_source(None) -> None`
-- `add_show(...)` false return path increments "already existed" counter
-
-These are straightforward unit tests and would bring the module to ~100%.
-
-## Recommended execution plan
-
-1. **Add `tests/test_main.py` first** (largest risk reduction quickly).
-2. **Expand `tests/test_trakt.py` for auth/token/device-flow branches**.
-3. **Add config edge-case tests** for normalization and validation misses.
-4. **Fill remaining sync branch tests**.
+Current uncovered production lines are small and mostly defensive branches:
+- `app/config.py`: dataclass accessors and specific validation branches not hit by current fixtures.
+- `app/trakt.py`: unsupported-source `ValueError` branch and `429 slow-down` sub-branch in device auth polling.
+- `main.py`: direct `if __name__ == "__main__"` execution line.
 
 ## Suggested quality gate
 
 After adding the above tests, enforce in CI:
 
 ```bash
-python -m pytest --cov=app --cov=main --cov-report=term-missing --cov-fail-under=90
+python -m pytest --cov=app --cov=main --cov-report=term-missing --cov-fail-under=95
 ```
 
-A 90% threshold is realistic given current baseline and should drive coverage in the most fragile modules.
+A 95% threshold is now realistic given current baseline and protects against regression in high-risk paths.

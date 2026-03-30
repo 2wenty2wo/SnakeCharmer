@@ -60,6 +60,21 @@ class TestParseShow:
 
 
 class TestGetShows:
+    def test_normalize_source_alias(self, client):
+        source = client._normalize_source("watchlist")
+
+        assert source.type == "watchlist"
+        assert source.list_slug == ""
+        assert source.requires_auth is False
+
+    def test_normalize_source_custom_list_to_user_list(self, client):
+        source = client._normalize_source("my custom")
+
+        assert source.type == "user_list"
+        assert source.owner == client.config.username
+        assert source.list_slug == "my custom"
+        assert source.requires_auth is True
+
     def test_fetch_trending(self, client):
         items = [
             {"show": {"title": "Show A", "ids": {"tvdb": 1}}},
@@ -129,6 +144,196 @@ class TestGetShows:
             shows = client.get_shows("trending")
 
         assert len(shows) == 2
+
+    def test_fetch_public_stops_on_empty_page(self, client):
+        with patch.object(client, "_request", return_value=_mock_response([])) as mock_request:
+            shows = client._fetch_public("/shows/trending", "trending", nested_key="show")
+
+        assert shows == []
+        mock_request.assert_called_once()
+
+    def test_fetch_public_uses_pagination_headers(self, client):
+        page1 = _mock_response(
+            [{"show": {"title": "Show A", "ids": {"tvdb": 1}}}],
+            headers={"X-Pagination-Page-Count": "2"},
+        )
+        page2 = _mock_response(
+            [{"show": {"title": "Show B", "ids": {"tvdb": 2}}}],
+            headers={"X-Pagination-Page-Count": "2"},
+        )
+        with patch.object(client, "_request", side_effect=[page1, page2]) as mock_request:
+            shows = client._fetch_public("/shows/trending", "trending", nested_key="show")
+
+        assert [show.tvdb_id for show in shows] == [1, 2]
+        assert mock_request.call_count == 2
+
+    def test_fetch_user_list_paginates_until_last_page(self, client):
+        page1 = _mock_response(
+            [{"show": {"title": "Show A", "ids": {"tvdb": 1}}}],
+            headers={"X-Pagination-Page-Count": "2"},
+        )
+        page2 = _mock_response(
+            [{"show": {"title": "Show B", "ids": {"tvdb": 2}}}],
+            headers={"X-Pagination-Page-Count": "2"},
+        )
+        with patch.object(client, "_request", side_effect=[page1, page2]):
+            shows = client._fetch_user_list(
+                "/users/test/list/items/shows", "list", nested_key="show"
+            )
+
+        assert [show.tvdb_id for show in shows] == [1, 2]
+
+
+class TestAuth:
+    def test_load_token_returns_none_when_file_missing(self, client):
+        assert client._load_token() is None
+
+    def test_load_token_invalid_json_returns_none(self, client, tmp_path):
+        token_file = tmp_path / "trakt_token.json"
+        token_file.write_text("{invalid")
+        client.token_path = str(token_file)
+
+        assert client._load_token() is None
+
+    def test_load_token_returns_valid_non_expired_token(self, client, tmp_path):
+        token = {"access_token": "abc", "created_at": 1000, "expires_in": 100000}
+        token_file = tmp_path / "trakt_token.json"
+        token_file.write_text('{"access_token":"abc","created_at":1000,"expires_in":100000}')
+        client.token_path = str(token_file)
+
+        with patch("app.trakt.time.time", return_value=1500):
+            loaded = client._load_token()
+
+        assert loaded == token
+
+    def test_load_token_refreshes_expired_token(self, client, tmp_path):
+        token_file = tmp_path / "trakt_token.json"
+        token_file.write_text(
+            '{"access_token":"old","refresh_token":"r1","created_at":1000,"expires_in":100}'
+        )
+        client.token_path = str(token_file)
+        refreshed = {"access_token": "new"}
+
+        with (
+            patch("app.trakt.time.time", return_value=5000),
+            patch.object(client, "_refresh_token", return_value=refreshed) as mock_refresh,
+        ):
+            loaded = client._load_token()
+
+        assert loaded == refreshed
+        mock_refresh.assert_called_once()
+
+    def test_ensure_auth_uses_loaded_token(self, client):
+        with (
+            patch.object(client, "_load_token", return_value={"access_token": "abc"}),
+            patch.object(client, "_authenticate") as mock_auth,
+        ):
+            client._ensure_auth()
+
+        assert client.session.headers["Authorization"] == "Bearer abc"
+        mock_auth.assert_not_called()
+
+    def test_ensure_auth_authenticates_when_no_token(self, client):
+        with (
+            patch.object(client, "_load_token", return_value=None),
+            patch.object(client, "_authenticate") as mock_auth,
+        ):
+            client._ensure_auth()
+
+        mock_auth.assert_called_once()
+
+    def test_save_token_writes_file(self, client, tmp_path):
+        client.token_path = str(tmp_path / "trakt_token.json")
+        client._save_token({"access_token": "abc"})
+
+        assert (tmp_path / "trakt_token.json").exists()
+        assert "abc" in (tmp_path / "trakt_token.json").read_text()
+
+    def test_refresh_token_success_saves_and_returns_token(self, client):
+        refreshed = {"access_token": "new-token"}
+        with (
+            patch.object(client.session, "post", return_value=_mock_response(refreshed)),
+            patch.object(client, "_save_token") as mock_save,
+        ):
+            token = client._refresh_token({"refresh_token": "old-refresh"})
+
+        assert token == refreshed
+        mock_save.assert_called_once_with(refreshed)
+
+    def test_refresh_token_request_error_returns_none(self, client):
+        with patch.object(client.session, "post", side_effect=requests.RequestException("boom")):
+            token = client._refresh_token({"refresh_token": "old-refresh"})
+
+        assert token is None
+
+    def test_authenticate_success_sets_authorization(self, client):
+        device_resp = _mock_response(
+            {
+                "user_code": "AAAA",
+                "verification_url": "https://trakt.tv/activate",
+                "expires_in": 60,
+                "interval": 1,
+                "device_code": "device-1",
+            }
+        )
+        poll_success = _mock_response({"access_token": "token-123"}, status_code=200)
+
+        with (
+            patch.object(client, "_request", return_value=device_resp),
+            patch.object(client.session, "post", return_value=poll_success),
+            patch.object(client, "_save_token") as mock_save,
+            patch("app.trakt.time.sleep"),
+            patch("app.trakt.time.time", side_effect=[0, 1]),
+        ):
+            client._authenticate()
+
+        assert client.session.headers["Authorization"] == "Bearer token-123"
+        mock_save.assert_called_once_with({"access_token": "token-123"})
+
+    @pytest.mark.parametrize("status_code", [404, 409, 410, 418])
+    def test_authenticate_terminal_poll_status_exits(self, client, status_code):
+        device_resp = _mock_response(
+            {
+                "user_code": "AAAA",
+                "verification_url": "https://trakt.tv/activate",
+                "expires_in": 60,
+                "interval": 1,
+                "device_code": "device-1",
+            }
+        )
+        poll_resp = _mock_response({}, status_code=status_code)
+
+        with (
+            patch.object(client, "_request", return_value=device_resp),
+            patch.object(client.session, "post", return_value=poll_resp),
+            patch("app.trakt.time.sleep"),
+            patch("app.trakt.time.time", return_value=1),
+            patch("app.trakt.log.error"),
+            pytest.raises(SystemExit),
+        ):
+            client._authenticate()
+
+    def test_authenticate_timeout_exits(self, client):
+        device_resp = _mock_response(
+            {
+                "user_code": "AAAA",
+                "verification_url": "https://trakt.tv/activate",
+                "expires_in": 1,
+                "interval": 1,
+                "device_code": "device-1",
+            }
+        )
+        pending_resp = _mock_response({}, status_code=400)
+
+        with (
+            patch.object(client, "_request", return_value=device_resp),
+            patch.object(client.session, "post", return_value=pending_resp),
+            patch("app.trakt.time.sleep"),
+            patch("app.trakt.time.time", side_effect=[0, 0.5, 2, 2]),
+            patch("app.trakt.log.error"),
+            pytest.raises(SystemExit),
+        ):
+            client._authenticate()
 
 
 class TestRequest:
