@@ -10,6 +10,19 @@ REQUEST_TIMEOUT = 30
 
 
 class MedusaClient:
+    _ALLOWED_ADD_OPTION_FIELDS = {
+        "quality",
+        "quality_profile",
+        "qualityProfile",
+        "required_words",
+        "requiredWords",
+    }
+
+    _OPTION_FIELD_ALIASES = {
+        "quality_profile": "qualityProfile",
+        "required_words": "requiredWords",
+    }
+
     def __init__(self, config: MedusaConfig):
         self.base_url = f"{config.url}/api/v2"
         self.session = requests.Session()
@@ -34,18 +47,25 @@ class MedusaClient:
         log.info("Found %d existing shows in Medusa", len(tvdb_ids))
         return tvdb_ids
 
-    def add_show(self, tvdb_id: int, title: str) -> bool:
+    def add_show(self, tvdb_id: int, title: str, add_options: dict | None = None) -> bool:
         """Add a show to Medusa by TVDB ID.
 
         Returns True if added, False if already exists.
         """
+        payload = {"id": {"tvdb": tvdb_id}}
+
+        if add_options:
+            for raw_key, value in add_options.items():
+                if raw_key not in self._ALLOWED_ADD_OPTION_FIELDS:
+                    continue
+                normalized_key = self._OPTION_FIELD_ALIASES.get(raw_key, raw_key)
+                payload[normalized_key] = value
+
         try:
             self._request(
                 "POST",
                 "/series",
-                json={
-                    "id": {"tvdb": tvdb_id},
-                },
+                json=payload,
             )
             log.info("Added: %s (tvdb:%d)", title, tvdb_id)
             return True
