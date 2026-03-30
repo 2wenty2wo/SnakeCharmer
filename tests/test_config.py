@@ -300,9 +300,7 @@ class TestLoadConfig:
         data = {
             "trakt": {
                 "client_id": "id",
-                "sources": [
-                    {"type": "trending", "medusa": {"required_words": ["web", "  ", 123]}}
-                ],
+                "sources": [{"type": "trending", "medusa": {"required_words": ["web", "  ", 123]}}],
             },
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
         }
