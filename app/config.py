@@ -315,7 +315,9 @@ def _validate(config: AppConfig) -> None:
 
         required_words = source.medusa.required_words
         if not isinstance(required_words, list):
-            errors.append("trakt.sources[].medusa.required_words must be a list of non-empty strings")
+            errors.append(
+                "trakt.sources[].medusa.required_words must be a list of non-empty strings"
+            )
         else:
             if any(not isinstance(word, str) or not word.strip() for word in required_words):
                 errors.append(

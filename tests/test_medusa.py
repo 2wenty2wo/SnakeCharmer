@@ -46,10 +46,32 @@ class TestGetExistingTvdbIds:
 
 class TestAddShow:
     def test_adds_show_successfully(self, client):
-        with patch.object(client, "_request", return_value=_mock_response({})):
+        with patch.object(client, "_request", return_value=_mock_response({})) as mock_request:
             result = client.add_show(12345, "Test Show")
 
         assert result is True
+        _, kwargs = mock_request.call_args
+        assert kwargs["json"] == {"id": {"tvdb": 12345}}
+
+    def test_merges_allowed_add_options(self, client):
+        with patch.object(client, "_request", return_value=_mock_response({})) as mock_request:
+            result = client.add_show(
+                12345,
+                "Test Show",
+                add_options={
+                    "quality": "hd",
+                    "required_words": ["proper"],
+                    "ignored": "value",
+                },
+            )
+
+        assert result is True
+        _, kwargs = mock_request.call_args
+        assert kwargs["json"] == {
+            "id": {"tvdb": 12345},
+            "quality": "hd",
+            "requiredWords": ["proper"],
+        }
 
     def test_returns_false_for_conflict(self, client):
         error_resp = MagicMock(spec=requests.Response)

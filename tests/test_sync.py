@@ -43,8 +43,8 @@ class TestRunSync:
         run_sync(config)
 
         assert mock_medusa.add_show.call_count == 2
-        mock_medusa.add_show.assert_any_call(2, "Show B")
-        mock_medusa.add_show.assert_any_call(3, "Show C")
+        mock_medusa.add_show.assert_any_call(2, "Show B", add_options=None)
+        mock_medusa.add_show.assert_any_call(3, "Show C", add_options=None)
 
     def test_skips_when_all_in_sync(self, config, mock_trakt, mock_medusa):
         mock_trakt.get_shows.side_effect = [
@@ -123,3 +123,27 @@ class TestRunSync:
         run_sync(config)
 
         assert mock_medusa.add_show.call_count == 3
+
+    def test_uses_first_source_options_for_duplicates(self, config, mock_trakt, mock_medusa):
+        config.trakt.sources = [
+            TraktSource(type="trending"),
+            TraktSource(type="watchlist"),
+        ]
+        config.trakt.sources[0].medusa.quality = "hd"
+        config.trakt.sources[1].medusa.quality = "sd"
+        config.trakt.sources[1].medusa.required_words = ["internal"]
+
+        mock_trakt.get_shows.side_effect = [
+            [TraktShow(title="Show A", tvdb_id=1)],
+            [TraktShow(title="Show A Duplicate", tvdb_id=1)],
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        mock_medusa.add_show.return_value = True
+
+        run_sync(config)
+
+        mock_medusa.add_show.assert_called_once_with(
+            1,
+            "Show A",
+            add_options={"quality": "hd"},
+        )
