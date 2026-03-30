@@ -73,6 +73,33 @@ class TestAddShow:
             "requiredWords": ["proper"],
         }
 
+    def test_post_payload_includes_quality_and_required_words_when_provided(self, client):
+        with patch.object(client, "_request", return_value=_mock_response({})) as mock_request:
+            result = client.add_show(
+                777,
+                "Configured Show",
+                add_options={
+                    "quality": ["uhd", "hd"],
+                    "required_words": ["remux", "proper"],
+                },
+            )
+
+        assert result is True
+        _, kwargs = mock_request.call_args
+        assert kwargs["json"] == {
+            "id": {"tvdb": 777},
+            "quality": ["uhd", "hd"],
+            "requiredWords": ["remux", "proper"],
+        }
+
+    def test_post_payload_is_minimal_when_no_options_provided(self, client):
+        with patch.object(client, "_request", return_value=_mock_response({})) as mock_request:
+            result = client.add_show(888, "Bare Minimum Show", add_options=None)
+
+        assert result is True
+        _, kwargs = mock_request.call_args
+        assert kwargs["json"] == {"id": {"tvdb": 888}}
+
     def test_returns_false_for_conflict(self, client):
         error_resp = MagicMock(spec=requests.Response)
         error_resp.status_code = 409
