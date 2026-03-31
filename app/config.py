@@ -8,6 +8,16 @@ import yaml
 log = logging.getLogger(__name__)
 
 PUBLIC_LISTS = {"trending", "popular", "watched"}
+
+
+class ConfigError(Exception):
+    """Raised when configuration validation fails."""
+
+    def __init__(self, errors: list[str]):
+        self.errors = errors
+        super().__init__(", ".join(errors))
+
+
 SOURCE_TYPES = PUBLIC_LISTS | {"watchlist", "user_list"}
 
 
@@ -88,11 +98,18 @@ class HealthConfig:
 
 
 @dataclass
+class WebUIConfig:
+    enabled: bool = False
+    port: int = 8089
+
+
+@dataclass
 class AppConfig:
     trakt: TraktConfig = field(default_factory=TraktConfig)
     medusa: MedusaConfig = field(default_factory=MedusaConfig)
     sync: SyncConfig = field(default_factory=SyncConfig)
     health: HealthConfig = field(default_factory=HealthConfig)
+    webui: WebUIConfig = field(default_factory=WebUIConfig)
     config_dir: str = "."
 
 
@@ -112,6 +129,8 @@ ENV_MAP = {
     "SNAKECHARMER_SYNC_LOG_FORMAT": ("sync", "log_format"),
     "SNAKECHARMER_HEALTH_ENABLED": ("health", "enabled"),
     "SNAKECHARMER_HEALTH_PORT": ("health", "port"),
+    "SNAKECHARMER_WEBUI_ENABLED": ("webui", "enabled"),
+    "SNAKECHARMER_WEBUI_PORT": ("webui", "port"),
 }
 
 
@@ -132,6 +151,7 @@ def load_config(path: str) -> AppConfig:
     medusa_raw = raw.get("medusa", {})
     sync_raw = raw.get("sync", {})
     health_raw = raw.get("health", {})
+    webui_raw = raw.get("webui", {})
 
     # Apply environment variable overrides
     for env_var, (section, key) in ENV_MAP.items():
@@ -142,6 +162,7 @@ def load_config(path: str) -> AppConfig:
                 "medusa": medusa_raw,
                 "sync": sync_raw,
                 "health": health_raw,
+                "webui": webui_raw,
             }[section]
             target[key] = value
 
@@ -188,15 +209,27 @@ def load_config(path: str) -> AppConfig:
         port=int(health_raw.get("port", 8095)),
     )
 
+    webui = WebUIConfig(
+        enabled=_to_bool(webui_raw.get("enabled", False)),
+        port=int(webui_raw.get("port", 8089)),
+    )
+
     config = AppConfig(
         trakt=trakt,
         medusa=medusa,
         sync=sync,
         health=health,
+        webui=webui,
         config_dir=os.path.dirname(os.path.abspath(path)),
     )
 
-    _validate(config)
+    try:
+        _validate(config)
+    except ConfigError as e:
+        for err in e.errors:
+            log.error("Config error: %s", err)
+        sys.exit(1)
+
     return config
 
 
@@ -351,6 +384,4 @@ def _validate(config: AppConfig) -> None:
                 )
 
     if errors:
-        for err in errors:
-            log.error("Config error: %s", err)
-        sys.exit(1)
+        raise ConfigError(errors)

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - SnakeCharmer{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="grid">
+    <article>
+        <header>Trakt</header>
+        <p><strong>Username:</strong> {{ config.trakt.username or "Not set" }}</p>
+        <p><strong>Sources:</strong> {{ config.trakt.sources | length }}</p>
+        <ul>
+            {% for source in config.trakt.sources %}
+            <li>{{ source.label }}</li>
+            {% endfor %}
+        </ul>
+        <p><strong>Limit:</strong> {{ config.trakt.limit }}</p>
+        <footer><a href="/config/trakt" role="button" class="outline">Edit</a></footer>
+    </article>
+
+    <article>
+        <header>Medusa</header>
+        <p><strong>URL:</strong> {{ config.medusa.url or "Not set" }}</p>
+        <p><strong>API Key:</strong> {{ "***" ~ config.medusa.api_key[-4:] if config.medusa.api_key else "Not set" }}</p>
+        <footer><a href="/config/medusa" role="button" class="outline">Edit</a></footer>
+    </article>
+</div>
+
+<div class="grid">
+    <article>
+        <header>Sync</header>
+        <p><strong>Dry Run:</strong> {{ "Yes" if config.sync.dry_run else "No" }}</p>
+        <p><strong>Interval:</strong> {{ config.sync.interval }}s{{ " (run once)" if config.sync.interval == 0 else "" }}</p>
+        <p><strong>Log Format:</strong> {{ config.sync.log_format }}</p>
+        <footer><a href="/config/sync" role="button" class="outline">Edit</a></footer>
+    </article>
+
+    <article>
+        <header>Health</header>
+        <p><strong>Enabled:</strong> {{ "Yes" if config.health.enabled else "No" }}</p>
+        <p><strong>Port:</strong> {{ config.health.port }}</p>
+        {% if health %}
+        <p><strong>Status:</strong>
+            <mark>{{ health.status }}</mark>
+        </p>
+        <p><strong>Uptime:</strong> {{ health.uptime_seconds | int }}s</p>
+        {% endif %}
+        <footer><a href="/config/health" role="button" class="outline">Edit</a></footer>
+    </article>
+</div>
+
+{% if health and health.last_sync %}
+<article>
+    <header>Last Sync</header>
+    <div class="grid">
+        <div>
+            <p><strong>Timestamp:</strong> {{ health.last_sync.timestamp }}</p>
+            <p><strong>Duration:</strong> {{ "%.1f" | format(health.last_sync.duration_seconds) }}s</p>
+        </div>
+        <div>
+            <p><strong>Added:</strong> {{ health.last_sync.added }}</p>
+            <p><strong>Skipped:</strong> {{ health.last_sync.skipped }}</p>
+            <p><strong>Failed:</strong> {{ health.last_sync.failed }}</p>
+        </div>
+    </div>
+</article>
+{% endif %}
+{% endblock %}
