@@ -113,6 +113,25 @@ class TestTraktConfig:
         assert updated.trakt.sources[0].owner == "bob"
         assert updated.trakt.sources[0].list_slug == "my-shows"
 
+    def test_save_trakt_preserves_sparse_source_indexes(self, tmp_path):
+        client, holder, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "popular",
+                "source_2_type": "trending",
+            },
+        )
+        assert response.status_code == 200
+        updated = holder.get()
+        assert len(updated.trakt.sources) == 2
+        assert updated.trakt.sources[0].type == "popular"
+        assert updated.trakt.sources[1].type == "trending"
+
     def test_save_trakt_validation_error(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
         # Empty client_id should cause validation error
@@ -128,6 +147,28 @@ class TestTraktConfig:
         )
         assert response.status_code == 200
         assert "error" in response.text.lower()
+
+    def test_invalid_trakt_save_does_not_overwrite_yaml(self, tmp_path):
+        client, _, config_path = _create_client(tmp_path)
+        with open(config_path) as f:
+            before_raw = yaml.safe_load(f)
+
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "",
+                "client_secret": "",
+                "username": "",
+                "limit": "50",
+                "source_0_type": "trending",
+            },
+        )
+
+        assert response.status_code == 200
+        assert "error" in response.text.lower()
+        with open(config_path) as f:
+            after_raw = yaml.safe_load(f)
+        assert after_raw == before_raw
 
     def test_add_source(self, tmp_path):
         client, _, _ = _create_client(tmp_path)

@@ -1,10 +1,11 @@
 import logging
+import re
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import ConfigError, TraktSource
-from app.webui.config_io import config_to_dict, reload_config, save_config
+from app.webui.config_io import config_to_dict, load_config_dict, save_config
 
 log = logging.getLogger(__name__)
 
@@ -191,11 +192,18 @@ async def health_json(request: Request):
 def _parse_sources_from_form(form) -> list[dict]:
     """Parse indexed source fields from form data into a list of source dicts."""
     sources: list[dict] = []
-    index = 0
-    while True:
+    index_pattern = re.compile(r"^source_(\d+)_type$")
+    indexes = sorted(
+        {
+            int(match.group(1))
+            for key in form
+            if (match := index_pattern.match(key)) is not None
+        }
+    )
+    for index in indexes:
         source_type = form.get(f"source_{index}_type")
         if source_type is None:
-            break
+            continue
         source_dict: dict = {"type": source_type}
         if source_type == "user_list":
             source_dict["owner"] = form.get(f"source_{index}_owner", "")
@@ -220,7 +228,6 @@ def _parse_sources_from_form(form) -> list[dict]:
             source_dict["medusa"] = medusa_opts
 
         sources.append(source_dict)
-        index += 1
     return sources
 
 
@@ -228,8 +235,8 @@ def _save_and_respond(request: Request, config_dict: dict, holder, section: str)
     """Save config dict to file, reload, update holder, return HTMX banner."""
     config_path = holder.config_path
     try:
+        new_config = load_config_dict(config_dict, config_path)
         save_config(config_dict, config_path)
-        new_config = reload_config(config_path)
         holder.update(new_config)
         return HTMLResponse(
             '<div class="banner success" role="alert">'

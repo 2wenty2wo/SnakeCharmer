@@ -141,8 +141,8 @@ def main() -> None:
                 result = run_sync(run_config)
                 if sync_status is not None:
                     sync_status.update(result)
-                log.info("Sleeping %ds until next sync...", config.sync.interval)
-                time.sleep(config.sync.interval)
+                log.info("Sleeping %ds until next sync...", run_config.sync.interval)
+                time.sleep(run_config.sync.interval)
         else:
             result = run_sync(config)
             if sync_status is not None:

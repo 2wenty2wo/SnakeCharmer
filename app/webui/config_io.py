@@ -86,7 +86,6 @@ def save_app_config(config: AppConfig, path: str) -> None:
 
 def reload_config(path: str) -> AppConfig:
     """Load and validate config from file. Raises ConfigError on validation failure."""
-    raw = {}
     try:
         with open(path) as f:
             raw = yaml.safe_load(f) or {}
@@ -94,9 +93,12 @@ def reload_config(path: str) -> AppConfig:
         raise ConfigError([f"Config file not found: {path}"]) from e
     except yaml.YAMLError as e:
         raise ConfigError([f"Failed to parse {path}: {e}"]) from e
+    return load_config_dict(raw, path)
 
-    # Re-use load_config internals but we need to avoid sys.exit
-    # We import _validate and build config manually
+
+def load_config_dict(raw: dict, path: str) -> AppConfig:
+    """Build and validate AppConfig from an in-memory dict."""
+    # Re-use load_config internals but we need to avoid sys.exit.
     from app.config import (
         HealthConfig,
         MedusaConfig,

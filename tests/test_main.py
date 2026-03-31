@@ -86,9 +86,22 @@ class TestMain:
 
     def test_interval_mode_loops_and_exits_on_keyboard_interrupt(self, base_config):
         base_config.sync.interval = 60
+        updated_config = AppConfig(
+            trakt=base_config.trakt,
+            medusa=base_config.medusa,
+            sync=SyncConfig(dry_run=False, interval=15),
+            health=base_config.health,
+            webui=base_config.webui,
+            config_dir=base_config.config_dir,
+        )
+        mock_holder = MagicMock()
+        mock_holder.get.return_value = updated_config
         with (
-            patch("main.parse_args", return_value=_mock_args()),
+            patch("main.parse_args", return_value=_mock_args(webui=True)),
             patch("main.load_config", return_value=base_config),
+            patch("app.webui.ConfigHolder", return_value=mock_holder),
+            patch("app.webui.create_app"),
+            patch("main.threading.Thread") as mock_thread,
             patch("main.run_sync", side_effect=[None, KeyboardInterrupt]) as mock_run_sync,
             patch("main.time.sleep") as mock_sleep,
             patch("main.sys.exit", side_effect=SystemExit(0)) as mock_exit,
@@ -98,7 +111,8 @@ class TestMain:
 
         assert exc_info.value.code == 0
         assert mock_run_sync.call_count == 2
-        mock_sleep.assert_has_calls([call(60)])
+        mock_sleep.assert_has_calls([call(15)])
+        mock_thread.return_value.start.assert_called_once()
         mock_exit.assert_called_once_with(0)
 
     def test_config_load_failure_propagates(self):
