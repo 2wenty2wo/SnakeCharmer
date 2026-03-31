@@ -194,11 +194,7 @@ def _parse_sources_from_form(form) -> list[dict]:
     sources: list[dict] = []
     index_pattern = re.compile(r"^source_(\d+)_type$")
     indexes = sorted(
-        {
-            int(match.group(1))
-            for key in form
-            if (match := index_pattern.match(key)) is not None
-        }
+        {int(match.group(1)) for key in form if (match := index_pattern.match(key)) is not None}
     )
     for index in indexes:
         source_type = form.get(f"source_{index}_type")
