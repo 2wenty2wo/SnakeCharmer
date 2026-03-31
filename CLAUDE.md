@@ -16,6 +16,8 @@ python main.py                          # run with config.yaml
 python main.py --dry-run                # preview without changes
 python main.py --config /path/to.yaml   # custom config path
 python main.py --log-format json        # structured JSON logging
+python main.py --webui                  # start with web UI enabled
+python main.py --webui --webui-port 9000  # web UI on custom port
 ```
 
 ## Docker
@@ -38,8 +40,9 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-- Tests live in `tests/` mirroring the `app/` structure (e.g., `tests/test_health.py` for `app/health.py`)
+- Tests live in `tests/` mirroring the `app/` structure (e.g., `tests/test_health.py` for `app/health.py`, `tests/test_webui.py` for `app/webui/`)
 - All HTTP calls are mocked (requests.Session) — never hit real APIs in tests
+- Web UI tests use `httpx.AsyncClient` with FastAPI's `TestClient` pattern
 - Use `tmp_path` for config file tests, `monkeypatch` for env var tests
 - Use `patch.object` on client methods or `session.request` for API tests
 
@@ -52,20 +55,25 @@ ruff format --check . # format check
 ruff check --fix .    # auto-fix
 ```
 
-Config is in `pyproject.toml`. CI (`.github/workflows/ci.yml`) runs both lint and format checks. Tests run on Python 3.10, 3.11, and 3.12.
+Config is in `pyproject.toml`. Rules: `E`, `F`, `W`, `I`, `UP`, `B`, `SIM`. Line length: 100. Target: Python 3.10. CI (`.github/workflows/ci.yml`) runs both lint and format checks. Tests run on Python 3.10, 3.11, and 3.12.
 
 ## Architecture
 
 ```
-main.py          CLI entry point, argparse, logging setup (text/JSON), health server init, optional interval loop
-app/config.py    Dataclass-based config: YAML loading → env var overrides → validation
-app/trakt.py     TraktClient: public list fetching, OAuth device flow, token persistence, retry with backoff
-app/medusa.py    MedusaClient: library listing and show addition via Medusa v2 API, retry with backoff
-app/sync.py      run_sync(): orchestrates fetch → diff → add cycle, returns SyncResult metrics
-app/health.py    HTTP health endpoint: SyncStatus tracking, /health JSON responses (200 ok / 503 degraded)
+main.py                    CLI entry point, argparse, logging setup (text/JSON), health server init, web UI init, optional interval loop
+app/config.py              Dataclass-based config: YAML loading → env var overrides → validation
+app/trakt.py               TraktClient: public list fetching, OAuth device flow, token persistence, retry with backoff
+app/medusa.py              MedusaClient: library listing and show addition via Medusa v2 API, retry with backoff
+app/sync.py                run_sync(): orchestrates fetch → diff → add cycle, returns SyncResult metrics
+app/health.py              HTTP health endpoint: SyncStatus tracking, /health JSON responses (200 ok / 503 degraded)
+app/webui/__init__.py      FastAPI app factory (create_app), ConfigHolder thread-safe wrapper
+app/webui/routes.py        HTMX-driven routes: dashboard, config sections (trakt/medusa/sync/health), /health JSON
+app/webui/config_io.py     Config serialization: AppConfig ↔ dict ↔ YAML file, atomic writes, validation
+app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, config section partials)
+app/webui/static/style.css CSS styles for the web UI
 ```
 
-Data flow: `main.py` loads config, optionally starts the health server, then calls `run_sync()` which instantiates both API clients, fetches shows from Trakt as `TraktShow` dataclasses, gets existing TVDB IDs from Medusa, adds any missing shows, and returns a `SyncResult` with detailed metrics. The health server exposes these metrics via HTTP.
+Data flow: `main.py` loads config, optionally starts the health server and/or web UI, then calls `run_sync()` which instantiates both API clients, fetches shows from Trakt as `TraktShow` dataclasses, gets existing TVDB IDs from Medusa, adds any missing shows, and returns a `SyncResult` with detailed metrics. The health server exposes these metrics via HTTP.
 
 ### Sync flow (`app/sync.py`)
 
@@ -100,6 +108,29 @@ When `health.enabled` is true, an HTTP server runs on `health.port` (default 809
 
 `SyncStatus` is a thread-safe dataclass shared between the sync loop and health server.
 
+When the web UI is enabled, the standalone health server is not started — the web UI serves `/health` directly via its FastAPI router.
+
+### Web UI (`app/webui/`)
+
+Optional browser-based config management built with FastAPI + Jinja2 + HTMX. Enabled via `--webui` CLI flag or `webui.enabled: true` in config.
+
+- Runs on `webui.port` (default 8089) in a daemon thread using uvicorn
+- **Dashboard** (`/`): shows current config summary and sync status
+- **Config sections** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`): edit and save each config section via HTMX form submissions
+- **Source management**: add/remove Trakt sources dynamically with per-source Medusa quality and required_words overrides
+- **Atomic saves**: config is written to a temp file then `os.replace()`'d to prevent corruption
+- **Validation**: config is validated before saving; validation errors are shown as HTMX banners
+- **Live reload**: `ConfigHolder` (thread-safe dataclass with `threading.Lock`) allows the sync loop to pick up config changes on the next cycle
+- **Health JSON** (`/health`): same JSON format as the standalone health endpoint
+
+Key classes:
+- `ConfigHolder` (`app/webui/__init__.py`): thread-safe mutable holder for the active `AppConfig`, shared between web UI and sync loop
+- `config_to_dict()` / `save_config()` / `load_config_dict()` (`app/webui/config_io.py`): round-trip serialization between `AppConfig` dataclasses and YAML files
+
+## Dependencies
+
+Core: `requests`, `pyyaml`. Web UI: `fastapi`, `uvicorn[standard]`, `jinja2`, `python-multipart`. Testing: `httpx` (for FastAPI test client). All pinned in `requirements.txt` and `pyproject.toml`.
+
 ## Data Models
 
 - `TraktShow` (`app/trakt.py`): `title`, `tvdb_id`, `imdb_id`, `year` — the unit of data flowing from Trakt to the sync engine
@@ -107,7 +138,9 @@ When `health.enabled` is true, an HTTP server runs on `health.port` (default 809
 - `MedusaAddOptions` (`app/config.py`): per-source Medusa overrides — `quality` (preset name, individual value, or list), `required_words` (list of strings)
 - `SyncResult` (`app/sync.py`): sync cycle metrics — `total_fetched`, `unique_shows`, `already_in_medusa`, `added`, `skipped`, `failed`, `duration_seconds`, `per_source`, `success`
 - `SyncStatus` (`app/health.py`): thread-safe container for last sync result and application uptime
-- Config hierarchy: `AppConfig` → `TraktConfig` / `MedusaConfig` / `SyncConfig` / `HealthConfig`
+- `ConfigHolder` (`app/webui/__init__.py`): thread-safe mutable holder for the active `AppConfig`
+- `ConfigError` (`app/config.py`): exception with `errors: list[str]` for validation failures
+- Config hierarchy: `AppConfig` → `TraktConfig` / `MedusaConfig` / `SyncConfig` / `HealthConfig` / `WebUIConfig`
 
 ### Quality resolution (`app/medusa.py`)
 
@@ -138,25 +171,28 @@ Only the config keys listed below can be overridden via environment variables wi
 | `SNAKECHARMER_SYNC_LOG_FORMAT` | `sync.log_format` |
 | `SNAKECHARMER_HEALTH_ENABLED` | `health.enabled` |
 | `SNAKECHARMER_HEALTH_PORT` | `health.port` |
+| `SNAKECHARMER_WEBUI_ENABLED` | `webui.enabled` |
+| `SNAKECHARMER_WEBUI_PORT` | `webui.port` |
 
 Priority: CLI flags > env vars > YAML config file.
 
 ## Code Conventions
 
 - Python 3.10+ with type hints (use `str | None` style, not `Optional`)
-- Dataclasses for config (`AppConfig`, `TraktConfig`, `MedusaConfig`, `SyncConfig`, `HealthConfig`) and data models (`TraktShow`, `SyncResult`, `SyncStatus`)
+- Dataclasses for config (`AppConfig`, `TraktConfig`, `MedusaConfig`, `SyncConfig`, `HealthConfig`, `WebUIConfig`) and data models (`TraktShow`, `SyncResult`, `SyncStatus`, `ConfigHolder`)
 - `requests.Session` per client for connection reuse and shared headers
 - Module-level `log = logging.getLogger(__name__)` in every file
 - Private methods prefixed with `_` (e.g., `_request`, `_parse_show`, `_validate`)
 - Config values: YAML is the source of truth, env vars (SNAKECHARMER_* prefix) override, CLI flags override config
 - No string formatting in log calls — use `log.info("msg %s", val)` style
-- Thread safety: use `threading.Lock` when sharing state between threads (see `SyncStatus`)
+- Thread safety: use `threading.Lock` when sharing state between threads (see `SyncStatus`, `ConfigHolder`)
+- Web UI routes use async FastAPI handlers with HTMX partial responses
 
 ## Logging
 
 Two log formats are available, configured via `sync.log_format` or `--log-format`:
 
-- **text** (default): standard human-readable format (`%(asctime)s %(levelname)-8s %(name)s: %(message)s`)
+- **text** (default): standard human-readable format (`%(asctime)s [%(levelname)s] %(message)s`)
 - **json**: structured JSON lines via `JsonFormatter` in `main.py` — each line is a JSON object with `timestamp`, `level`, `logger`, `message`, and optional `exception` fields
 
 ## Known Gaps
@@ -165,3 +201,4 @@ Two log formats are available, configured via `sync.log_format` or `--log-format
 - No removal/unsync support — shows added to Medusa are never removed if removed from a Trakt list
 - No notification system (planned in roadmap)
 - Legacy `list`/`lists` config keys are still supported but undocumented in README; env vars `SNAKECHARMER_TRAKT_LIST` and `SNAKECHARMER_TRAKT_LISTS` trigger the legacy path
+- Web UI does not support OAuth token management or triggering a manual sync
