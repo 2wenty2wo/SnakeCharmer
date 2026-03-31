@@ -325,12 +325,13 @@ class TestAuth:
         )
         poll_success = _mock_response({"access_token": "token-123"}, status_code=200)
 
+        mock_time = MagicMock(side_effect=[0, 1, 100])
         with (
             patch.object(client, "_request", return_value=device_resp),
             patch.object(client.session, "post", return_value=poll_success),
             patch.object(client, "_save_token") as mock_save,
             patch("app.trakt.time.sleep"),
-            patch("app.trakt.time.time", side_effect=[0, 1]),
+            patch("app.trakt.time.time", mock_time),
         ):
             client._authenticate()
 
@@ -395,12 +396,13 @@ class TestAuth:
         slow_down = _mock_response({}, status_code=429)
         poll_success = _mock_response({"access_token": "token-123"}, status_code=200)
 
+        mock_time = MagicMock(side_effect=[0, 1, 3, 100])
         with (
             patch.object(client, "_request", return_value=device_resp),
             patch.object(client.session, "post", side_effect=[slow_down, poll_success]),
             patch.object(client, "_save_token") as mock_save,
             patch("app.trakt.time.sleep") as mock_sleep,
-            patch("app.trakt.time.time", side_effect=[0, 1, 3]),
+            patch("app.trakt.time.time", mock_time),
         ):
             client._authenticate()
 
@@ -421,6 +423,7 @@ class TestAuth:
         )
         poll_success = _mock_response({"access_token": "token-123"}, status_code=200)
 
+        mock_time = MagicMock(side_effect=[0, 1, 2, 100])
         with (
             patch.object(client, "_request", return_value=device_resp),
             patch.object(
@@ -430,7 +433,7 @@ class TestAuth:
             ),
             patch.object(client, "_save_token") as mock_save,
             patch("app.trakt.time.sleep"),
-            patch("app.trakt.time.time", side_effect=[0, 1, 2]),
+            patch("app.trakt.time.time", mock_time),
             patch("app.trakt.log.warning") as mock_warning,
         ):
             client._authenticate()
@@ -478,5 +481,55 @@ class TestRequest:
         with (
             patch.object(client.session, "request", return_value=rate_limited),
             pytest.raises(ValueError),
+        ):
+            client._request("GET", "/test")
+
+
+class TestRetry:
+    def _make_client(self, trakt_config, tmp_path, **kwargs):
+        defaults = {"max_retries": 2, "retry_backoff": 0.01}
+        defaults.update(kwargs)
+        return TraktClient(trakt_config, config_dir=str(tmp_path), **defaults)
+
+    def test_retries_on_connection_error_then_succeeds(self, trakt_config, tmp_path):
+        client = self._make_client(trakt_config, tmp_path)
+        success = _mock_response({"ok": True})
+
+        with (
+            patch.object(
+                client.session,
+                "request",
+                side_effect=[requests.ConnectionError("refused"), success],
+            ),
+            patch("app.trakt.time.sleep"),
+        ):
+            resp = client._request("GET", "/test")
+
+        assert resp.json() == {"ok": True}
+
+    def test_retries_on_500_then_succeeds(self, trakt_config, tmp_path):
+        client = self._make_client(trakt_config, tmp_path)
+        error_resp = _mock_response({}, status_code=500)
+        success = _mock_response({"ok": True})
+
+        with (
+            patch.object(client.session, "request", side_effect=[error_resp, success]),
+            patch("app.trakt.time.sleep"),
+        ):
+            resp = client._request("GET", "/test")
+
+        assert resp.json() == {"ok": True}
+
+    def test_gives_up_after_max_retries(self, trakt_config, tmp_path):
+        client = self._make_client(trakt_config, tmp_path, max_retries=1)
+
+        with (
+            patch.object(
+                client.session,
+                "request",
+                side_effect=requests.ConnectionError("refused"),
+            ),
+            patch("app.trakt.time.sleep"),
+            pytest.raises(requests.ConnectionError),
         ):
             client._request("GET", "/test")

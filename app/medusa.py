@@ -1,4 +1,5 @@
 import logging
+import time
 
 import requests
 
@@ -71,8 +72,10 @@ def resolve_quality(quality: str | list[str]) -> list[int]:
 
 
 class MedusaClient:
-    def __init__(self, config: MedusaConfig):
+    def __init__(self, config: MedusaConfig, max_retries: int = 3, retry_backoff: float = 2.0):
         self.base_url = f"{config.url}/api/v2"
+        self.max_retries = max_retries
+        self.retry_backoff = retry_backoff
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -131,13 +134,42 @@ class MedusaClient:
             raise
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
-        """Make an HTTP request to the Medusa API."""
+        """Make an HTTP request to the Medusa API with retry on transient failures."""
         url = f"{self.base_url}{path}"
-        try:
-            kwargs.setdefault("timeout", REQUEST_TIMEOUT)
-            resp = self.session.request(method, url, **kwargs)
-            resp.raise_for_status()
-            return resp
-        except requests.ConnectionError:
-            log.error("Cannot reach Medusa at %s - is it running?", self.base_url)
-            raise
+        kwargs.setdefault("timeout", REQUEST_TIMEOUT)
+        last_exception = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                resp = self.session.request(method, url, **kwargs)
+                if resp.status_code >= 500 and attempt < self.max_retries:
+                    delay = self.retry_backoff ** (attempt + 1)
+                    log.warning(
+                        "Medusa returned %d, retrying in %.1fs (attempt %d/%d)",
+                        resp.status_code,
+                        delay,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                    time.sleep(delay)
+                    continue
+                resp.raise_for_status()
+                return resp
+            except (requests.ConnectionError, requests.Timeout) as e:
+                last_exception = e
+                if attempt < self.max_retries:
+                    delay = self.retry_backoff ** (attempt + 1)
+                    log.warning(
+                        "Medusa request failed (%s), retrying in %.1fs (attempt %d/%d)",
+                        type(e).__name__,
+                        delay,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                    time.sleep(delay)
+                    continue
+                if isinstance(e, requests.ConnectionError):
+                    log.error("Cannot reach Medusa at %s - is it running?", self.base_url)
+                raise
+
+        raise last_exception  # type: ignore[misc]
