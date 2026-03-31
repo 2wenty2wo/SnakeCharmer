@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Trakt Config - SnakeCharmer{% endblock %}
+{% block content %}
+<h1>Trakt Configuration</h1>
+
+<form hx-post="/config/trakt" hx-target="#result-banner" hx-swap="innerHTML">
+    <fieldset>
+        <legend>Credentials</legend>
+        <label>
+            Client ID
+            <input type="text" name="client_id" value="{{ config.trakt.client_id }}" placeholder="Your Trakt client ID" required>
+        </label>
+        <label>
+            Client Secret
+            <input type="password" name="client_secret" value="{{ config.trakt.client_secret }}" placeholder="Your Trakt client secret">
+        </label>
+        <label>
+            Username
+            <input type="text" name="username" value="{{ config.trakt.username }}" placeholder="Your Trakt username">
+        </label>
+        <label>
+            Limit
+            <input type="number" name="limit" value="{{ config.trakt.limit }}" min="1" max="1000">
+            <small>Max shows to fetch from public lists (trending/popular/watched)</small>
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Sources</legend>
+        <div id="sources-list">
+            {% for source in config.trakt.sources %}
+            {% include "config/source_row.html" with context %}
+            {% endfor %}
+        </div>
+        <button type="button"
+                hx-post="/config/trakt/sources/add"
+                hx-target="#sources-list"
+                hx-swap="beforeend"
+                class="outline secondary">
+            + Add Source
+        </button>
+    </fieldset>
+
+    <button type="submit">Save Trakt Settings</button>
+</form>
+{% endblock %}

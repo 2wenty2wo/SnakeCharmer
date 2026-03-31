@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -43,6 +44,17 @@ def parse_args() -> argparse.Namespace:
         choices=["text", "json"],
         default=None,
         help="Log output format (default: text)",
+    )
+    parser.add_argument(
+        "--webui",
+        action="store_true",
+        help="Start the web UI for config management",
+    )
+    parser.add_argument(
+        "--webui-port",
+        type=int,
+        default=None,
+        help="Port for the web UI (default: 8089)",
     )
     return parser.parse_args()
 
@@ -88,13 +100,45 @@ def main() -> None:
         from app.health import SyncStatus, start_health_server
 
         sync_status = SyncStatus()
+
+    webui_enabled = args.webui or config.webui.enabled
+
+    if webui_enabled:
+        import uvicorn
+
+        from app.webui import ConfigHolder, create_app
+
+        if sync_status is None:
+            from app.health import SyncStatus
+
+            sync_status = SyncStatus()
+
+        config_holder = ConfigHolder(config=config, config_path=args.config)
+        app = create_app(config_holder, sync_status=sync_status)
+
+        webui_port = args.webui_port or config.webui.port
+        log.info("Starting web UI on port %d", webui_port)
+        webui_thread = threading.Thread(
+            target=uvicorn.run,
+            args=(app,),
+            kwargs={"host": "0.0.0.0", "port": webui_port, "log_level": "warning"},
+            daemon=True,
+        )
+        webui_thread.start()
+
+        # When webui is active, skip starting the stdlib health server
+        # since the webui already serves /health
+    elif config.health.enabled:
+        from app.health import start_health_server
+
         start_health_server(config.health.port, sync_status)
         log.info("Health check endpoint started on port %d", config.health.port)
 
     try:
         if config.sync.interval > 0:
             while True:
-                result = run_sync(config)
+                run_config = config_holder.get() if webui_enabled else config
+                result = run_sync(run_config)
                 if sync_status is not None:
                     sync_status.update(result)
                 log.info("Sleeping %ds until next sync...", config.sync.interval)
@@ -103,6 +147,12 @@ def main() -> None:
             result = run_sync(config)
             if sync_status is not None:
                 sync_status.update(result)
+            if webui_enabled:
+                log.info(
+                    "Sync complete. Web UI running on port %d. Press Ctrl+C to exit.",
+                    webui_port,
+                )
+                webui_thread.join()
     except KeyboardInterrupt:
         log.info("Shutting down")
         sys.exit(0)

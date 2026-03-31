@@ -28,7 +28,13 @@ def base_config():
 
 
 def _mock_args(**overrides):
-    defaults = {"config": "config.yaml", "dry_run": False, "log_format": None}
+    defaults = {
+        "config": "config.yaml",
+        "dry_run": False,
+        "log_format": None,
+        "webui": False,
+        "webui_port": None,
+    }
     defaults.update(overrides)
     return MagicMock(**defaults)
 

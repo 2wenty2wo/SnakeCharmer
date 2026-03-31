@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Medusa Config - SnakeCharmer{% endblock %}
+{% block content %}
+<h1>Medusa Configuration</h1>
+
+<form hx-post="/config/medusa" hx-target="#result-banner" hx-swap="innerHTML">
+    <label>
+        URL
+        <input type="url" name="url" value="{{ config.medusa.url }}" placeholder="http://localhost:8081" required>
+        <small>Medusa base URL (e.g. http://localhost:8081)</small>
+    </label>
+    <label>
+        API Key
+        <input type="password" name="api_key" value="{{ config.medusa.api_key }}" placeholder="Your Medusa API key" required>
+    </label>
+    <button type="submit">Save Medusa Settings</button>
+</form>
+{% endblock %}

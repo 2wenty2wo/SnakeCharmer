@@ -75,3 +75,9 @@ sync:
 health:
   enabled: false
   port: 8095
+
+# Web UI for managing configuration via browser
+# Enable with config or --webui CLI flag
+webui:
+  enabled: false
+  port: 8089

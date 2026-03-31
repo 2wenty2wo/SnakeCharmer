@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Health Config - SnakeCharmer{% endblock %}
+{% block content %}
+<h1>Health Configuration</h1>
+
+<form hx-post="/config/health" hx-target="#result-banner" hx-swap="innerHTML">
+    <label>
+        <input type="checkbox" name="enabled" {{ "checked" if config.health.enabled }}>
+        Enabled
+        <small>Start HTTP health endpoint for Docker/monitoring tools</small>
+    </label>
+    <label>
+        Port
+        <input type="number" name="port" value="{{ config.health.port }}" min="1" max="65535">
+        <small>Port for the health check endpoint</small>
+    </label>
+    <button type="submit">Save Health Settings</button>
+</form>
+{% endblock %}

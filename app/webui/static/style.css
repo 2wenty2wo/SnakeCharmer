@@ -1,0 +1,27 @@
+.banner {
+    padding: 0.75rem 1rem;
+    border-radius: 0.25rem;
+    margin-bottom: 1rem;
+}
+
+.banner.success {
+    background-color: var(--pico-ins-color);
+    color: var(--pico-color);
+}
+
+.banner.error {
+    background-color: var(--pico-del-color);
+    color: var(--pico-color);
+}
+
+.banner ul {
+    margin-bottom: 0;
+    padding-left: 1.5rem;
+}
+
+.source-row {
+    border: 1px solid var(--pico-muted-border-color);
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 0.25rem;
+}
