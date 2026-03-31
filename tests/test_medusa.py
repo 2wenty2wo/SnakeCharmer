@@ -206,3 +206,75 @@ class TestRequest:
             pytest.raises(requests.ConnectionError),
         ):
             client._request("GET", "/series")
+
+
+class TestRetry:
+    def test_retries_on_connection_error_then_succeeds(self, medusa_config):
+        client = MedusaClient(medusa_config, max_retries=2, retry_backoff=0.01)
+        success = _mock_response([])
+
+        with (
+            patch.object(
+                client.session,
+                "request",
+                side_effect=[requests.ConnectionError("refused"), success],
+            ),
+            patch("app.medusa.time.sleep"),
+        ):
+            resp = client._request("GET", "/series")
+
+        assert resp.json() == []
+
+    def test_retries_on_500_then_succeeds(self, medusa_config):
+        client = MedusaClient(medusa_config, max_retries=2, retry_backoff=0.01)
+        error_resp = _mock_response({}, status_code=500)
+        success = _mock_response({"ok": True})
+
+        with (
+            patch.object(client.session, "request", side_effect=[error_resp, success]),
+            patch("app.medusa.time.sleep"),
+        ):
+            resp = client._request("GET", "/series")
+
+        assert resp.json() == {"ok": True}
+
+    def test_does_not_retry_4xx(self, medusa_config):
+        client = MedusaClient(medusa_config, max_retries=2, retry_backoff=0.01)
+        bad_request = _mock_response({}, status_code=400)
+        bad_request.raise_for_status.side_effect = requests.HTTPError(response=bad_request)
+
+        with (
+            patch.object(client.session, "request", return_value=bad_request),
+            pytest.raises(requests.HTTPError),
+        ):
+            client._request("GET", "/series")
+
+    def test_gives_up_after_max_retries(self, medusa_config):
+        client = MedusaClient(medusa_config, max_retries=2, retry_backoff=0.01)
+
+        with (
+            patch.object(
+                client.session,
+                "request",
+                side_effect=requests.ConnectionError("refused"),
+            ),
+            patch("app.medusa.time.sleep"),
+            pytest.raises(requests.ConnectionError),
+        ):
+            client._request("GET", "/series")
+
+    def test_retries_on_timeout_then_succeeds(self, medusa_config):
+        client = MedusaClient(medusa_config, max_retries=1, retry_backoff=0.01)
+        success = _mock_response([])
+
+        with (
+            patch.object(
+                client.session,
+                "request",
+                side_effect=[requests.Timeout("timeout"), success],
+            ),
+            patch("app.medusa.time.sleep"),
+        ):
+            resp = client._request("GET", "/series")
+
+        assert resp.json() == []

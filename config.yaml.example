@@ -62,3 +62,16 @@ sync:
 
   # Seconds between sync cycles (0 = run once and exit)
   interval: 600
+
+  # Retry settings for transient API failures (connection errors, 5xx, timeouts)
+  max_retries: 3        # Max retry attempts (default: 3)
+  retry_backoff: 2.0    # Base backoff multiplier in seconds (default: 2.0)
+
+  # Logging format: "text" (human-readable) or "json" (structured JSON lines)
+  # JSON format works well with log aggregators like Loki, Promtail, Dozzle
+  log_format: text
+
+# Health check endpoint for Docker/monitoring tools (Uptime Kuma, Portainer, etc.)
+health:
+  enabled: false
+  port: 8095

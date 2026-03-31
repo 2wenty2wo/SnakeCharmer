@@ -1,4 +1,6 @@
 import logging
+import time
+from dataclasses import dataclass, field
 
 from app.config import AppConfig
 from app.medusa import MedusaClient
@@ -7,10 +9,35 @@ from app.trakt import TraktClient
 log = logging.getLogger(__name__)
 
 
-def run_sync(config: AppConfig) -> None:
+@dataclass
+class SyncResult:
+    total_fetched: int = 0
+    unique_shows: int = 0
+    already_in_medusa: int = 0
+    added: int = 0
+    skipped: int = 0
+    failed: int = 0
+    duration_seconds: float = 0.0
+    per_source: dict[str, int] = field(default_factory=dict)
+    success: bool = True
+
+
+def run_sync(config: AppConfig) -> SyncResult:
     """Run a single sync cycle: fetch Trakt lists, compare with Medusa, add missing shows."""
-    trakt_client = TraktClient(config.trakt, config_dir=config.config_dir)
-    medusa_client = MedusaClient(config.medusa)
+    start_time = time.monotonic()
+    result = SyncResult()
+
+    trakt_client = TraktClient(
+        config.trakt,
+        config_dir=config.config_dir,
+        max_retries=config.sync.max_retries,
+        retry_backoff=config.sync.retry_backoff,
+    )
+    medusa_client = MedusaClient(
+        config.medusa,
+        max_retries=config.sync.max_retries,
+        retry_backoff=config.sync.retry_backoff,
+    )
 
     trakt_shows_by_tvdb = {}
     source_lists: dict[int, list[str]] = {}
@@ -25,9 +52,13 @@ def run_sync(config: AppConfig) -> None:
             list_shows = trakt_client.get_shows(source)
         except Exception as e:
             log.error("Failed to fetch Trakt source '%s': %s", source_name, e)
-            return
+            result.success = False
+            result.duration_seconds = time.monotonic() - start_time
+            return result
 
         list_counts[source_name] = len(list_shows)
+        result.total_fetched += len(list_shows)
+        result.per_source[source_name] = len(list_shows)
         log.info("Source '%s' returned %d show(s)", source_name, len(list_shows))
 
         for show in list_shows:
@@ -37,21 +68,26 @@ def run_sync(config: AppConfig) -> None:
             source_objs.setdefault(show.tvdb_id, []).append(source)
 
     trakt_shows = list(trakt_shows_by_tvdb.values())
+    result.unique_shows = len(trakt_shows)
 
     if not trakt_shows:
         joined_sources = ", ".join(source.label for source in config.trakt.sources)
         log.info("No shows found across configured Trakt sources: %s", joined_sources)
-        return
+        result.duration_seconds = time.monotonic() - start_time
+        return result
 
     # Fetch existing Medusa library
     try:
         existing_ids = medusa_client.get_existing_tvdb_ids()
     except Exception as e:
         log.error("Failed to fetch Medusa library: %s", e)
-        return
+        result.success = False
+        result.duration_seconds = time.monotonic() - start_time
+        return result
 
     # Find missing shows
     missing = [s for s in trakt_shows if s.tvdb_id not in existing_ids]
+    result.already_in_medusa = len(trakt_shows) - len(missing)
 
     if not missing:
         log.info(
@@ -59,7 +95,9 @@ def run_sync(config: AppConfig) -> None:
             len(trakt_shows),
             ", ".join(f"{name}={count}" for name, count in list_counts.items()),
         )
-        return
+        result.duration_seconds = time.monotonic() - start_time
+        _log_summary(result, config.sync.dry_run)
+        return result
 
     log.info(
         "%d unique show(s) to add to Medusa from sources: %s",
@@ -68,10 +106,6 @@ def run_sync(config: AppConfig) -> None:
     )
 
     # Add missing shows
-    added = 0
-    skipped = 0
-    failed = 0
-
     for show in missing:
         show_sources = source_objs.get(show.tvdb_id, [])
         selected_source = show_sources[0] if show_sources else None
@@ -90,7 +124,7 @@ def run_sync(config: AppConfig) -> None:
                 selected_source_label,
                 option_keys,
             )
-            added += 1
+            result.added += 1
             continue
 
         try:
@@ -105,25 +139,38 @@ def run_sync(config: AppConfig) -> None:
                     selected_source_label,
                     option_keys,
                 )
-                added += 1
+                result.added += 1
             else:
-                skipped += 1
+                result.skipped += 1
         except Exception as e:
             log.error("Failed to add '%s' (tvdb:%d): %s", show.title, show.tvdb_id, e)
-            failed += 1
+            result.failed += 1
 
-    # Summary
-    prefix = "[DRY RUN] " if config.sync.dry_run else ""
+    result.success = result.failed == 0
+    result.duration_seconds = time.monotonic() - start_time
+    _log_summary(result, config.sync.dry_run)
+    return result
+
+
+def _log_summary(result: SyncResult, dry_run: bool) -> None:
+    """Log a structured sync summary."""
+    prefix = "[DRY RUN] " if dry_run else ""
+    source_summary = ", ".join(f"{name}={count}" for name, count in result.per_source.items())
+    missing = result.added + result.skipped + result.failed
     log.info(
-        "%sSync complete: %d added, %d already existed, %d failed (out of %d missing)",
+        "%sSync complete in %.1fs: sources: %s | "
+        "unique: %d | in library: %d | missing: %d | "
+        "added: %d | skipped: %d | failed: %d",
         prefix,
-        added,
-        skipped,
-        failed,
-        len(missing),
+        result.duration_seconds,
+        source_summary,
+        result.unique_shows,
+        result.already_in_medusa,
+        missing,
+        result.added,
+        result.skipped,
+        result.failed,
     )
-    source_summary = ", ".join(f"{name}={count}" for name, count in list_counts.items())
-    log.info("Trakt source summary: %s", source_summary)
 
 
 def _medusa_add_options_from_source(source) -> dict | None:

@@ -76,6 +76,15 @@ class MedusaConfig:
 class SyncConfig:
     dry_run: bool = False
     interval: int = 0
+    max_retries: int = 3
+    retry_backoff: float = 2.0
+    log_format: str = "text"
+
+
+@dataclass
+class HealthConfig:
+    enabled: bool = False
+    port: int = 8095
 
 
 @dataclass
@@ -83,6 +92,7 @@ class AppConfig:
     trakt: TraktConfig = field(default_factory=TraktConfig)
     medusa: MedusaConfig = field(default_factory=MedusaConfig)
     sync: SyncConfig = field(default_factory=SyncConfig)
+    health: HealthConfig = field(default_factory=HealthConfig)
     config_dir: str = "."
 
 
@@ -97,6 +107,11 @@ ENV_MAP = {
     "SNAKECHARMER_MEDUSA_API_KEY": ("medusa", "api_key"),
     "SNAKECHARMER_SYNC_DRY_RUN": ("sync", "dry_run"),
     "SNAKECHARMER_SYNC_INTERVAL": ("sync", "interval"),
+    "SNAKECHARMER_SYNC_MAX_RETRIES": ("sync", "max_retries"),
+    "SNAKECHARMER_SYNC_RETRY_BACKOFF": ("sync", "retry_backoff"),
+    "SNAKECHARMER_SYNC_LOG_FORMAT": ("sync", "log_format"),
+    "SNAKECHARMER_HEALTH_ENABLED": ("health", "enabled"),
+    "SNAKECHARMER_HEALTH_PORT": ("health", "port"),
 }
 
 
@@ -116,12 +131,18 @@ def load_config(path: str) -> AppConfig:
     trakt_raw = raw.get("trakt", {})
     medusa_raw = raw.get("medusa", {})
     sync_raw = raw.get("sync", {})
+    health_raw = raw.get("health", {})
 
     # Apply environment variable overrides
     for env_var, (section, key) in ENV_MAP.items():
         value = os.environ.get(env_var)
         if value is not None:
-            target = {"trakt": trakt_raw, "medusa": medusa_raw, "sync": sync_raw}[section]
+            target = {
+                "trakt": trakt_raw,
+                "medusa": medusa_raw,
+                "sync": sync_raw,
+                "health": health_raw,
+            }[section]
             target[key] = value
 
     # Build config objects
@@ -157,12 +178,21 @@ def load_config(path: str) -> AppConfig:
     sync = SyncConfig(
         dry_run=_to_bool(sync_raw.get("dry_run", False)),
         interval=int(sync_raw.get("interval", 0)),
+        max_retries=int(sync_raw.get("max_retries", 3)),
+        retry_backoff=float(sync_raw.get("retry_backoff", 2.0)),
+        log_format=str(sync_raw.get("log_format", "text")).strip().lower(),
+    )
+
+    health = HealthConfig(
+        enabled=_to_bool(health_raw.get("enabled", False)),
+        port=int(health_raw.get("port", 8095)),
     )
 
     config = AppConfig(
         trakt=trakt,
         medusa=medusa,
         sync=sync,
+        health=health,
         config_dir=os.path.dirname(os.path.abspath(path)),
     )
 

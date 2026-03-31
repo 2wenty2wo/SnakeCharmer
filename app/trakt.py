@@ -24,9 +24,17 @@ class TraktShow:
 
 
 class TraktClient:
-    def __init__(self, config: TraktConfig, config_dir: str = "."):
+    def __init__(
+        self,
+        config: TraktConfig,
+        config_dir: str = ".",
+        max_retries: int = 3,
+        retry_backoff: float = 2.0,
+    ):
         self.config = config
         self.token_path = os.path.join(config_dir, TOKEN_FILE)
+        self.max_retries = max_retries
+        self.retry_backoff = retry_backoff
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -290,16 +298,51 @@ class TraktClient:
     # --- HTTP Helpers ---
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
-        """Make an HTTP request to the Trakt API with rate limit handling."""
+        """Make an HTTP request to the Trakt API with retry on transient failures."""
         url = f"{BASE_URL}{path}"
         kwargs.setdefault("timeout", REQUEST_TIMEOUT)
-        resp = self.session.request(method, url, **kwargs)
 
-        if resp.status_code == 429:
-            retry_after = int(resp.headers.get("Retry-After", 10))
-            log.warning("Rate limited, waiting %ds", retry_after)
-            time.sleep(retry_after)
-            resp = self.session.request(method, url, **kwargs)
+        for attempt in range(self.max_retries + 1):
+            try:
+                resp = self.session.request(method, url, **kwargs)
 
-        resp.raise_for_status()
-        return resp
+                # Rate limit: wait and retry without consuming an attempt
+                if resp.status_code == 429:
+                    retry_after = int(resp.headers.get("Retry-After", 10))
+                    log.warning("Rate limited, waiting %ds", retry_after)
+                    time.sleep(retry_after)
+                    resp = self.session.request(method, url, **kwargs)
+                    if resp.status_code == 429:
+                        resp.raise_for_status()
+
+                if resp.status_code >= 500 and attempt < self.max_retries:
+                    delay = self.retry_backoff ** (attempt + 1)
+                    log.warning(
+                        "Trakt returned %d, retrying in %.1fs (attempt %d/%d)",
+                        resp.status_code,
+                        delay,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                    time.sleep(delay)
+                    continue
+
+                resp.raise_for_status()
+                return resp
+            except (requests.ConnectionError, requests.Timeout) as e:
+                if attempt < self.max_retries:
+                    delay = self.retry_backoff ** (attempt + 1)
+                    log.warning(
+                        "Trakt request failed (%s), retrying in %.1fs (attempt %d/%d)",
+                        type(e).__name__,
+                        delay,
+                        attempt + 1,
+                        self.max_retries,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise
+
+        # All retry attempts exhausted with 5xx responses
+        resp.raise_for_status()  # type: ignore[possibly-undefined]
+        return resp  # type: ignore[possibly-undefined]

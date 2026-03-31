@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from app.config import AppConfig, MedusaConfig, SyncConfig, TraktConfig, TraktSource
-from app.sync import _medusa_add_options_from_source, run_sync
+from app.sync import SyncResult, _medusa_add_options_from_source, run_sync
 from app.trakt import TraktShow
 
 
@@ -46,6 +46,29 @@ class TestRunSync:
         mock_medusa.add_show.assert_any_call(2, "Show B", add_options=None)
         mock_medusa.add_show.assert_any_call(3, "Show C", add_options=None)
 
+    def test_returns_sync_result_with_counts(self, config, mock_trakt, mock_medusa):
+        mock_trakt.get_shows.side_effect = [
+            [
+                TraktShow(title="Show A", tvdb_id=1),
+                TraktShow(title="Show B", tvdb_id=2),
+                TraktShow(title="Show C", tvdb_id=3),
+            ]
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = {1}
+        mock_medusa.add_show.return_value = True
+
+        result = run_sync(config)
+
+        assert isinstance(result, SyncResult)
+        assert result.total_fetched == 3
+        assert result.unique_shows == 3
+        assert result.already_in_medusa == 1
+        assert result.added == 2
+        assert result.failed == 0
+        assert result.success is True
+        assert result.duration_seconds > 0
+        assert "trending" in result.per_source
+
     def test_skips_when_all_in_sync(self, config, mock_trakt, mock_medusa):
         mock_trakt.get_shows.side_effect = [
             [
@@ -81,9 +104,10 @@ class TestRunSync:
     def test_handles_trakt_failure(self, config, mock_trakt, mock_medusa):
         mock_trakt.get_shows.side_effect = Exception("API error")
 
-        run_sync(config)  # should not raise
+        result = run_sync(config)  # should not raise
 
         mock_medusa.get_existing_tvdb_ids.assert_not_called()
+        assert result.success is False
 
     def test_handles_medusa_failure(self, config, mock_trakt, mock_medusa):
         mock_trakt.get_shows.side_effect = [
