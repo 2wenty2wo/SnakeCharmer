@@ -192,7 +192,7 @@ python main.py --log-format json
 
 ## Environment Variables
 
-All config keys can be overridden with `SNAKECHARMER_`-prefixed environment variables. Structured keys (`trakt.sources`, per-source `medusa` options) must be set in YAML.
+Only the config keys listed below can be overridden with `SNAKECHARMER_`-prefixed environment variables. Any unsupported `SNAKECHARMER_` variables are ignored. Structured keys (`trakt.sources`, per-source `medusa` options) must be set in YAML.
 
 | Variable | Config path |
 |---|---|
