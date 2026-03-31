@@ -12,13 +12,18 @@ shows to [Medusa](https://pymedusa.com).**
 
 ## Features
 
-- Sync one or more Trakt watchlists/custom lists
+- Sync one or more Trakt sources (watchlist, trending, popular, watched, custom user lists)
 - Automatically add missing shows to Medusa
-- Smart duplicate detection (no double adds)
+- Smart duplicate detection by TVDB ID (no double adds)
 - Per-source Medusa quality presets and required words
+- OAuth device flow for private lists and watchlists
 - Dry-run mode (see what would be added)
-- Simple logging for visibility
-- Docker-ready
+- Scheduled sync with configurable interval
+- Retry with exponential backoff for transient API failures
+- Text or structured JSON logging
+- Health check HTTP endpoint for monitoring
+- Environment variable overrides for all settings
+- Docker-ready with built-in healthcheck
 
 ---
 
@@ -61,8 +66,9 @@ Create a `config.yaml` file in the root directory:
 ``` yaml
 trakt:
   client_id: YOUR_TRAKT_CLIENT_ID
-  client_secret: YOUR_TRAKT_CLIENT_SECRET
-  username: YOUR_TRAKT_USERNAME
+  client_secret: YOUR_TRAKT_CLIENT_SECRET   # required for OAuth (watchlist, auth: true)
+  username: YOUR_TRAKT_USERNAME              # required for watchlist sources
+  limit: 50                                  # max shows from public lists (default: 50)
   sources:
     - type: watchlist
     - type: trending
@@ -79,7 +85,14 @@ medusa:
 
 sync:
   dry_run: true
-  interval: 600
+  interval: 600          # seconds between syncs (0 = run once and exit)
+  max_retries: 3         # retry attempts for transient failures (default: 3)
+  retry_backoff: 2.0     # backoff multiplier in seconds (default: 2.0)
+  log_format: text       # "text" or "json"
+
+health:
+  enabled: false         # enable HTTP health endpoint
+  port: 8095             # health endpoint port (default: 8095)
 ```
 
 ### Trakt source types
@@ -127,6 +140,26 @@ trakt:
       auth: true
 ```
 
+### Example: per-source quality and required words
+
+Each source can specify Medusa add options. When a show appears in multiple sources, the options from the first source (in config order) are used.
+
+```yaml
+trakt:
+  client_id: YOUR_TRAKT_CLIENT_ID
+  sources:
+    - type: trending
+      medusa:
+        quality: hd1080p                 # preset: any, sd, hd, hd720p, hd1080p, uhd, uhd4k, uhd8k
+        required_words: ["web-dl"]
+    - type: user_list
+      owner: alice
+      list_slug: must-watch
+      medusa:
+        quality: ["fullhdtv", "hdwebdl"] # combine individual values
+        required_words: ["x265", "2160p"]
+```
+
 ---
 
 ## Usage
@@ -149,6 +182,49 @@ python main.py --dry-run
 python main.py --config /path/to/config.yaml
 ```
 
+### JSON logging
+
+``` bash
+python main.py --log-format json
+```
+
+---
+
+## Environment Variables
+
+All config keys can be overridden with `SNAKECHARMER_`-prefixed environment variables. Structured keys (`trakt.sources`, per-source `medusa` options) must be set in YAML.
+
+| Variable | Config path |
+|---|---|
+| `SNAKECHARMER_TRAKT_CLIENT_ID` | `trakt.client_id` |
+| `SNAKECHARMER_TRAKT_CLIENT_SECRET` | `trakt.client_secret` |
+| `SNAKECHARMER_TRAKT_USERNAME` | `trakt.username` |
+| `SNAKECHARMER_TRAKT_LIMIT` | `trakt.limit` |
+| `SNAKECHARMER_MEDUSA_URL` | `medusa.url` |
+| `SNAKECHARMER_MEDUSA_API_KEY` | `medusa.api_key` |
+| `SNAKECHARMER_SYNC_DRY_RUN` | `sync.dry_run` |
+| `SNAKECHARMER_SYNC_INTERVAL` | `sync.interval` |
+| `SNAKECHARMER_SYNC_MAX_RETRIES` | `sync.max_retries` |
+| `SNAKECHARMER_SYNC_RETRY_BACKOFF` | `sync.retry_backoff` |
+| `SNAKECHARMER_SYNC_LOG_FORMAT` | `sync.log_format` |
+| `SNAKECHARMER_HEALTH_ENABLED` | `health.enabled` |
+| `SNAKECHARMER_HEALTH_PORT` | `health.port` |
+
+Priority: CLI flags > environment variables > YAML config file.
+
+---
+
+## Health Endpoint
+
+When `health.enabled` is `true`, an HTTP server runs on `health.port` (default 8095):
+
+- `GET /` or `GET /health` returns JSON with sync status
+- **200** with `status: "ok"` after a successful sync
+- **503** with `status: "degraded"` after a failed sync
+- **200** with `status: "unknown"` before the first sync completes
+
+Response includes `uptime_seconds` and `last_sync` details (timestamp, duration, show counts).
+
 ---
 
 ## Docker
@@ -165,6 +241,8 @@ docker run -e SNAKECHARMER_SYNC_DRY_RUN=true \
   -v $(pwd)/config.yaml:/app/config.yaml snakecharmer
 ```
 
+The image uses `python:3.11-slim` and includes a healthcheck (every 30s, 10s start period) that queries the health endpoint when `health.enabled` is true, or validates config otherwise.
+
 ---
 
 ## Project Structure
@@ -177,12 +255,15 @@ snakecharmer/
 ├── app/
 │   ├── __init__.py
 │   ├── config.py
+│   ├── health.py
 │   ├── medusa.py
 │   ├── sync.py
 │   └── trakt.py
 ├── tests/
 │   ├── __init__.py
 │   ├── test_config.py
+│   ├── test_health.py
+│   ├── test_main.py
 │   ├── test_medusa.py
 │   ├── test_sync.py
 │   └── test_trakt.py
@@ -190,6 +271,7 @@ snakecharmer/
 ├── CLAUDE.md
 ├── Dockerfile
 ├── config.yaml.example
+├── logo.webp
 ├── main.py
 ├── pyproject.toml
 ├── README.md
