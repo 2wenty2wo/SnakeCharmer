@@ -22,6 +22,7 @@ shows to [Medusa](https://pymedusa.com).**
 - Retry with exponential backoff for transient API failures
 - Text or structured JSON logging
 - Health check HTTP endpoint for monitoring
+- Apprise-based notifications (Pushover, Discord, Telegram, ntfy, and 100+ more)
 - Optional web UI for config management (FastAPI + HTMX)
 - Environment variable overrides for all settings
 - Docker-ready with built-in healthcheck
@@ -98,6 +99,13 @@ health:
 webui:
   enabled: false         # enable browser-based config UI
   port: 8089             # web UI port (default: 8089)
+
+notify:
+  enabled: false         # enable Apprise notifications
+  urls: []               # Apprise URLs (pover://, discord://, tgram://, etc.)
+  on_success: true       # notify after successful sync
+  on_failure: true       # notify after failed sync
+  only_if_added: false   # suppress success alerts when no shows were added
 ```
 
 ### Trakt source types
@@ -223,6 +231,8 @@ Only the config keys listed below can be overridden with `SNAKECHARMER_`-prefixe
 | `SNAKECHARMER_HEALTH_PORT` | `health.port` |
 | `SNAKECHARMER_WEBUI_ENABLED` | `webui.enabled` |
 | `SNAKECHARMER_WEBUI_PORT` | `webui.port` |
+| `SNAKECHARMER_NOTIFY_ENABLED` | `notify.enabled` |
+| `SNAKECHARMER_NOTIFY_URLS` | `notify.urls` (comma-separated) |
 
 Priority: CLI flags > environment variables > YAML config file.
 
@@ -246,7 +256,7 @@ Response includes `uptime_seconds` and `last_sync` details (timestamp, duration,
 When enabled, SnakeCharmer runs a browser-based config management interface built with FastAPI, Jinja2, and HTMX. Enable it via the `--webui` CLI flag or `webui.enabled: true` in config. Runs on port 8089 by default.
 
 - **Dashboard** (`/`): shows current config summary and sync status
-- **Config editors** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`): edit and save each config section
+- **Config editors** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`, `/config/notify`): edit and save each config section
 - **Source management**: add/remove Trakt sources with per-source Medusa quality and required_words overrides
 - **Atomic saves**: config is written to a temp file then atomically replaced to prevent corruption
 - **Validation**: config is validated before saving; errors are shown inline
@@ -254,6 +264,19 @@ When enabled, SnakeCharmer runs a browser-based config management interface buil
 - **Health JSON** (`/health`): same format as the standalone health endpoint
 
 When the web UI is enabled, the standalone health server is not started --- the web UI serves `/health` directly.
+
+---
+
+## Notifications
+
+SnakeCharmer can send notifications after each sync cycle via [Apprise](https://github.com/caronc/apprise), supporting 100+ services including Pushover, Discord, Telegram, ntfy, Home Assistant, Slack, and more.
+
+- **`on_success`** / **`on_failure`**: control which sync outcomes trigger a notification
+- **`only_if_added`**: when true, suppresses success notifications if no shows were actually added (useful in interval mode to avoid noise)
+- **Dry-run aware**: messages say "Would add" instead of "Added" during dry runs
+- Notification failures are logged as warnings but never crash the sync loop
+
+See the [Apprise wiki](https://github.com/caronc/apprise/wiki) for the full list of supported services and URL formats.
 
 ---
 
@@ -287,6 +310,7 @@ snakecharmer/
 │   ├── config.py
 │   ├── health.py
 │   ├── medusa.py
+│   ├── notify.py
 │   ├── sync.py
 │   ├── trakt.py
 │   └── webui/
@@ -311,6 +335,7 @@ snakecharmer/
 │   ├── test_health.py
 │   ├── test_main.py
 │   ├── test_medusa.py
+│   ├── test_notify.py
 │   ├── test_sync.py
 │   ├── test_trakt.py
 │   └── test_webui.py
@@ -335,7 +360,7 @@ snakecharmer/
 - [ ] Tag / category support
 - [ ] Overseerr integration
 - [x] Web UI
-- [ ] Notifications
+- [x] Notifications
 
 ---
 
