@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 
 from app.config import load_config
+from app.notify import send_notification
 from app.sync import run_sync
 
 
@@ -141,12 +142,20 @@ def main() -> None:
                 result = run_sync(run_config)
                 if sync_status is not None:
                     sync_status.update(result)
+                try:
+                    send_notification(run_config.notify, result)
+                except Exception as exc:
+                    log.warning("Notification error: %s", exc)
                 log.info("Sleeping %ds until next sync...", run_config.sync.interval)
                 time.sleep(run_config.sync.interval)
         else:
             result = run_sync(config)
             if sync_status is not None:
                 sync_status.update(result)
+            try:
+                send_notification(config.notify, result)
+            except Exception as exc:
+                log.warning("Notification error: %s", exc)
             if webui_enabled:
                 log.info(
                     "Sync complete. Web UI running on port %d. Press Ctrl+C to exit.",

@@ -104,12 +104,22 @@ class WebUIConfig:
 
 
 @dataclass
+class NotifyConfig:
+    enabled: bool = False
+    urls: list[str] = field(default_factory=list)
+    on_success: bool = True
+    on_failure: bool = True
+    only_if_added: bool = False
+
+
+@dataclass
 class AppConfig:
     trakt: TraktConfig = field(default_factory=TraktConfig)
     medusa: MedusaConfig = field(default_factory=MedusaConfig)
     sync: SyncConfig = field(default_factory=SyncConfig)
     health: HealthConfig = field(default_factory=HealthConfig)
     webui: WebUIConfig = field(default_factory=WebUIConfig)
+    notify: NotifyConfig = field(default_factory=NotifyConfig)
     config_dir: str = "."
 
 
@@ -131,6 +141,8 @@ ENV_MAP = {
     "SNAKECHARMER_HEALTH_PORT": ("health", "port"),
     "SNAKECHARMER_WEBUI_ENABLED": ("webui", "enabled"),
     "SNAKECHARMER_WEBUI_PORT": ("webui", "port"),
+    "SNAKECHARMER_NOTIFY_ENABLED": ("notify", "enabled"),
+    "SNAKECHARMER_NOTIFY_URLS": ("notify", "urls"),
 }
 
 
@@ -152,6 +164,7 @@ def load_config(path: str) -> AppConfig:
     sync_raw = raw.get("sync", {})
     health_raw = raw.get("health", {})
     webui_raw = raw.get("webui", {})
+    notify_raw = raw.get("notify", {})
 
     # Apply environment variable overrides
     for env_var, (section, key) in ENV_MAP.items():
@@ -163,6 +176,7 @@ def load_config(path: str) -> AppConfig:
                 "sync": sync_raw,
                 "health": health_raw,
                 "webui": webui_raw,
+                "notify": notify_raw,
             }[section]
             target[key] = value
 
@@ -214,12 +228,21 @@ def load_config(path: str) -> AppConfig:
         port=int(webui_raw.get("port", 8089)),
     )
 
+    notify = NotifyConfig(
+        enabled=_to_bool(notify_raw.get("enabled", False)),
+        urls=_normalize_notify_urls(notify_raw),
+        on_success=_to_bool(notify_raw.get("on_success", True)),
+        on_failure=_to_bool(notify_raw.get("on_failure", True)),
+        only_if_added=_to_bool(notify_raw.get("only_if_added", False)),
+    )
+
     config = AppConfig(
         trakt=trakt,
         medusa=medusa,
         sync=sync,
         health=health,
         webui=webui,
+        notify=notify,
         config_dir=os.path.dirname(os.path.abspath(path)),
     )
 
@@ -237,6 +260,15 @@ def _to_bool(value) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).lower() in ("true", "1", "yes")
+
+
+def _normalize_notify_urls(notify_raw: dict) -> list[str]:
+    raw = notify_raw.get("urls", [])
+    if isinstance(raw, list):
+        return [str(u).strip() for u in raw if str(u).strip()]
+    if isinstance(raw, str):
+        return [u.strip() for u in raw.split(",") if u.strip()]
+    return []
 
 
 def _normalize_trakt_lists(trakt_raw: dict) -> list[str]:
