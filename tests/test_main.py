@@ -151,6 +151,7 @@ class TestMain:
         with (
             patch("main.parse_args", return_value=_mock_args(webui=True)),
             patch("main.load_config", return_value=base_config),
+            patch("app.health.start_health_server") as mock_start_health_server,
             patch("app.webui.ConfigHolder"),
             patch("app.webui.create_app"),
             patch("main.threading.Thread") as mock_thread,
@@ -158,7 +159,7 @@ class TestMain:
         ):
             main.main()
 
-        # webui thread started, but health server never imported for standalone use
+        mock_start_health_server.assert_not_called()
         mock_thread.return_value.start.assert_called_once()
 
     def test_notification_error_in_single_run_is_swallowed(self, base_config):
