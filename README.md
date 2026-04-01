@@ -4,9 +4,13 @@
 
 <p align="center">
   <a href="https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml"><img src="https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://codecov.io/gh/2wenty2wo/SnakeCharmer"><img src="https://codecov.io/gh/2wenty2wo/SnakeCharmer/branch/main/graph/badge.svg" alt="codecov" /></a>
   <a href="https://github.com/2wenty2wo/SnakeCharmer"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+" /></a>
+  <a href="https://github.com/2wenty2wo/SnakeCharmer/blob/main/Dockerfile"><img src="https://img.shields.io/badge/docker-supported-blue?logo=docker&logoColor=white" alt="Docker" /></a>
   <a href="https://github.com/2wenty2wo/SnakeCharmer"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" /></a>
+  <a href="https://github.com/2wenty2wo/SnakeCharmer"><img src="https://img.shields.io/badge/version-0.1.0-informational" alt="Version 0.1.0" /></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff" /></a>
+  <a href="https://github.com/sponsors/2wenty2wo"><img src="https://img.shields.io/badge/sponsor-♥-ea4aaa?logo=github" alt="Sponsor" /></a>
 </p>
 
 <p align="center"><strong>SnakeCharmer watches your <a href="https://trakt.tv">Trakt</a> lists and automatically adds missing shows to <a href="https://pymedusa.com">Medusa</a>.</strong></p>
