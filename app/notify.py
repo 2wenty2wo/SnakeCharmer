@@ -8,7 +8,7 @@ from app.sync import SyncResult
 log = logging.getLogger(__name__)
 
 
-def send_notification(config: NotifyConfig, result: SyncResult) -> None:
+def send_notification(config: NotifyConfig, result: SyncResult, *, dry_run: bool = False) -> None:
     """Send an Apprise notification based on sync result."""
     if not config.enabled:
         return
@@ -22,7 +22,7 @@ def send_notification(config: NotifyConfig, result: SyncResult) -> None:
         if config.only_if_added and result.added == 0:
             log.debug("Skipping notification: only_if_added=true and no shows were added")
             return
-        title, body = _success_message(result)
+        title, body = _success_message(result, dry_run=dry_run)
     else:
         if not config.on_failure:
             return
@@ -43,10 +43,11 @@ def _build_apprise(urls: list[str]) -> apprise.Apprise:
     return ap
 
 
-def _success_message(result: SyncResult) -> tuple[str, str]:
+def _success_message(result: SyncResult, *, dry_run: bool = False) -> tuple[str, str]:
     title = "SnakeCharmer: Sync Complete"
+    added_text = "Would add" if dry_run else "Added"
     body = (
-        f"Added {result.added} show(s) in {result.duration_seconds:.1f}s "
+        f"{added_text} {result.added} show(s) in {result.duration_seconds:.1f}s "
         f"(unique: {result.unique_shows}, already in library: {result.already_in_medusa}, "
         f"skipped: {result.skipped}, failed: {result.failed})"
     )

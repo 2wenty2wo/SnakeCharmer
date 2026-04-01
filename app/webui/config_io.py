@@ -59,6 +59,13 @@ def config_to_dict(config: AppConfig) -> dict:
             "enabled": config.webui.enabled,
             "port": config.webui.port,
         },
+        "notify": {
+            "enabled": config.notify.enabled,
+            "urls": config.notify.urls,
+            "on_success": config.notify.on_success,
+            "on_failure": config.notify.on_failure,
+            "only_if_added": config.notify.only_if_added,
+        },
     }
     return result
 
@@ -102,10 +109,12 @@ def load_config_dict(raw: dict, path: str) -> AppConfig:
     from app.config import (
         HealthConfig,
         MedusaConfig,
+        NotifyConfig,
         SyncConfig,
         TraktConfig,
         WebUIConfig,
         _legacy_lists_to_sources,
+        _normalize_notify_urls,
         _normalize_trakt_lists,
         _normalize_trakt_sources,
         _to_bool,
@@ -117,6 +126,7 @@ def load_config_dict(raw: dict, path: str) -> AppConfig:
     sync_raw = raw.get("sync", {})
     health_raw = raw.get("health", {})
     webui_raw = raw.get("webui", {})
+    notify_raw = raw.get("notify", {})
 
     trakt_lists = _normalize_trakt_lists(trakt_raw)
     username = str(trakt_raw.get("username", ""))
@@ -159,12 +169,21 @@ def load_config_dict(raw: dict, path: str) -> AppConfig:
         port=int(webui_raw.get("port", 8089)),
     )
 
+    notify = NotifyConfig(
+        enabled=_to_bool(notify_raw.get("enabled", False)),
+        urls=_normalize_notify_urls(notify_raw),
+        on_success=_to_bool(notify_raw.get("on_success", True)),
+        on_failure=_to_bool(notify_raw.get("on_failure", True)),
+        only_if_added=_to_bool(notify_raw.get("only_if_added", False)),
+    )
+
     config = AppConfig(
         trakt=trakt,
         medusa=medusa,
         sync=sync,
         health=health,
         webui=webui,
+        notify=notify,
         config_dir=os.path.dirname(os.path.abspath(path)),
     )
 

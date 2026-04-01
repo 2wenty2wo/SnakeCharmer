@@ -143,7 +143,7 @@ def main() -> None:
                 if sync_status is not None:
                     sync_status.update(result)
                 try:
-                    send_notification(run_config.notify, result)
+                    send_notification(run_config.notify, result, dry_run=run_config.sync.dry_run)
                 except Exception as exc:
                     log.warning("Notification error: %s", exc)
                 log.info("Sleeping %ds until next sync...", run_config.sync.interval)
@@ -153,7 +153,7 @@ def main() -> None:
             if sync_status is not None:
                 sync_status.update(result)
             try:
-                send_notification(config.notify, result)
+                send_notification(config.notify, result, dry_run=config.sync.dry_run)
             except Exception as exc:
                 log.warning("Notification error: %s", exc)
             if webui_enabled:

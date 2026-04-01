@@ -68,6 +68,15 @@ class TestSendNotification:
         assert "Sync Complete" in kwargs["title"]
         assert "Added 2" in kwargs["body"]
 
+    def test_success_message_uses_dry_run_wording(self):
+        config = NotifyConfig(enabled=True, urls=["pover://user@token"], on_success=True)
+        result = _success_result(added=4)
+        mock_ap = MagicMock()
+        with patch("app.notify._build_apprise", return_value=mock_ap):
+            send_notification(config, result, dry_run=True)
+        kwargs = mock_ap.notify.call_args.kwargs
+        assert "Would add 4" in kwargs["body"]
+
     def test_skips_success_when_on_success_false(self):
         config = NotifyConfig(enabled=True, urls=["pover://user@token"], on_success=False)
         result = _success_result()
@@ -170,6 +179,11 @@ class TestSuccessMessage:
         result = _success_result(added=7)
         _, body = _success_message(result)
         assert "Added 7" in body
+
+    def test_body_contains_dry_run_wording(self):
+        result = _success_result(added=3)
+        _, body = _success_message(result, dry_run=True)
+        assert "Would add 3" in body
 
     def test_body_contains_duration(self):
         result = _success_result(duration_seconds=3.456)
