@@ -364,6 +364,15 @@ snakecharmer/
 
 ---
 
+## Support
+
+SnakeCharmer is free and open source. If you find it useful, consider supporting development:
+
+- [GitHub Sponsors](https://github.com/sponsors/2wenty2wo)
+- [Ko-fi](https://ko-fi.com/2wenty2wo)
+
+---
+
 ## Disclaimer
 
 SnakeCharmer is not affiliated with Medusa or Trakt.
