@@ -81,3 +81,25 @@ health:
 webui:
   enabled: false
   port: 8089
+
+# Notifications via Apprise (https://github.com/caronc/apprise)
+# Supports 100+ services: Pushover, Home Assistant, Slack, Discord, ntfy, Telegram, etc.
+notify:
+  enabled: false
+
+  # List of Apprise notification URLs.
+  # Examples:
+  #   pover://user@token                     # Pushover
+  #   hassio://token@homeassistant.local     # Home Assistant
+  #   ntfy://hostname/topic                  # ntfy
+  #   discord://webhook_id/webhook_token     # Discord
+  #   tgram://bottoken/ChatID                # Telegram
+  # See https://github.com/caronc/apprise/wiki for the full list.
+  urls: []
+
+  on_success: true      # Notify after a successful sync
+  on_failure: true      # Notify after a failed sync
+
+  # Suppress success notifications when no shows were added.
+  # Useful in interval mode to avoid noise in steady state.
+  only_if_added: false

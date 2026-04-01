@@ -7,6 +7,7 @@ from app.config import (
     HealthConfig,
     MedusaAddOptions,
     MedusaConfig,
+    NotifyConfig,
     SyncConfig,
     TraktConfig,
     TraktSource,
@@ -28,6 +29,7 @@ def _make_config(**overrides) -> AppConfig:
         "sync": SyncConfig(),
         "health": HealthConfig(),
         "webui": WebUIConfig(),
+        "notify": NotifyConfig(),
         "config_dir": ".",
     }
     defaults.update(overrides)
@@ -53,6 +55,8 @@ class TestConfigToDict:
         assert result["sync"]["interval"] == 0
         assert result["health"]["enabled"] is False
         assert result["webui"]["enabled"] is False
+        assert result["notify"]["enabled"] is False
+        assert result["notify"]["urls"] == []
 
     def test_user_list_source(self):
         config = _make_config(
@@ -170,7 +174,15 @@ class TestSaveConfig:
 
 class TestSaveAppConfig:
     def test_full_roundtrip(self, tmp_path):
-        config = _make_config()
+        config = _make_config(
+            notify=NotifyConfig(
+                enabled=True,
+                urls=["ntfy://example/topic", "discord://abc/def"],
+                on_success=True,
+                on_failure=False,
+                only_if_added=True,
+            )
+        )
         path = str(tmp_path / "config.yaml")
         save_app_config(config, path)
 
@@ -179,6 +191,7 @@ class TestSaveAppConfig:
         assert loaded.medusa.url == config.medusa.url
         assert loaded.medusa.api_key == config.medusa.api_key
         assert loaded.sync.dry_run == config.sync.dry_run
+        assert loaded.notify == config.notify
         assert len(loaded.trakt.sources) == len(config.trakt.sources)
 
 
