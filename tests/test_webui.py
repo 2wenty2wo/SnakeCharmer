@@ -5,6 +5,7 @@ from app.config import (
     AppConfig,
     HealthConfig,
     MedusaConfig,
+    NotifyConfig,
     SyncConfig,
     TraktConfig,
     TraktSource,
@@ -262,6 +263,65 @@ class TestHealthConfig:
         updated = holder.get()
         assert updated.health.enabled is True
         assert updated.health.port == 9999
+
+
+class TestNotifyConfig:
+    def test_get_notify_page(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/config/notify")
+        assert response.status_code == 200
+        assert "Notify" in response.text or "Notification" in response.text
+
+    def test_save_notify(self, tmp_path):
+        client, holder, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/notify",
+            data={
+                "enabled": "on",
+                "urls": "pushover://user@token",
+                "on_success": "on",
+                "on_failure": "on",
+                "only_if_added": "on",
+            },
+        )
+        assert response.status_code == 200
+        assert "saved" in response.text.lower()
+        updated = holder.get()
+        assert updated.notify.enabled is True
+        assert updated.notify.urls == ["pushover://user@token"]
+        assert updated.notify.on_success is True
+        assert updated.notify.on_failure is True
+        assert updated.notify.only_if_added is True
+
+    def test_save_notify_multiple_urls(self, tmp_path):
+        client, holder, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/notify",
+            data={
+                "enabled": "on",
+                "urls": "pushover://user@token\ndiscord://webhook_id/token\n",
+                "on_success": "on",
+            },
+        )
+        assert response.status_code == 200
+        updated = holder.get()
+        assert updated.notify.urls == ["pushover://user@token", "discord://webhook_id/token"]
+
+    def test_save_notify_unchecked_booleans(self, tmp_path):
+        config = _make_config(
+            notify=NotifyConfig(enabled=True, on_success=True, on_failure=True),
+        )
+        client, holder, _ = _create_client(tmp_path, config)
+        response = client.post(
+            "/config/notify",
+            data={"urls": ""},
+        )
+        assert response.status_code == 200
+        updated = holder.get()
+        assert updated.notify.enabled is False
+        assert updated.notify.on_success is False
+        assert updated.notify.on_failure is False
+        assert updated.notify.only_if_added is False
 
 
 class TestHealthEndpoint:

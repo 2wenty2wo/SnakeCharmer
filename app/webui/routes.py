@@ -173,6 +173,36 @@ async def save_health(request: Request):
     return _save_and_respond(request, config_dict, holder, "health")
 
 
+# --- Notify Config ---
+
+
+@router.get("/config/notify", response_class=HTMLResponse)
+async def config_notify(request: Request):
+    config = _holder(request).get()
+    return _templates(request).TemplateResponse(
+        request,
+        "config/notify.html",
+        context={"config": config, "active_page": "notify"},
+    )
+
+
+@router.post("/config/notify", response_class=HTMLResponse)
+async def save_notify(request: Request):
+    holder = _holder(request)
+    form = await request.form()
+    config = holder.get()
+    config_dict = config_to_dict(config)
+
+    config_dict["notify"]["enabled"] = form.get("enabled") == "on"
+    urls_raw = form.get("urls", "")
+    config_dict["notify"]["urls"] = [u.strip() for u in urls_raw.splitlines() if u.strip()]
+    config_dict["notify"]["on_success"] = form.get("on_success") == "on"
+    config_dict["notify"]["on_failure"] = form.get("on_failure") == "on"
+    config_dict["notify"]["only_if_added"] = form.get("only_if_added") == "on"
+
+    return _save_and_respond(request, config_dict, holder, "notify")
+
+
 # --- Health JSON endpoint ---
 
 

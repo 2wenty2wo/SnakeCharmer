@@ -128,7 +128,7 @@ Optional browser-based config management built with FastAPI + Jinja2 + HTMX. Ena
 
 - Runs on `webui.port` (default 8089) in a daemon thread using uvicorn
 - **Dashboard** (`/`): shows current config summary and sync status
-- **Config sections** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`): edit and save each config section via HTMX form submissions
+- **Config sections** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`, `/config/notify`): edit and save each config section via HTMX form submissions
 - **Source management**: add/remove Trakt sources dynamically with per-source Medusa quality and required_words overrides
 - **Atomic saves**: config is written to a temp file then `os.replace()`'d to prevent corruption
 - **Validation**: config is validated before saving; validation errors are shown as HTMX banners
@@ -216,4 +216,4 @@ Two log formats are available, configured via `sync.log_format` or `--log-format
 - No removal/unsync support — shows added to Medusa are never removed if removed from a Trakt list
 - Legacy `list`/`lists` config keys are still supported but undocumented in README; env vars `SNAKECHARMER_TRAKT_LIST` and `SNAKECHARMER_TRAKT_LISTS` trigger the legacy path
 - Web UI does not support OAuth token management or triggering a manual sync
-- Web UI does not yet have a config section for notification settings
+- Web UI does not support editing WebUI settings (intentional — cannot change UI port/enabled from within the UI)
