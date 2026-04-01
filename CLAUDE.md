@@ -69,11 +69,12 @@ app/health.py              HTTP health endpoint: SyncStatus tracking, /health JS
 app/webui/__init__.py      FastAPI app factory (create_app), ConfigHolder thread-safe wrapper
 app/webui/routes.py        HTMX-driven routes: dashboard, config sections (trakt/medusa/sync/health), /health JSON
 app/webui/config_io.py     Config serialization: AppConfig ↔ dict ↔ YAML file, atomic writes, validation
+app/notify.py              Apprise-based notifications: sends alerts on sync success/failure to 100+ services
 app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, config section partials)
 app/webui/static/style.css CSS styles for the web UI
 ```
 
-Data flow: `main.py` loads config, optionally starts the health server and/or web UI, then calls `run_sync()` which instantiates both API clients, fetches shows from Trakt as `TraktShow` dataclasses, gets existing TVDB IDs from Medusa, adds any missing shows, and returns a `SyncResult` with detailed metrics. The health server exposes these metrics via HTTP.
+Data flow: `main.py` loads config, optionally starts the health server and/or web UI, then calls `run_sync()` which instantiates both API clients, fetches shows from Trakt as `TraktShow` dataclasses, gets existing TVDB IDs from Medusa, adds any missing shows, and returns a `SyncResult` with detailed metrics. After each sync cycle, `send_notification()` is called to send alerts via Apprise if configured. The health server exposes these metrics via HTTP.
 
 ### Sync flow (`app/sync.py`)
 
@@ -110,6 +111,17 @@ When `health.enabled` is true, an HTTP server runs on `health.port` (default 809
 
 When the web UI is enabled, the standalone health server is not started — the web UI serves `/health` directly via its FastAPI router.
 
+### Notifications (`app/notify.py`)
+
+Apprise-based notification system supporting 100+ services (Pushover, Discord, Telegram, ntfy, Home Assistant, etc.). Configured via the `notify` section in YAML config.
+
+- `send_notification()` is called after each sync cycle in `main.py`
+- Sends on success, failure, or both (controlled by `on_success` / `on_failure` flags)
+- `only_if_added`: when true, suppresses success notifications if no shows were added
+- Dry-run aware: messages say "Would add" instead of "Added" during dry runs
+- Notification failures are logged as warnings but never crash the sync loop
+- Uses `_build_apprise()` to construct an `apprise.Apprise` instance from configured URLs
+
 ### Web UI (`app/webui/`)
 
 Optional browser-based config management built with FastAPI + Jinja2 + HTMX. Enabled via `--webui` CLI flag or `webui.enabled: true` in config.
@@ -129,7 +141,7 @@ Key classes:
 
 ## Dependencies
 
-Core: `requests`, `pyyaml`. Web UI: `fastapi`, `uvicorn[standard]`, `jinja2`, `python-multipart`. Testing: `httpx` (for FastAPI test client). All pinned in `requirements.txt` and `pyproject.toml`.
+Core: `requests`, `pyyaml`, `apprise`. Web UI: `fastapi`, `uvicorn[standard]`, `jinja2`, `python-multipart`. Testing: `httpx` (for FastAPI test client). All pinned in `requirements.txt` and `pyproject.toml`.
 
 ## Data Models
 
@@ -139,8 +151,9 @@ Core: `requests`, `pyyaml`. Web UI: `fastapi`, `uvicorn[standard]`, `jinja2`, `p
 - `SyncResult` (`app/sync.py`): sync cycle metrics — `total_fetched`, `unique_shows`, `already_in_medusa`, `added`, `skipped`, `failed`, `duration_seconds`, `per_source`, `success`
 - `SyncStatus` (`app/health.py`): thread-safe container for last sync result and application uptime
 - `ConfigHolder` (`app/webui/__init__.py`): thread-safe mutable holder for the active `AppConfig`
+- `NotifyConfig` (`app/config.py`): notification settings — `enabled`, `urls` (list of Apprise URLs), `on_success`, `on_failure`, `only_if_added`
 - `ConfigError` (`app/config.py`): exception with `errors: list[str]` for validation failures
-- Config hierarchy: `AppConfig` → `TraktConfig` / `MedusaConfig` / `SyncConfig` / `HealthConfig` / `WebUIConfig`
+- Config hierarchy: `AppConfig` → `TraktConfig` / `MedusaConfig` / `SyncConfig` / `HealthConfig` / `WebUIConfig` / `NotifyConfig`
 
 ### Quality resolution (`app/medusa.py`)
 
@@ -173,13 +186,15 @@ Only the config keys listed below can be overridden via environment variables wi
 | `SNAKECHARMER_HEALTH_PORT` | `health.port` |
 | `SNAKECHARMER_WEBUI_ENABLED` | `webui.enabled` |
 | `SNAKECHARMER_WEBUI_PORT` | `webui.port` |
+| `SNAKECHARMER_NOTIFY_ENABLED` | `notify.enabled` |
+| `SNAKECHARMER_NOTIFY_URLS` | `notify.urls` (comma-separated) |
 
 Priority: CLI flags > env vars > YAML config file.
 
 ## Code Conventions
 
 - Python 3.10+ with type hints (use `str | None` style, not `Optional`)
-- Dataclasses for config (`AppConfig`, `TraktConfig`, `MedusaConfig`, `SyncConfig`, `HealthConfig`, `WebUIConfig`) and data models (`TraktShow`, `SyncResult`, `SyncStatus`, `ConfigHolder`)
+- Dataclasses for config (`AppConfig`, `TraktConfig`, `MedusaConfig`, `SyncConfig`, `HealthConfig`, `WebUIConfig`, `NotifyConfig`) and data models (`TraktShow`, `SyncResult`, `SyncStatus`, `ConfigHolder`)
 - `requests.Session` per client for connection reuse and shared headers
 - Module-level `log = logging.getLogger(__name__)` in every file
 - Private methods prefixed with `_` (e.g., `_request`, `_parse_show`, `_validate`)
@@ -199,6 +214,6 @@ Two log formats are available, configured via `sync.log_format` or `--log-format
 
 - Token refresh in trakt.py can silently fail and fall through to device auth
 - No removal/unsync support — shows added to Medusa are never removed if removed from a Trakt list
-- No notification system (planned in roadmap)
 - Legacy `list`/`lists` config keys are still supported but undocumented in README; env vars `SNAKECHARMER_TRAKT_LIST` and `SNAKECHARMER_TRAKT_LISTS` trigger the legacy path
 - Web UI does not support OAuth token management or triggering a manual sync
+- Web UI does not yet have a config section for notification settings
