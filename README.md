@@ -1,12 +1,15 @@
-<img src="logo.webp" alt="SnakeCharmer Logo" width="50%" />
+<p align="center">
+  <img src="logo.webp" alt="SnakeCharmer Logo" width="50%" />
+</p>
 
-[![CI](https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml/badge.svg)](https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://github.com/2wenty2wo/SnakeCharmer)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/2wenty2wo/SnakeCharmer)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+<p align="center">
+  <a href="https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml"><img src="https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/2wenty2wo/SnakeCharmer"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+" /></a>
+  <a href="https://github.com/2wenty2wo/SnakeCharmer"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" /></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff" /></a>
+</p>
 
-**SnakeCharmer watches your [Trakt](https://trakt.tv) lists and automatically adds missing
-shows to [Medusa](https://pymedusa.com).**
+<p align="center"><strong>SnakeCharmer watches your <a href="https://trakt.tv">Trakt</a> lists and automatically adds missing shows to <a href="https://pymedusa.com">Medusa</a>.</strong></p>
 
 ---
 
