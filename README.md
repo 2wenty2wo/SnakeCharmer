@@ -22,6 +22,7 @@ shows to [Medusa](https://pymedusa.com).**
 - Retry with exponential backoff for transient API failures
 - Text or structured JSON logging
 - Health check HTTP endpoint for monitoring
+- Optional web UI for config management (FastAPI + HTMX)
 - Environment variable overrides for all settings
 - Docker-ready with built-in healthcheck
 
@@ -93,6 +94,10 @@ sync:
 health:
   enabled: false         # enable HTTP health endpoint
   port: 8095             # health endpoint port (default: 8095)
+
+webui:
+  enabled: false         # enable browser-based config UI
+  port: 8089             # web UI port (default: 8089)
 ```
 
 ### Trakt source types
@@ -188,6 +193,13 @@ python main.py --config /path/to/config.yaml
 python main.py --log-format json
 ```
 
+### Web UI
+
+``` bash
+python main.py --webui                    # start with web UI enabled
+python main.py --webui --webui-port 9000  # web UI on custom port
+```
+
 ---
 
 ## Environment Variables
@@ -209,6 +221,8 @@ Only the config keys listed below can be overridden with `SNAKECHARMER_`-prefixe
 | `SNAKECHARMER_SYNC_LOG_FORMAT` | `sync.log_format` |
 | `SNAKECHARMER_HEALTH_ENABLED` | `health.enabled` |
 | `SNAKECHARMER_HEALTH_PORT` | `health.port` |
+| `SNAKECHARMER_WEBUI_ENABLED` | `webui.enabled` |
+| `SNAKECHARMER_WEBUI_PORT` | `webui.port` |
 
 Priority: CLI flags > environment variables > YAML config file.
 
@@ -224,6 +238,22 @@ When `health.enabled` is `true`, an HTTP server runs on `health.port` (default 8
 - **200** with `status: "unknown"` before the first sync completes
 
 Response includes `uptime_seconds` and `last_sync` details (timestamp, duration, show counts).
+
+---
+
+## Web UI
+
+When enabled, SnakeCharmer runs a browser-based config management interface built with FastAPI, Jinja2, and HTMX. Enable it via the `--webui` CLI flag or `webui.enabled: true` in config. Runs on port 8089 by default.
+
+- **Dashboard** (`/`): shows current config summary and sync status
+- **Config editors** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`): edit and save each config section
+- **Source management**: add/remove Trakt sources with per-source Medusa quality and required_words overrides
+- **Atomic saves**: config is written to a temp file then atomically replaced to prevent corruption
+- **Validation**: config is validated before saving; errors are shown inline
+- **Live reload**: the sync loop picks up config changes on the next cycle
+- **Health JSON** (`/health`): same format as the standalone health endpoint
+
+When the web UI is enabled, the standalone health server is not started --- the web UI serves `/health` directly.
 
 ---
 
@@ -258,15 +288,32 @@ snakecharmer/
 │   ├── health.py
 │   ├── medusa.py
 │   ├── sync.py
-│   └── trakt.py
+│   ├── trakt.py
+│   └── webui/
+│       ├── __init__.py
+│       ├── config_io.py
+│       ├── routes.py
+│       ├── static/
+│       │   └── style.css
+│       └── templates/
+│           ├── base.html
+│           ├── dashboard.html
+│           └── config/
+│               ├── health.html
+│               ├── medusa.html
+│               ├── source_row.html
+│               ├── sync.html
+│               └── trakt.html
 ├── tests/
 │   ├── __init__.py
 │   ├── test_config.py
+│   ├── test_config_io.py
 │   ├── test_health.py
 │   ├── test_main.py
 │   ├── test_medusa.py
 │   ├── test_sync.py
-│   └── test_trakt.py
+│   ├── test_trakt.py
+│   └── test_webui.py
 ├── .gitignore
 ├── CLAUDE.md
 ├── Dockerfile
@@ -287,7 +334,7 @@ snakecharmer/
 - [ ] Show removal (sync down)
 - [ ] Tag / category support
 - [ ] Overseerr integration
-- [ ] Web UI
+- [x] Web UI
 - [ ] Notifications
 
 ---
