@@ -132,3 +132,178 @@ class TestMain:
             pytest.raises(RuntimeError, match="unexpected crash"),
         ):
             main.main()
+
+    def test_health_server_started_when_enabled(self, base_config):
+        base_config.health.enabled = True
+        base_config.health.port = 9999
+        with (
+            patch("main.parse_args", return_value=_mock_args()),
+            patch("main.load_config", return_value=base_config),
+            patch("main.run_sync"),
+            patch("app.health.start_health_server") as mock_start,
+        ):
+            main.main()
+
+        mock_start.assert_called_once_with(9999, mock_start.call_args[0][1])
+
+    def test_health_server_not_started_when_webui_active(self, base_config):
+        base_config.health.enabled = True
+        with (
+            patch("main.parse_args", return_value=_mock_args(webui=True)),
+            patch("main.load_config", return_value=base_config),
+            patch("app.health.start_health_server") as mock_start_health_server,
+            patch("app.webui.ConfigHolder"),
+            patch("app.webui.create_app"),
+            patch("main.threading.Thread") as mock_thread,
+            patch("main.run_sync"),
+        ):
+            main.main()
+
+        mock_start_health_server.assert_not_called()
+        mock_thread.return_value.start.assert_called_once()
+
+    def test_notification_error_in_single_run_is_swallowed(self, base_config):
+        with (
+            patch("main.parse_args", return_value=_mock_args()),
+            patch("main.load_config", return_value=base_config),
+            patch("main.run_sync"),
+            patch("main.send_notification", side_effect=RuntimeError("notify boom")),
+        ):
+            # Should not raise
+            main.main()
+
+    def test_notification_error_in_interval_mode_is_swallowed(self, base_config):
+        base_config.sync.interval = 30
+        call_count = 0
+
+        def _sync_side_effect(*a, **kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise KeyboardInterrupt
+
+        with (
+            patch("main.parse_args", return_value=_mock_args()),
+            patch("main.load_config", return_value=base_config),
+            patch("main.run_sync", side_effect=_sync_side_effect),
+            patch("main.send_notification", side_effect=RuntimeError("notify boom")),
+            patch("main.time.sleep"),
+            patch("main.sys.exit", side_effect=SystemExit(0)),
+            pytest.raises(SystemExit),
+        ):
+            main.main()
+
+    def test_single_run_with_webui_joins_thread(self, base_config):
+        with (
+            patch("main.parse_args", return_value=_mock_args(webui=True)),
+            patch("main.load_config", return_value=base_config),
+            patch("app.webui.ConfigHolder"),
+            patch("app.webui.create_app"),
+            patch("main.threading.Thread") as mock_thread,
+            patch("main.run_sync"),
+        ):
+            main.main()
+
+        mock_thread.return_value.join.assert_called_once()
+
+    def test_sync_status_updated_in_single_run(self, base_config):
+        base_config.health.enabled = True
+        mock_result = MagicMock()
+        with (
+            patch("main.parse_args", return_value=_mock_args()),
+            patch("main.load_config", return_value=base_config),
+            patch("main.run_sync", return_value=mock_result),
+            patch("app.health.start_health_server"),
+            patch("app.health.SyncStatus") as mock_status_cls,
+        ):
+            main.main()
+
+        mock_status_cls.return_value.update.assert_called_once_with(mock_result)
+
+
+class TestJsonFormatter:
+    def test_formats_basic_log_record(self):
+        import json
+
+        formatter = main.JsonFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="Hello %s",
+            args=("world",),
+            exc_info=None,
+        )
+        output = formatter.format(record)
+        data = json.loads(output)
+
+        assert data["level"] == "INFO"
+        assert data["logger"] == "test"
+        assert data["message"] == "Hello world"
+        assert "timestamp" in data
+        assert "exception" not in data
+
+    def test_formats_exception_info(self):
+        import json
+        import sys
+
+        formatter = main.JsonFormatter()
+        try:
+            raise ValueError("test error")
+        except ValueError:
+            exc_info = sys.exc_info()
+
+        record = logging.LogRecord(
+            name="test",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=1,
+            msg="Something failed",
+            args=(),
+            exc_info=exc_info,
+        )
+        output = formatter.format(record)
+        data = json.loads(output)
+
+        assert data["level"] == "ERROR"
+        assert data["message"] == "Something failed"
+        assert "exception" in data
+        assert "ValueError: test error" in data["exception"]
+
+    def test_formats_without_exception_when_exc_info_none_tuple(self):
+        import json
+
+        formatter = main.JsonFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.WARNING,
+            pathname="test.py",
+            lineno=1,
+            msg="A warning",
+            args=(),
+            exc_info=(None, None, None),
+        )
+        output = formatter.format(record)
+        data = json.loads(output)
+
+        assert "exception" not in data
+
+
+class TestSetupLogging:
+    def test_json_format_uses_json_formatter(self):
+        root = logging.getLogger()
+        root.handlers.clear()
+        main._setup_logging("json")
+
+        assert len(root.handlers) == 1
+        assert isinstance(root.handlers[0].formatter, main.JsonFormatter)
+
+    def test_text_format_uses_standard_formatter(self):
+        root = logging.getLogger()
+        root.handlers.clear()
+        main._setup_logging("text")
+
+        assert len(root.handlers) == 1
+        assert isinstance(root.handlers[0].formatter, logging.Formatter)
+        assert not isinstance(root.handlers[0].formatter, main.JsonFormatter)

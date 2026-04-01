@@ -278,3 +278,35 @@ class TestRetry:
             resp = client._request("GET", "/series")
 
         assert resp.json() == []
+
+    def test_exhausted_5xx_retries_raises(self, medusa_config):
+        """When all retry attempts return 5xx, the last exception is raised."""
+        client = MedusaClient(medusa_config, max_retries=1, retry_backoff=0.01)
+        error_resp = _mock_response({}, status_code=503)
+        error_resp.raise_for_status.side_effect = requests.HTTPError(response=error_resp)
+
+        with (
+            patch.object(client.session, "request", return_value=error_resp),
+            patch("app.medusa.time.sleep"),
+            pytest.raises(requests.HTTPError),
+        ):
+            client._request("GET", "/series")
+
+    def test_exhausted_connection_retries_logs_unreachable(self, medusa_config):
+        """When all connection retries are exhausted, logs Medusa unreachable."""
+        client = MedusaClient(medusa_config, max_retries=1, retry_backoff=0.01)
+
+        with (
+            patch.object(
+                client.session,
+                "request",
+                side_effect=requests.ConnectionError("refused"),
+            ),
+            patch("app.medusa.time.sleep"),
+            patch("app.medusa.log.error") as mock_log_error,
+            pytest.raises(requests.ConnectionError),
+        ):
+            client._request("GET", "/series")
+
+        mock_log_error.assert_called_once()
+        assert "Cannot reach Medusa" in mock_log_error.call_args[0][0]
