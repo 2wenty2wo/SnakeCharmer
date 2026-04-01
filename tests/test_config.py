@@ -479,3 +479,47 @@ class TestNormalizeHelpers:
 
         with pytest.raises(SystemExit):
             load_config(path)
+
+
+class TestConfigErrorClass:
+    def test_config_error_stores_errors_list(self):
+        from app.config import ConfigError
+
+        errors = ["missing field A", "invalid field B"]
+        exc = ConfigError(errors)
+        assert exc.errors == errors
+        assert "missing field A" in str(exc)
+        assert "invalid field B" in str(exc)
+
+    def test_config_error_single_error(self):
+        from app.config import ConfigError
+
+        exc = ConfigError(["only one"])
+        assert exc.errors == ["only one"]
+        assert str(exc) == "only one"
+
+
+class TestNormalizeNotifyUrls:
+    def test_list_of_urls(self, tmp_path, minimal_config):
+        minimal_config["notify"] = {"urls": ["ntfy://topic1", "discord://hook"]}
+        path = _write_config(tmp_path, minimal_config)
+        config = load_config(path)
+        assert config.notify.urls == ["ntfy://topic1", "discord://hook"]
+
+    def test_comma_separated_string_via_env(self, tmp_path, minimal_config, monkeypatch):
+        monkeypatch.setenv("SNAKECHARMER_NOTIFY_URLS", "ntfy://a,discord://b")
+        path = _write_config(tmp_path, minimal_config)
+        config = load_config(path)
+        assert config.notify.urls == ["ntfy://a", "discord://b"]
+
+    def test_empty_list_urls(self, tmp_path, minimal_config):
+        minimal_config["notify"] = {"urls": []}
+        path = _write_config(tmp_path, minimal_config)
+        config = load_config(path)
+        assert config.notify.urls == []
+
+    def test_numeric_urls_coerced_to_string(self, tmp_path, minimal_config):
+        minimal_config["notify"] = {"urls": [12345]}
+        path = _write_config(tmp_path, minimal_config)
+        config = load_config(path)
+        assert config.notify.urls == ["12345"]

@@ -223,3 +223,34 @@ class TestReloadConfig:
 
         with pytest.raises(ConfigError):
             reload_config(path)
+
+    def test_reload_malformed_yaml_raises(self, tmp_path):
+        import pytest
+
+        from app.config import ConfigError
+
+        path = str(tmp_path / "config.yaml")
+        with open(path, "w") as f:
+            f.write("{{invalid yaml: [unbalanced")
+
+        with pytest.raises(ConfigError, match="Failed to parse"):
+            reload_config(path)
+
+
+class TestSaveConfigFailure:
+    def test_temp_file_cleaned_up_on_write_error(self, tmp_path):
+        from unittest.mock import patch
+
+        import pytest
+
+        path = str(tmp_path / "config.yaml")
+
+        with (
+            patch("app.webui.config_io.yaml.dump", side_effect=OSError("disk full")),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            save_config({"test": True}, path)
+
+        # No temp files should remain
+        files = os.listdir(tmp_path)
+        assert all(not f.startswith(".config_") for f in files)

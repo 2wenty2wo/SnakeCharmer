@@ -533,3 +533,16 @@ class TestRetry:
             pytest.raises(requests.ConnectionError),
         ):
             client._request("GET", "/test")
+
+    def test_exhausted_5xx_retries_raises(self, trakt_config, tmp_path):
+        """When all retry attempts return 5xx, raise_for_status is called on the last response."""
+        client = self._make_client(trakt_config, tmp_path, max_retries=1)
+        error_resp = _mock_response({}, status_code=502)
+        error_resp.raise_for_status.side_effect = requests.HTTPError(response=error_resp)
+
+        with (
+            patch.object(client.session, "request", return_value=error_resp),
+            patch("app.trakt.time.sleep"),
+            pytest.raises(requests.HTTPError),
+        ):
+            client._request("GET", "/test")

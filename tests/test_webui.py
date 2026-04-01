@@ -324,6 +324,78 @@ class TestNotifyConfig:
         assert updated.notify.only_if_added is False
 
 
+class TestSourceWithMedusaOptions:
+    def test_save_trakt_with_comma_separated_quality(self, tmp_path):
+        client, holder, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_quality": "hd1080p, uhd4k",
+            },
+        )
+        assert response.status_code == 200
+        updated = holder.get()
+        assert updated.trakt.sources[0].medusa.quality == ["hd1080p", "uhd4k"]
+
+    def test_save_trakt_with_required_words(self, tmp_path):
+        client, holder, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_required_words": "proper, remux",
+            },
+        )
+        assert response.status_code == 200
+        updated = holder.get()
+        assert updated.trakt.sources[0].medusa.required_words == ["proper", "remux"]
+
+    def test_save_trakt_with_single_quality(self, tmp_path):
+        client, holder, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_quality": "hd720p",
+            },
+        )
+        assert response.status_code == 200
+        updated = holder.get()
+        assert updated.trakt.sources[0].medusa.quality == "hd720p"
+
+
+class TestSaveAndRespondErrors:
+    def test_unexpected_exception_returns_error_banner(self, tmp_path):
+        from unittest.mock import patch
+
+        client, _, _ = _create_client(tmp_path)
+        with patch(
+            "app.webui.routes.load_config_dict",
+            side_effect=RuntimeError("unexpected"),
+        ):
+            response = client.post(
+                "/config/medusa",
+                data={"url": "http://localhost:8081", "api_key": "key"},
+            )
+
+        assert response.status_code == 200
+        assert "Failed to save" in response.text
+        assert "unexpected" in response.text
+
+
 class TestHealthEndpoint:
     def test_health_json_no_status(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
