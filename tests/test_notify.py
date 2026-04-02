@@ -150,6 +150,35 @@ class TestSendNotification:
             send_notification(config, result)
         mock_build.assert_called_once_with(urls)
 
+    def test_build_apprise_exception_caught(self):
+        """If _build_apprise itself raises, send_notification must not propagate."""
+        config = NotifyConfig(enabled=True, urls=["pover://user@token"], on_success=True)
+        result = _success_result()
+        with patch("app.notify._build_apprise", side_effect=RuntimeError("build failed")):
+            send_notification(config, result)  # must not raise
+
+    def test_only_if_added_dry_run_sends_when_shows_added(self):
+        """only_if_added with dry_run=True should still send when added > 0."""
+        config = NotifyConfig(
+            enabled=True, urls=["pover://user@token"], on_success=True, only_if_added=True
+        )
+        result = _success_result(added=2)
+        mock_ap = MagicMock()
+        with patch("app.notify._build_apprise", return_value=mock_ap):
+            send_notification(config, result, dry_run=True)
+        mock_ap.notify.assert_called_once()
+        assert "Would add 2" in mock_ap.notify.call_args.kwargs["body"]
+
+    def test_only_if_added_dry_run_suppresses_when_nothing_added(self):
+        """only_if_added with dry_run=True should still suppress when added == 0."""
+        config = NotifyConfig(
+            enabled=True, urls=["pover://user@token"], on_success=True, only_if_added=True
+        )
+        result = _success_result(added=0)
+        with patch("app.notify._build_apprise") as mock_build:
+            send_notification(config, result, dry_run=True)
+        mock_build.assert_not_called()
+
 
 class TestBuildApprise:
     def test_adds_each_url(self):

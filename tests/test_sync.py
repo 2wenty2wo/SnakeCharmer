@@ -1,9 +1,10 @@
+import logging
 from unittest.mock import patch
 
 import pytest
 
 from app.config import AppConfig, MedusaConfig, SyncConfig, TraktConfig, TraktSource
-from app.sync import SyncResult, _medusa_add_options_from_source, run_sync
+from app.sync import SyncResult, _log_summary, _medusa_add_options_from_source, run_sync
 from app.trakt import TraktShow
 
 
@@ -285,3 +286,57 @@ class TestMedusaAddOptionsFromSource:
         result = _medusa_add_options_from_source(source)
         assert result == {"required_words": ["proper"]}
         assert "quality" not in result
+
+
+class TestLogSummary:
+    def test_no_dry_run_prefix(self, caplog):
+        result = SyncResult(
+            added=2, skipped=1, failed=0, duration_seconds=1.5,
+            per_source={"trending": 3}, unique_shows=5, already_in_medusa=2,
+        )
+        with caplog.at_level(logging.INFO, logger="app.sync"):
+            _log_summary(result, dry_run=False)
+        assert "[DRY RUN]" not in caplog.text
+        assert "Sync complete" in caplog.text
+
+    def test_dry_run_prefix_present(self, caplog):
+        result = SyncResult(added=3, duration_seconds=0.5, per_source={"trending": 3})
+        with caplog.at_level(logging.INFO, logger="app.sync"):
+            _log_summary(result, dry_run=True)
+        assert "[DRY RUN] Sync complete" in caplog.text
+
+    def test_per_source_summary_formatted(self, caplog):
+        result = SyncResult(
+            per_source={"trending": 5, "popular": 3}, duration_seconds=1.0
+        )
+        with caplog.at_level(logging.INFO, logger="app.sync"):
+            _log_summary(result, dry_run=False)
+        assert "trending=5" in caplog.text
+        assert "popular=3" in caplog.text
+
+    def test_missing_count_is_sum_of_added_skipped_failed(self, caplog):
+        result = SyncResult(added=2, skipped=1, failed=3, duration_seconds=1.0, per_source={})
+        with caplog.at_level(logging.INFO, logger="app.sync"):
+            _log_summary(result, dry_run=False)
+        assert "missing: 6" in caplog.text
+
+    def test_all_metrics_present_in_log(self, caplog):
+        result = SyncResult(
+            added=4, skipped=2, failed=1, unique_shows=10,
+            already_in_medusa=3, duration_seconds=2.25, per_source={"watchlist": 7},
+        )
+        with caplog.at_level(logging.INFO, logger="app.sync"):
+            _log_summary(result, dry_run=False)
+        log_text = caplog.text
+        assert "unique: 10" in log_text
+        assert "in library: 3" in log_text
+        assert "added: 4" in log_text
+        assert "skipped: 2" in log_text
+        assert "failed: 1" in log_text
+        assert "2.2s" in log_text
+
+    def test_empty_per_source_produces_empty_sources_string(self, caplog):
+        result = SyncResult(duration_seconds=0.1, per_source={})
+        with caplog.at_level(logging.INFO, logger="app.sync"):
+            _log_summary(result, dry_run=False)
+        assert "sources:  |" in caplog.text

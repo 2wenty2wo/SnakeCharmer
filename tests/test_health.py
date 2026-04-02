@@ -1,4 +1,6 @@
 import json
+import re
+import threading
 from http.client import HTTPConnection
 
 import pytest
@@ -46,6 +48,45 @@ class TestSyncStatus:
         snap = sync_status.snapshot()
 
         assert snap["status"] == "degraded"
+
+    def test_snapshot_timestamp_is_iso8601(self, sync_status):
+        result = SyncResult(added=1, success=True, duration_seconds=1.0)
+        sync_status.update(result)
+        snap = sync_status.snapshot()
+        assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", snap["last_sync"]["timestamp"])
+
+    def test_concurrent_updates_do_not_raise(self, sync_status):
+        """Concurrent reads and writes via the threading.Lock must not raise or corrupt state."""
+        errors = []
+        statuses = []
+
+        def writer(success: bool) -> None:
+            try:
+                for _ in range(100):
+                    sync_status.update(SyncResult(added=1, success=success, duration_seconds=0.01))
+            except Exception as exc:
+                errors.append(exc)
+
+        def reader() -> None:
+            try:
+                for _ in range(100):
+                    snap = sync_status.snapshot()
+                    statuses.append(snap["status"])
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=writer, args=(True,)),
+            threading.Thread(target=writer, args=(False,)),
+            threading.Thread(target=reader),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors
+        assert all(s in ("ok", "degraded", "unknown") for s in statuses)
 
 
 class TestHealthServer:
@@ -112,6 +153,21 @@ class TestHealthServer:
             resp = conn.getresponse()
 
             assert resp.status == 404
+            conn.close()
+        finally:
+            server.shutdown()
+
+    def test_root_path_returns_health_json(self, sync_status):
+        server = start_health_server(0, sync_status)
+        port = server.server_address[1]
+        try:
+            conn = HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("GET", "/")
+            resp = conn.getresponse()
+            assert resp.status == 200
+            body = json.loads(resp.read())
+            assert "status" in body
+            assert "uptime_seconds" in body
             conn.close()
         finally:
             server.shutdown()

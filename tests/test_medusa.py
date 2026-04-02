@@ -43,6 +43,26 @@ class TestGetExistingTvdbIds:
 
         assert ids == set()
 
+    def test_tvdb_id_zero_excluded(self, client):
+        """A series with tvdb_id of 0 is falsy and should not appear in the result set."""
+        series = [{"id": {"tvdb": 0}}, {"id": {"tvdb": 123}}]
+        with patch.object(client, "_request", return_value=_mock_response(series)):
+            ids = client.get_existing_tvdb_ids()
+        assert ids == {123}
+        assert 0 not in ids
+
+    def test_invalid_json_response_propagates(self, client):
+        """If the API returns non-JSON, the ValueError from .json() should propagate."""
+        bad_resp = MagicMock(spec=requests.Response)
+        bad_resp.json.side_effect = ValueError("No JSON object could be decoded")
+        bad_resp.status_code = 200
+        bad_resp.raise_for_status.return_value = None
+        with (
+            patch.object(client, "_request", return_value=bad_resp),
+            pytest.raises(ValueError),
+        ):
+            client.get_existing_tvdb_ids()
+
 
 class TestAddShow:
     def test_adds_show_successfully(self, client):
@@ -188,6 +208,20 @@ class TestResolveQuality:
 
     def test_duplicate_names_deduplicated(self):
         assert resolve_quality(["hdtv", "hdtv"]) == [8]
+
+    def test_unknown_in_list_raises(self):
+        with pytest.raises(ValueError, match="Unknown Medusa quality 'bogus'"):
+            resolve_quality(["hdtv", "bogus"])
+
+    def test_empty_string_raises(self):
+        with pytest.raises(ValueError, match="Unknown Medusa quality ''"):
+            resolve_quality("")
+
+    def test_whitespace_stripped(self):
+        assert resolve_quality("  hdtv  ") == [8]
+
+    def test_whitespace_stripped_in_list(self):
+        assert resolve_quality(["  hdtv  ", " hdbluray "]) == [8, 256]
 
 
 class TestRequest:
