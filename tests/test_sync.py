@@ -291,8 +291,13 @@ class TestMedusaAddOptionsFromSource:
 class TestLogSummary:
     def test_no_dry_run_prefix(self, caplog):
         result = SyncResult(
-            added=2, skipped=1, failed=0, duration_seconds=1.5,
-            per_source={"trending": 3}, unique_shows=5, already_in_medusa=2,
+            added=2,
+            skipped=1,
+            failed=0,
+            duration_seconds=1.5,
+            per_source={"trending": 3},
+            unique_shows=5,
+            already_in_medusa=2,
         )
         with caplog.at_level(logging.INFO, logger="app.sync"):
             _log_summary(result, dry_run=False)
@@ -306,9 +311,7 @@ class TestLogSummary:
         assert "[DRY RUN] Sync complete" in caplog.text
 
     def test_per_source_summary_formatted(self, caplog):
-        result = SyncResult(
-            per_source={"trending": 5, "popular": 3}, duration_seconds=1.0
-        )
+        result = SyncResult(per_source={"trending": 5, "popular": 3}, duration_seconds=1.0)
         with caplog.at_level(logging.INFO, logger="app.sync"):
             _log_summary(result, dry_run=False)
         assert "trending=5" in caplog.text
@@ -322,8 +325,13 @@ class TestLogSummary:
 
     def test_all_metrics_present_in_log(self, caplog):
         result = SyncResult(
-            added=4, skipped=2, failed=1, unique_shows=10,
-            already_in_medusa=3, duration_seconds=2.25, per_source={"watchlist": 7},
+            added=4,
+            skipped=2,
+            failed=1,
+            unique_shows=10,
+            already_in_medusa=3,
+            duration_seconds=2.25,
+            per_source={"watchlist": 7},
         )
         with caplog.at_level(logging.INFO, logger="app.sync"):
             _log_summary(result, dry_run=False)
