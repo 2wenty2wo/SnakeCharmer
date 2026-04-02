@@ -256,6 +256,53 @@ When `health.enabled` is `true`, an HTTP server runs on `health.port` (default 8
 
 Response includes `uptime_seconds` and `last_sync` details (timestamp, duration, show counts).
 
+Example response after a successful sync:
+
+```json
+{
+  "status": "ok",
+  "uptime_seconds": 3600.0,
+  "last_sync": {
+    "timestamp": "2025-01-15T12:00:00Z",
+    "duration_seconds": 4.2,
+    "added": 3,
+    "skipped": 0,
+    "failed": 0,
+    "unique_shows": 25,
+    "already_in_medusa": 22
+  }
+}
+```
+
+### Homepage Integration
+
+The `/health` endpoint is compatible with [Homepage](https://gethomepage.dev)'s [Custom API widget](https://gethomepage.dev/widgets/services/customapi/). Add SnakeCharmer to your `services.yaml`:
+
+```yaml
+- SnakeCharmer:
+    icon: mdi-snake
+    href: http://snakecharmer:8089/          # link to web UI (optional)
+    widget:
+      type: customapi
+      url: http://snakecharmer:8089/health   # or :8095 for standalone health
+      refreshInterval: 30000                 # 30 seconds
+      mappings:
+        - field: status
+          label: Status
+          format: text
+        - field: last_sync.added
+          label: Added
+          format: number
+        - field: last_sync.unique_shows
+          label: Tracked
+          format: number
+        - field: last_sync.already_in_medusa
+          label: In Library
+          format: number
+```
+
+Use port **8089** when the web UI is enabled (`--webui`), or port **8095** for the standalone health server (`health.enabled: true`). You can map any field from the JSON response above using dot notation (e.g., `last_sync.failed`, `last_sync.skipped`, `uptime_seconds`).
+
 ---
 
 ## Web UI

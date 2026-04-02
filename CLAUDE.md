@@ -111,6 +111,8 @@ When `health.enabled` is true, an HTTP server runs on `health.port` (default 809
 
 When the web UI is enabled, the standalone health server is not started — the web UI serves `/health` directly via its FastAPI router.
 
+The `/health` JSON response is compatible with Homepage (gethomepage.dev) Custom API widgets. See the README "Homepage Integration" section for `services.yaml` configuration examples.
+
 ### Notifications (`app/notify.py`)
 
 Apprise-based notification system supporting 100+ services (Pushover, Discord, Telegram, ntfy, Home Assistant, etc.). Configured via the `notify` section in YAML config.
