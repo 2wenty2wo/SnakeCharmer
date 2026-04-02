@@ -359,18 +359,6 @@ snakecharmer/
 
 ---
 
-## Roadmap
-
-- [x] Multiple Trakt lists
-- [x] Per-source Medusa quality presets
-- [ ] Show removal (sync down)
-- [ ] Tag / category support
-- [ ] Overseerr integration
-- [x] Web UI
-- [x] Notifications
-
----
-
 ## Support
 
 SnakeCharmer is free and open source. If you find it useful, consider supporting development:
