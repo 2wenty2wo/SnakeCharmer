@@ -8,7 +8,6 @@
   <a href="https://github.com/2wenty2wo/SnakeCharmer"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+" /></a>
   <a href="https://github.com/2wenty2wo/SnakeCharmer/blob/main/Dockerfile"><img src="https://img.shields.io/badge/docker-supported-blue?logo=docker&logoColor=white" alt="Docker" /></a>
   <a href="https://github.com/2wenty2wo/SnakeCharmer"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" /></a>
-  <a href="https://github.com/2wenty2wo/SnakeCharmer"><img src="https://img.shields.io/badge/version-0.1.0-informational" alt="Version 0.1.0" /></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff" /></a>
   <a href="https://github.com/sponsors/2wenty2wo"><img src="https://img.shields.io/badge/sponsor-♥-ea4aaa?logo=github" alt="Sponsor" /></a>
 </p>
