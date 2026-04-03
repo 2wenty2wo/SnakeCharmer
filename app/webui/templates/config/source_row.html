@@ -1,5 +1,15 @@
-{% set i = loop.index0 if loop is defined else index %}
-<fieldset class="source-row" id="source-{{ i }}">
+{% set i = index %}
+<div class="source-row" id="source-{{ i }}">
+    <div class="source-header">
+        <span class="source-number">Source {{ i + 1 }}</span>
+        <button type="button" class="outline btn-remove"
+                hx-delete="/config/trakt/sources/{{ i }}"
+                hx-target="#source-{{ i }}"
+                hx-swap="outerHTML"
+                hx-confirm="Remove this source?">
+            Remove
+        </button>
+    </div>
     <div class="grid">
         <label>
             Type
@@ -42,14 +52,7 @@
             <small>Comma-separated keywords</small>
         </label>
     </div>
-    <button type="button" class="outline secondary"
-            hx-delete="/config/trakt/sources/{{ i }}"
-            hx-target="#source-{{ i }}"
-            hx-swap="outerHTML"
-            hx-confirm="Remove this source?">
-        Remove
-    </button>
-</fieldset>
+</div>
 <script>
 function toggleSourceFields(select, index) {
     var fields = document.getElementById('source_' + index + '_user_list_fields');

@@ -1,67 +1,146 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - SnakeCharmer{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <p class="page-description">Overview of your SnakeCharmer configuration and sync status.</p>
+</div>
 
 <div class="grid">
     <article>
-        <header>Trakt</header>
-        <p><strong>Username:</strong> {{ config.trakt.username or "Not set" }}</p>
-        <p><strong>Sources:</strong> {{ config.trakt.sources | length }}</p>
-        <ul>
+        <header><span class="card-icon">&#127916;</span> Trakt</header>
+        <div class="info-row">
+            <span class="info-label">Username</span>
+            <span class="info-value">{{ config.trakt.username or "Not set" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Sources</span>
+            <span class="info-value">{{ config.trakt.sources | length }}</span>
+        </div>
+        {% if config.trakt.sources %}
+        <ul class="source-list">
             {% for source in config.trakt.sources %}
             <li>{{ source.label }}</li>
             {% endfor %}
         </ul>
-        <p><strong>Limit:</strong> {{ config.trakt.limit }}</p>
+        {% endif %}
+        <div class="info-row">
+            <span class="info-label">Limit</span>
+            <span class="info-value">{{ config.trakt.limit }}</span>
+        </div>
         <footer><a href="/config/trakt" role="button" class="outline">Edit</a></footer>
     </article>
 
     <article>
-        <header>Medusa</header>
-        <p><strong>URL:</strong> {{ config.medusa.url or "Not set" }}</p>
-        <p><strong>API Key:</strong> {{ "***" ~ config.medusa.api_key[-4:] if config.medusa.api_key else "Not set" }}</p>
+        <header><span class="card-icon">&#128225;</span> Medusa</header>
+        <div class="info-row">
+            <span class="info-label">URL</span>
+            <span class="info-value">{{ config.medusa.url or "Not set" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">API Key</span>
+            <span class="info-value">{{ "***" ~ config.medusa.api_key[-4:] if config.medusa.api_key else "Not set" }}</span>
+        </div>
         <footer><a href="/config/medusa" role="button" class="outline">Edit</a></footer>
     </article>
 </div>
 
 <div class="grid">
     <article>
-        <header>Sync</header>
-        <p><strong>Dry Run:</strong> {{ "Yes" if config.sync.dry_run else "No" }}</p>
-        <p><strong>Interval:</strong> {{ config.sync.interval }}s{{ " (run once)" if config.sync.interval == 0 else "" }}</p>
-        <p><strong>Log Format:</strong> {{ config.sync.log_format }}</p>
+        <header><span class="card-icon">&#128260;</span> Sync</header>
+        <div class="info-row">
+            <span class="info-label">Dry Run</span>
+            <span class="info-value">
+                <span class="config-badge{{ '' if config.sync.dry_run else ' off' }}">{{ "On" if config.sync.dry_run else "Off" }}</span>
+            </span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Interval</span>
+            <span class="info-value">{{ config.sync.interval }}s{{ " (run once)" if config.sync.interval == 0 else "" }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Log Format</span>
+            <span class="info-value">{{ config.sync.log_format }}</span>
+        </div>
         <footer><a href="/config/sync" role="button" class="outline">Edit</a></footer>
     </article>
 
     <article>
-        <header>Health</header>
-        <p><strong>Enabled:</strong> {{ "Yes" if config.health.enabled else "No" }}</p>
-        <p><strong>Port:</strong> {{ config.health.port }}</p>
+        <header><span class="card-icon">&#128154;</span> Health</header>
+        <div class="info-row">
+            <span class="info-label">Enabled</span>
+            <span class="info-value">
+                <span class="config-badge{{ '' if config.health.enabled else ' off' }}">{{ "On" if config.health.enabled else "Off" }}</span>
+            </span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Port</span>
+            <span class="info-value">{{ config.health.port }}</span>
+        </div>
         {% if health %}
-        <p><strong>Status:</strong>
-            <mark>{{ health.status }}</mark>
-        </p>
-        <p><strong>Uptime:</strong> {{ health.uptime_seconds | int }}s</p>
+        <div class="info-row">
+            <span class="info-label">Status</span>
+            <span class="info-value">
+                <span class="status-badge status-{{ health.status }}">{{ health.status }}</span>
+            </span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Uptime</span>
+            <span class="info-value">{{ health.uptime_seconds | int }}s</span>
+        </div>
         {% endif %}
         <footer><a href="/config/health" role="button" class="outline">Edit</a></footer>
     </article>
 </div>
 
-{% if health and health.last_sync %}
-<article>
-    <header>Last Sync</header>
-    <div class="grid">
-        <div>
-            <p><strong>Timestamp:</strong> {{ health.last_sync.timestamp }}</p>
-            <p><strong>Duration:</strong> {{ "%.1f" | format(health.last_sync.duration_seconds) }}s</p>
+<div class="grid">
+    <article>
+        <header><span class="card-icon">&#128276;</span> Notifications</header>
+        <div class="info-row">
+            <span class="info-label">Enabled</span>
+            <span class="info-value">
+                <span class="config-badge{{ '' if config.notify.enabled else ' off' }}">{{ "On" if config.notify.enabled else "Off" }}</span>
+            </span>
         </div>
-        <div>
-            <p><strong>Added:</strong> {{ health.last_sync.added }}</p>
-            <p><strong>Skipped:</strong> {{ health.last_sync.skipped }}</p>
-            <p><strong>Failed:</strong> {{ health.last_sync.failed }}</p>
+        <div class="info-row">
+            <span class="info-label">URLs</span>
+            <span class="info-value">{{ config.notify.urls | length }} configured</span>
         </div>
-    </div>
-</article>
-{% endif %}
+        <div class="info-row">
+            <span class="info-label">On Success</span>
+            <span class="info-value">
+                <span class="config-badge{{ '' if config.notify.on_success else ' off' }}">{{ "On" if config.notify.on_success else "Off" }}</span>
+            </span>
+        </div>
+        <footer><a href="/config/notify" role="button" class="outline">Edit</a></footer>
+    </article>
+
+    {% if health and health.last_sync %}
+    <article>
+        <header><span class="card-icon">&#128202;</span> Last Sync</header>
+        <div class="info-row">
+            <span class="info-label">Timestamp</span>
+            <span class="info-value">{{ health.last_sync.timestamp }}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Duration</span>
+            <span class="info-value">{{ "%.1f" | format(health.last_sync.duration_seconds) }}s</span>
+        </div>
+        <div class="sync-metrics">
+            <div class="metric">
+                <span class="metric-value added">{{ health.last_sync.added }}</span>
+                <span class="metric-label">Added</span>
+            </div>
+            <div class="metric">
+                <span class="metric-value skipped">{{ health.last_sync.skipped }}</span>
+                <span class="metric-label">Skipped</span>
+            </div>
+            <div class="metric">
+                <span class="metric-value failed">{{ health.last_sync.failed }}</span>
+                <span class="metric-label">Failed</span>
+            </div>
+        </div>
+    </article>
+    {% endif %}
+</div>
 {% endblock %}
