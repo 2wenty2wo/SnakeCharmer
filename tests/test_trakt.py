@@ -65,6 +65,17 @@ class TestParseShow:
         assert show.title == "Unknown"
         assert show.tvdb_id == 99999
 
+    def test_tvdb_id_zero_treated_as_missing(self, client):
+        data = {"title": "Zero ID Show", "ids": {"tvdb": 0}}
+        assert client._parse_show(data) is None
+
+    def test_unicode_title_parsed_correctly(self, client):
+        data = {"title": "élite", "ids": {"tvdb": 12345}}
+        show = client._parse_show(data)
+        assert show is not None
+        assert show.title == "élite"
+        assert show.tvdb_id == 12345
+
 
 class TestGetShows:
     def test_normalize_source_alias(self, client):
@@ -220,6 +231,32 @@ class TestGetShows:
     def test_get_shows_unsupported_source_type_raises(self, client):
         with pytest.raises(ValueError, match="Unsupported Trakt source type"):
             client.get_shows(TraktSource(type="unknown"))
+
+    def test_fetch_public_missing_pagination_header_fetches_one_page(self, client):
+        """When X-Pagination-Page-Count is absent the client treats page-count as 1."""
+        resp = MagicMock(spec=requests.Response)
+        resp.json.return_value = [{"show": {"title": "Show A", "ids": {"tvdb": 1}}}]
+        resp.status_code = 200
+        resp.headers = {}  # no pagination header
+        resp.raise_for_status.return_value = None
+        with patch.object(client, "_request", return_value=resp) as mock_request:
+            shows = client._fetch_public("/shows/trending", "trending", nested_key="show")
+        assert len(shows) == 1
+        mock_request.assert_called_once()
+
+    def test_fetch_user_list_missing_pagination_header_fetches_one_page(self, client):
+        """When X-Pagination-Page-Count is absent the user-list fetcher treats page-count as 1."""
+        resp = MagicMock(spec=requests.Response)
+        resp.json.return_value = [{"show": {"title": "Show A", "ids": {"tvdb": 1}}}]
+        resp.status_code = 200
+        resp.headers = {}
+        resp.raise_for_status.return_value = None
+        with patch.object(client, "_request", return_value=resp) as mock_request:
+            shows = client._fetch_user_list(
+                "/users/test/list/items/shows", "list", nested_key="show"
+            )
+        assert len(shows) == 1
+        mock_request.assert_called_once()
 
 
 class TestAuth:
