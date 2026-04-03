@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Health Config - SnakeCharmer{% endblock %}
 {% block content %}
-<h1>Health Configuration</h1>
+<div class="page-header">
+    <h1>Health Configuration</h1>
+    <p class="page-description">Configure the HTTP health endpoint for Docker and monitoring tools.</p>
+</div>
 
 <form hx-post="/config/health" hx-target="#result-banner" hx-swap="innerHTML">
     <label>

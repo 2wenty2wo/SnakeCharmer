@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Trakt Config - SnakeCharmer{% endblock %}
 {% block content %}
-<h1>Trakt Configuration</h1>
+<div class="page-header">
+    <h1>Trakt Configuration</h1>
+    <p class="page-description">Configure your Trakt API credentials and show sources.</p>
+</div>
 
 <form hx-post="/config/trakt" hx-target="#result-banner" hx-swap="innerHTML">
     <fieldset>
@@ -29,6 +32,7 @@
         <legend>Sources</legend>
         <div id="sources-list">
             {% for source in config.trakt.sources %}
+            {% set index = loop.index0 %}
             {% include "config/source_row.html" with context %}
             {% endfor %}
         </div>
@@ -36,7 +40,7 @@
                 hx-post="/config/trakt/sources/add"
                 hx-target="#sources-list"
                 hx-swap="beforeend"
-                class="outline secondary">
+                class="outline secondary btn-add-source">
             + Add Source
         </button>
     </fieldset>

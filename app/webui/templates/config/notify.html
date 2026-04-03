@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Notify Config - SnakeCharmer{% endblock %}
 {% block content %}
-<h1>Notification Configuration</h1>
+<div class="page-header">
+    <h1>Notification Configuration</h1>
+    <p class="page-description">Set up notifications for sync events via Pushover, Discord, Telegram, and more.</p>
+</div>
 
 <form hx-post="/config/notify" hx-target="#result-banner" hx-swap="innerHTML">
     <label>

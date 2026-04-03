@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Sync Config - SnakeCharmer{% endblock %}
 {% block content %}
-<h1>Sync Configuration</h1>
+<div class="page-header">
+    <h1>Sync Configuration</h1>
+    <p class="page-description">Control sync behavior, scheduling, and retry logic.</p>
+</div>
 
 <form hx-post="/config/sync" hx-target="#result-banner" hx-swap="innerHTML">
     <label>
