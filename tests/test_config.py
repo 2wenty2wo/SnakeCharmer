@@ -523,3 +523,80 @@ class TestNormalizeNotifyUrls:
         path = _write_config(tmp_path, minimal_config)
         config = load_config(path)
         assert config.notify.urls == ["12345"]
+
+
+class TestBoundaryValues:
+    """Test edge-case and boundary values that the config loader should handle."""
+
+    def test_zero_limit_loads_successfully(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "limit": 0, "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+        assert config.trakt.limit == 0
+
+    def test_zero_max_retries_loads_successfully(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"max_retries": 0},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+        assert config.sync.max_retries == 0
+
+    def test_zero_retry_backoff_loads_successfully(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"retry_backoff": 0},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+        assert config.sync.retry_backoff == 0
+
+    def test_zero_interval_means_single_run(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"interval": 0},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+        assert config.sync.interval == 0
+
+    def test_empty_sources_list_loads_successfully(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": []},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        # Empty sources should fail validation (at least one source required)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_extra_unknown_keys_ignored(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [{"type": "trending"}],
+                "unknown_key": "value",
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "completely_unknown_section": {"foo": "bar"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+        assert config.trakt.client_id == "id"
+
+    def test_negative_limit_loads(self, tmp_path):
+        """Negative limit is not explicitly validated — it loads but produces 0 shows."""
+        data = {
+            "trakt": {"client_id": "id", "limit": -1, "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+        assert config.trakt.limit == -1

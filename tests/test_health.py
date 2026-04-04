@@ -171,3 +171,108 @@ class TestHealthServer:
             conn.close()
         finally:
             server.shutdown()
+
+
+class TestHealthSnapshotSchema:
+    """Validate the full JSON schema of health endpoint responses."""
+
+    def test_unknown_snapshot_schema(self, sync_status):
+        snap = sync_status.snapshot()
+        assert set(snap.keys()) == {"status", "uptime_seconds"}
+        assert snap["status"] == "unknown"
+        assert isinstance(snap["uptime_seconds"], float)
+        assert snap["uptime_seconds"] >= 0
+
+    def test_ok_snapshot_has_all_last_sync_keys(self, sync_status):
+        result = SyncResult(
+            added=2,
+            skipped=1,
+            failed=0,
+            unique_shows=8,
+            already_in_medusa=5,
+            duration_seconds=3.14,
+            success=True,
+        )
+        sync_status.update(result)
+        snap = sync_status.snapshot()
+
+        assert set(snap.keys()) == {"status", "uptime_seconds", "last_sync"}
+        assert snap["status"] == "ok"
+        last_sync = snap["last_sync"]
+        expected_keys = {
+            "timestamp",
+            "duration_seconds",
+            "added",
+            "skipped",
+            "failed",
+            "unique_shows",
+            "already_in_medusa",
+        }
+        assert set(last_sync.keys()) == expected_keys
+
+        # Validate types
+        assert isinstance(last_sync["timestamp"], str)
+        assert isinstance(last_sync["duration_seconds"], float)
+        for int_key in ("added", "skipped", "failed", "unique_shows", "already_in_medusa"):
+            assert isinstance(last_sync[int_key], int)
+
+        # Validate timestamp format (ISO 8601)
+        assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", last_sync["timestamp"])
+
+    def test_degraded_snapshot_schema(self, sync_status):
+        result = SyncResult(added=0, failed=3, success=False, duration_seconds=1.0)
+        sync_status.update(result)
+        snap = sync_status.snapshot()
+
+        assert snap["status"] == "degraded"
+        assert "last_sync" in snap
+        assert snap["last_sync"]["failed"] == 3
+
+    def test_uptime_is_positive_number(self, sync_status):
+        snap = sync_status.snapshot()
+        assert snap["uptime_seconds"] >= 0
+        assert isinstance(snap["uptime_seconds"], float)
+
+    def test_concurrent_reads_produce_consistent_snapshots(self, sync_status):
+        """Verify that concurrent get/update never produces torn reads
+        (e.g., status=ok but last_sync from a failed run)."""
+        errors = []
+
+        def writer(success: bool) -> None:
+            try:
+                for _ in range(200):
+                    sync_status.update(
+                        SyncResult(
+                            added=1 if success else 0,
+                            failed=0 if success else 5,
+                            success=success,
+                            duration_seconds=0.01,
+                        )
+                    )
+            except Exception as exc:
+                errors.append(exc)
+
+        def reader() -> None:
+            try:
+                for _ in range(200):
+                    snap = sync_status.snapshot()
+                    if "last_sync" in snap:
+                        if snap["status"] == "ok":
+                            assert snap["last_sync"]["failed"] == 0
+                        elif snap["status"] == "degraded":
+                            assert snap["last_sync"]["failed"] == 5
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=writer, args=(True,)),
+            threading.Thread(target=writer, args=(False,)),
+            threading.Thread(target=reader),
+            threading.Thread(target=reader),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors

@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 import requests
@@ -583,3 +583,103 @@ class TestRetry:
             pytest.raises(requests.HTTPError),
         ):
             client._request("GET", "/test")
+
+    def test_backoff_sleep_durations_on_5xx(self, trakt_config, tmp_path):
+        """Verify that sleep durations follow retry_backoff ** (attempt + 1) formula."""
+        client = self._make_client(trakt_config, tmp_path, max_retries=3, retry_backoff=2.0)
+        error_resp = _mock_response({}, status_code=500)
+        success = _mock_response({"ok": True})
+
+        with (
+            patch.object(
+                client.session,
+                "request",
+                side_effect=[error_resp, error_resp, error_resp, success],
+            ),
+            patch("app.trakt.time.sleep") as mock_sleep,
+        ):
+            client._request("GET", "/test")
+
+        assert mock_sleep.call_args_list == [call(2.0), call(4.0), call(8.0)]
+
+    def test_backoff_sleep_durations_on_connection_error(self, trakt_config, tmp_path):
+        """Verify that connection error retries use correct backoff delays."""
+        client = self._make_client(trakt_config, tmp_path, max_retries=2, retry_backoff=3.0)
+        success = _mock_response({"ok": True})
+
+        with (
+            patch.object(
+                client.session,
+                "request",
+                side_effect=[
+                    requests.ConnectionError("refused"),
+                    requests.ConnectionError("refused"),
+                    success,
+                ],
+            ),
+            patch("app.trakt.time.sleep") as mock_sleep,
+        ):
+            client._request("GET", "/test")
+
+        assert mock_sleep.call_args_list == [call(3.0), call(9.0)]
+
+    def test_rate_limit_retry_after_header_respected(self, trakt_config, tmp_path):
+        """Verify that the Retry-After header value is used as the sleep duration."""
+        client = self._make_client(trakt_config, tmp_path)
+        rate_limited = _mock_response([], status_code=429, headers={"Retry-After": "42"})
+        success = _mock_response([])
+
+        with (
+            patch.object(client.session, "request", side_effect=[rate_limited, success]),
+            patch("app.trakt.time.sleep") as mock_sleep,
+        ):
+            client._request("GET", "/test")
+
+        mock_sleep.assert_called_once_with(42)
+
+
+class TestTokenEdgeCases:
+    def test_load_token_missing_keys_still_returns_token(self, trakt_config, tmp_path):
+        """Token file with valid JSON but missing created_at/expires_in defaults to 0,
+        which means token is always expired."""
+        client = TraktClient(trakt_config, config_dir=str(tmp_path))
+        token_file = tmp_path / "trakt_token.json"
+        token_file.write_text('{"access_token": "abc"}')
+        client.token_path = str(token_file)
+
+        with (
+            patch("app.trakt.time.time", return_value=100),
+            patch.object(client, "_refresh_token", return_value=None) as mock_refresh,
+        ):
+            result = client._load_token()
+
+        # Token with missing created_at=0, expires_in=0 is expired, so refresh is called
+        mock_refresh.assert_called_once()
+        assert result is None  # refresh returned None
+
+    def test_load_token_refresh_fails_falls_through(self, trakt_config, tmp_path):
+        """When refresh fails (returns None), _load_token returns None and
+        _ensure_auth falls through to _authenticate."""
+        client = TraktClient(trakt_config, config_dir=str(tmp_path))
+        token_file = tmp_path / "trakt_token.json"
+        token_file.write_text(
+            '{"access_token":"old","refresh_token":"r","created_at":1000,"expires_in":100}'
+        )
+        client.token_path = str(token_file)
+
+        with (
+            patch("app.trakt.time.time", return_value=5000),
+            patch.object(client, "_refresh_token", return_value=None),
+            patch.object(client, "_authenticate") as mock_auth,
+        ):
+            client._ensure_auth()
+
+        mock_auth.assert_called_once()
+
+    def test_save_token_permission_error_propagates(self, trakt_config, tmp_path):
+        """_save_token raises OSError if the token directory is not writable."""
+        client = TraktClient(trakt_config, config_dir=str(tmp_path))
+        client.token_path = "/nonexistent/directory/token.json"
+
+        with pytest.raises(OSError):
+            client._save_token({"access_token": "abc"})
