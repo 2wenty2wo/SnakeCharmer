@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 import requests
@@ -344,3 +344,75 @@ class TestRetry:
 
         mock_log_error.assert_called_once()
         assert "Cannot reach Medusa" in mock_log_error.call_args[0][0]
+
+    def test_backoff_sleep_durations_on_5xx(self, medusa_config):
+        """Verify that sleep durations follow retry_backoff ** (attempt + 1) formula."""
+        client = MedusaClient(medusa_config, max_retries=3, retry_backoff=2.0)
+        error_resp = _mock_response({}, status_code=500)
+        success = _mock_response({"ok": True})
+
+        with (
+            patch.object(
+                client.session,
+                "request",
+                side_effect=[error_resp, error_resp, error_resp, success],
+            ),
+            patch("app.medusa.time.sleep") as mock_sleep,
+        ):
+            client._request("GET", "/series")
+
+        assert mock_sleep.call_args_list == [call(2.0), call(4.0), call(8.0)]
+
+    def test_backoff_sleep_durations_on_connection_error(self, medusa_config):
+        """Verify that connection error retries use correct backoff delays."""
+        client = MedusaClient(medusa_config, max_retries=2, retry_backoff=3.0)
+        success = _mock_response([])
+
+        with (
+            patch.object(
+                client.session,
+                "request",
+                side_effect=[
+                    requests.ConnectionError("refused"),
+                    requests.ConnectionError("refused"),
+                    success,
+                ],
+            ),
+            patch("app.medusa.time.sleep") as mock_sleep,
+        ):
+            client._request("GET", "/series")
+
+        assert mock_sleep.call_args_list == [call(3.0), call(9.0)]
+
+
+class TestResolveQualityEdgeCases:
+    def test_preset_combined_with_individual(self):
+        """Combining a preset (hd) with an individual value (sddvd) merges bitmasks."""
+        result = resolve_quality(["hd", "sddvd"])
+        # hd = [8, 16, 32, 64, 128, 256, 512], sddvd = [4]
+        assert 4 in result  # sddvd
+        assert 8 in result  # hdtv (from hd preset)
+
+    def test_bitmask_to_quality_list_directly(self):
+        """Test _bitmask_to_quality_list decomposition independently."""
+        from app.medusa import _bitmask_to_quality_list
+
+        # 8 + 64 = 72 (hdtv + hdwebdl)
+        result = _bitmask_to_quality_list(72)
+        assert result == [8, 64]
+
+    def test_bitmask_to_quality_list_zero_excluded(self):
+        """Zero ('na') should not appear in decomposed list."""
+        from app.medusa import _bitmask_to_quality_list
+
+        result = _bitmask_to_quality_list(65535)
+        assert 0 not in result
+
+    def test_add_show_with_invalid_quality_raises_value_error(self, medusa_config):
+        """ValueError from resolve_quality should propagate through add_show."""
+        client = MedusaClient(medusa_config)
+        with (
+            patch.object(client, "_request", return_value=_mock_response({})),
+            pytest.raises(ValueError, match="Unknown Medusa quality"),
+        ):
+            client.add_show(123, "Test", add_options={"quality": "nonexistent"})

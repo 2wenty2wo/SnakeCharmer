@@ -1,3 +1,4 @@
+import pytest
 import yaml
 from fastapi.testclient import TestClient
 
@@ -421,3 +422,149 @@ class TestHealthEndpoint:
         data = response.json()
         assert data["status"] == "unknown"
         assert "uptime_seconds" in data
+
+    def test_health_json_degraded_returns_503(self, tmp_path):
+        from app.health import SyncStatus
+        from app.sync import SyncResult
+
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(SyncResult(added=0, failed=3, success=False, duration_seconds=1.0))
+        app = create_app(holder, sync_status=sync_status)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        response = client.get("/health")
+        assert response.status_code == 503
+        assert response.json()["status"] == "degraded"
+
+
+class TestConfigHolderThreadSafety:
+    """Verify that ConfigHolder.get/update are safe under concurrent access."""
+
+    def test_concurrent_get_update_no_torn_reads(self, tmp_path):
+        import threading
+
+        config_a = _make_config(
+            trakt=TraktConfig(
+                client_id="config_a",
+                client_secret="secret_a",
+                username="user_a",
+                sources=[TraktSource(type="trending")],
+                limit=10,
+            ),
+        )
+        config_b = _make_config(
+            trakt=TraktConfig(
+                client_id="config_b",
+                client_secret="secret_b",
+                username="user_b",
+                sources=[TraktSource(type="popular")],
+                limit=20,
+            ),
+        )
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config_a, config_path)
+        holder = ConfigHolder(config=config_a, config_path=config_path)
+
+        errors = []
+
+        def writer(config) -> None:
+            try:
+                for _ in range(500):
+                    holder.update(config)
+            except Exception as exc:
+                errors.append(exc)
+
+        def reader() -> None:
+            try:
+                for _ in range(500):
+                    cfg = holder.get()
+                    # Values must be consistent — either config_a or config_b, never mixed
+                    cid = cfg.trakt.client_id
+                    if cid == "config_a":
+                        assert cfg.trakt.username == "user_a"
+                        assert cfg.trakt.limit == 10
+                    elif cid == "config_b":
+                        assert cfg.trakt.username == "user_b"
+                        assert cfg.trakt.limit == 20
+                    else:
+                        errors.append(AssertionError(f"Unexpected client_id: {cid}"))
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [
+            threading.Thread(target=writer, args=(config_a,)),
+            threading.Thread(target=writer, args=(config_b,)),
+            threading.Thread(target=reader),
+            threading.Thread(target=reader),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors
+
+
+class TestWebuiFormEdgeCases:
+    def test_save_sync_non_numeric_interval_raises(self, tmp_path):
+        """Non-numeric values in numeric fields cause an unhandled ValueError."""
+        client, _, _ = _create_client(tmp_path)
+        with pytest.raises(ValueError):
+            client.post(
+                "/config/sync",
+                data={
+                    "interval": "abc",
+                    "max_retries": "3",
+                    "retry_backoff": "2.0",
+                    "log_format": "text",
+                },
+            )
+
+    def test_save_health_non_numeric_port_raises(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with pytest.raises(ValueError):
+            client.post(
+                "/config/health",
+                data={"port": "not_a_port"},
+            )
+
+    def test_save_trakt_no_sources_returns_validation_error(self, tmp_path):
+        """Submitting a Trakt form with no sources should trigger validation."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                # no source_X_type fields
+            },
+        )
+        assert response.status_code == 200
+        assert "error" in response.text.lower()
+
+    def test_save_trakt_source_with_empty_quality_ignored(self, tmp_path):
+        """Empty quality/required_words strings should not produce medusa options."""
+        client, holder, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_quality": "",
+                "source_0_required_words": "",
+            },
+        )
+        assert response.status_code == 200
+        updated = holder.get()
+        assert updated.trakt.sources[0].medusa.quality is None
+        assert updated.trakt.sources[0].medusa.required_words == []

@@ -307,3 +307,70 @@ class TestSetupLogging:
         assert len(root.handlers) == 1
         assert isinstance(root.handlers[0].formatter, logging.Formatter)
         assert not isinstance(root.handlers[0].formatter, main.JsonFormatter)
+
+
+class TestMainIntegration:
+    """Lightweight integration tests that exercise real wiring with mocked HTTP."""
+
+    def test_single_run_wires_config_to_sync(self, tmp_path):
+        """Config is loaded from a real YAML file and passed through to run_sync."""
+        import yaml
+
+        config_file = tmp_path / "config.yaml"
+        config_data = {
+            "trakt": {
+                "client_id": "integration-cid",
+                "sources": [{"type": "trending"}],
+            },
+            "medusa": {
+                "url": "http://medusa-test:8081",
+                "api_key": "integration-key",
+            },
+        }
+        with open(config_file, "w") as f:
+            yaml.dump(config_data, f)
+
+        captured_config = {}
+
+        def fake_sync(config):
+            captured_config["trakt_cid"] = config.trakt.client_id
+            captured_config["medusa_url"] = config.medusa.url
+            captured_config["sources"] = [s.type for s in config.trakt.sources]
+            return MagicMock(success=True)
+
+        with (
+            patch("main.parse_args", return_value=_mock_args(config=str(config_file))),
+            patch("main.run_sync", side_effect=fake_sync),
+            patch("main.send_notification"),
+        ):
+            main.main()
+
+        assert captured_config["trakt_cid"] == "integration-cid"
+        assert captured_config["medusa_url"] == "http://medusa-test:8081"
+        assert captured_config["sources"] == ["trending"]
+
+    def test_log_format_from_config_file_used(self, tmp_path):
+        """Verify that log_format from config.yaml is used when --log-format is not passed."""
+        import yaml
+
+        config_file = tmp_path / "config.yaml"
+        config_data = {
+            "trakt": {
+                "client_id": "cid",
+                "sources": [{"type": "trending"}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"log_format": "json"},
+        }
+        with open(config_file, "w") as f:
+            yaml.dump(config_data, f)
+
+        with (
+            patch("main.parse_args", return_value=_mock_args(config=str(config_file))),
+            patch("main.run_sync", return_value=MagicMock(success=True)),
+            patch("main.send_notification"),
+        ):
+            main.main()
+
+        root = logging.getLogger()
+        assert any(isinstance(h.formatter, main.JsonFormatter) for h in root.handlers)

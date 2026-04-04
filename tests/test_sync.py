@@ -348,3 +348,130 @@ class TestLogSummary:
         with caplog.at_level(logging.INFO, logger="app.sync"):
             _log_summary(result, dry_run=False)
         assert "sources:  |" in caplog.text
+
+
+class TestDeduplicationWithManySources:
+    """Stress-test deduplication with 3+ sources and overlapping shows."""
+
+    def test_three_sources_first_wins(self, config, mock_trakt, mock_medusa):
+        """With 3 sources each contributing the same show, first source's options are used."""
+        config.trakt.sources = [
+            TraktSource(type="trending"),
+            TraktSource(type="popular"),
+            TraktSource(type="watched"),
+        ]
+        config.trakt.sources[0].medusa.quality = "hd720p"
+        config.trakt.sources[1].medusa.quality = "hd1080p"
+        config.trakt.sources[2].medusa.quality = "sd"
+
+        # Same show in all three sources
+        mock_trakt.get_shows.side_effect = [
+            [TraktShow(title="Show A (trending)", tvdb_id=100)],
+            [TraktShow(title="Show A (popular)", tvdb_id=100)],
+            [TraktShow(title="Show A (watched)", tvdb_id=100)],
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        mock_medusa.add_show.return_value = True
+
+        result = run_sync(config)
+
+        # Only added once, with first source's options
+        mock_medusa.add_show.assert_called_once_with(
+            100,
+            "Show A (trending)",
+            add_options={"quality": "hd720p"},
+        )
+        assert result.added == 1
+        assert result.unique_shows == 1
+        assert result.total_fetched == 3
+
+    def test_three_sources_different_shows_all_added(self, config, mock_trakt, mock_medusa):
+        config.trakt.sources = [
+            TraktSource(type="trending"),
+            TraktSource(type="popular"),
+            TraktSource(type="watched"),
+        ]
+        mock_trakt.get_shows.side_effect = [
+            [TraktShow(title="Show A", tvdb_id=1)],
+            [TraktShow(title="Show B", tvdb_id=2)],
+            [TraktShow(title="Show C", tvdb_id=3)],
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        mock_medusa.add_show.return_value = True
+
+        result = run_sync(config)
+
+        assert mock_medusa.add_show.call_count == 3
+        assert result.added == 3
+        assert result.unique_shows == 3
+
+    def test_partial_overlap_across_three_sources(self, config, mock_trakt, mock_medusa):
+        """Shows overlap partially: A in src 1+2, B in src 2+3, C only in src 3."""
+        config.trakt.sources = [
+            TraktSource(type="trending"),
+            TraktSource(type="popular"),
+            TraktSource(type="watched"),
+        ]
+        config.trakt.sources[0].medusa.quality = "hd"
+        config.trakt.sources[1].medusa.quality = "sd"
+        config.trakt.sources[2].medusa.required_words = ["internal"]
+
+        mock_trakt.get_shows.side_effect = [
+            [TraktShow(title="Show A", tvdb_id=10)],
+            [TraktShow(title="Show A dupe", tvdb_id=10), TraktShow(title="Show B", tvdb_id=20)],
+            [TraktShow(title="Show B dupe", tvdb_id=20), TraktShow(title="Show C", tvdb_id=30)],
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        mock_medusa.add_show.return_value = True
+
+        result = run_sync(config)
+
+        assert result.unique_shows == 3
+        assert result.total_fetched == 5
+        assert mock_medusa.add_show.call_count == 3
+
+        # Show A: first seen in trending → quality=hd
+        mock_medusa.add_show.assert_any_call(10, "Show A", add_options={"quality": "hd"})
+        # Show B: first seen in popular → quality=sd
+        mock_medusa.add_show.assert_any_call(20, "Show B", add_options={"quality": "sd"})
+        # Show C: first seen in watched → required_words=["internal"]
+        mock_medusa.add_show.assert_any_call(
+            30,
+            "Show C",
+            add_options={"required_words": ["internal"]},
+        )
+
+    def test_failed_source_excludes_all_shows(self, config, mock_trakt, mock_medusa):
+        """If any source fails, sync aborts — no partial results from earlier sources."""
+        config.trakt.sources = [
+            TraktSource(type="trending"),
+            TraktSource(type="popular"),
+            TraktSource(type="watched"),
+        ]
+        mock_trakt.get_shows.side_effect = [
+            [TraktShow(title="Show A", tvdb_id=1)],
+            [TraktShow(title="Show B", tvdb_id=2)],
+            Exception("API timeout on third source"),
+        ]
+
+        result = run_sync(config)
+
+        assert result.success is False
+        mock_medusa.get_existing_tvdb_ids.assert_not_called()
+        mock_medusa.add_show.assert_not_called()
+
+    def test_empty_sources_list_returns_success_with_no_shows(self, mock_trakt, mock_medusa):
+        """Config with empty sources list should succeed with 0 shows."""
+        config = AppConfig(
+            trakt=TraktConfig(client_id="id", sources=[]),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
+            sync=SyncConfig(dry_run=False, interval=0),
+        )
+
+        result = run_sync(config)
+
+        assert result.success is True
+        assert result.unique_shows == 0
+        assert result.total_fetched == 0
+        mock_trakt.get_shows.assert_not_called()
+        mock_medusa.get_existing_tvdb_ids.assert_not_called()
