@@ -71,7 +71,8 @@ app/webui/routes.py        HTMX-driven routes: dashboard, config sections (trakt
 app/webui/config_io.py     Config serialization: AppConfig ↔ dict ↔ YAML file, atomic writes, validation
 app/notify.py              Apprise-based notifications: sends alerts on sync success/failure to 100+ services
 app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, config section partials)
-app/webui/static/style.css CSS styles for the web UI
+app/webui/static/style.css Green Deck design system: custom CSS with design tokens, sidebar layout, DM Sans typography
+DESIGN.md                  Green Deck design system spec: colors, typography, components, spacing, elevation rules
 ```
 
 Data flow: `main.py` loads config, optionally starts the health server and/or web UI, then calls `run_sync()` which instantiates both API clients, fetches shows from Trakt as `TraktShow` dataclasses, gets existing TVDB IDs from Medusa, adds any missing shows, and returns a `SyncResult` with detailed metrics. After each sync cycle, `send_notification()` is called to send alerts via Apprise if configured. The health server exposes these metrics via HTTP.
@@ -126,10 +127,10 @@ Apprise-based notification system supporting 100+ services (Pushover, Discord, T
 
 ### Web UI (`app/webui/`)
 
-Optional browser-based config management built with FastAPI + Jinja2 + HTMX. Enabled via `--webui` CLI flag or `webui.enabled: true` in config.
+Optional browser-based config management built with FastAPI + Jinja2 + HTMX, styled with the Green Deck design system (`DESIGN.md`). Enabled via `--webui` CLI flag or `webui.enabled: true` in config. **All web UI changes must follow the Green Deck spec in `DESIGN.md`.**
 
 - Runs on `webui.port` (default 8089) in a daemon thread using uvicorn
-- **Dashboard** (`/`): shows current config summary and sync status
+- **Dashboard** (`/`): shows current config summary and sync status in a card grid
 - **Config sections** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`, `/config/notify`): edit and save each config section via HTMX form submissions
 - **Source management**: add/remove Trakt sources dynamically with per-source Medusa quality and required_words overrides
 - **Atomic saves**: config is written to a temp file then `os.replace()`'d to prevent corruption
@@ -140,6 +141,18 @@ Optional browser-based config management built with FastAPI + Jinja2 + HTMX. Ena
 Key classes:
 - `ConfigHolder` (`app/webui/__init__.py`): thread-safe mutable holder for the active `AppConfig`, shared between web UI and sync loop
 - `config_to_dict()` / `save_config()` / `load_config_dict()` (`app/webui/config_io.py`): round-trip serialization between `AppConfig` dataclasses and YAML files
+
+### Web UI Design (`DESIGN.md` — Green Deck)
+
+The web UI follows the Green Deck design system defined in `DESIGN.md`. This file is the authoritative spec for all visual styling. Key implementation details:
+
+- **CSS tokens**: `app/webui/static/style.css` uses `--gd-*` custom properties (`--gd-primary: #1DB954`, `--gd-bg: #121212`, `--gd-surface: #181818`, etc.) mapped directly from DESIGN.md color definitions
+- **Layout**: 240px fixed left sidebar (`#000000` background) with scrollable main content area (32px padding, max-width 1600px)
+- **Typography**: DM Sans (400/500/700/800) and JetBrains Mono (400) loaded from Google Fonts. Page titles 32px/700, body 14px/400, labels 11px/700 uppercase with 0.1em tracking
+- **Elevation**: Surface brightness communicates depth — no box-shadows. Levels: `#121212` (bg) → `#181818` (cards) → `#282828` (hover/elevated) → `#333333` (modals)
+- **Components**: Pill buttons (9999px radius, scale 1.04x on hover), borderless cards (8px radius, surface color only), custom inputs (#282828 bg, white focus border), custom checkboxes (#1DB954 fill when checked)
+- **Responsive**: Below 768px the sidebar collapses to a horizontal top nav
+- **No CSS framework**: Custom CSS only — no Pico, Bootstrap, or Tailwind. All styles derive from DESIGN.md tokens
 
 ## Dependencies
 
