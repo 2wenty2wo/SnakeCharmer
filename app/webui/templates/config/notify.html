@@ -7,31 +7,34 @@
 </div>
 
 <form hx-post="/config/notify" hx-target="#result-banner" hx-swap="innerHTML">
-    <label>
-        <input type="checkbox" name="enabled" {{ "checked" if config.notify.enabled }}>
-        Enabled
-        <small>Enable notifications after each sync cycle</small>
-    </label>
-    <label>
-        Apprise URLs
-        <textarea name="urls" rows="4" placeholder="pushover://user@token&#10;discord://webhook_id/webhook_token">{{ config.notify.urls | join('\n') }}</textarea>
-        <small>One Apprise URL per line. Supports 100+ services (Pushover, Discord, Telegram, ntfy, etc.)</small>
-    </label>
-    <label>
-        <input type="checkbox" name="on_success" {{ "checked" if config.notify.on_success }}>
-        Notify on success
-        <small>Send a notification after a successful sync</small>
-    </label>
-    <label>
-        <input type="checkbox" name="on_failure" {{ "checked" if config.notify.on_failure }}>
-        Notify on failure
-        <small>Send a notification after a failed sync</small>
-    </label>
-    <label>
-        <input type="checkbox" name="only_if_added" {{ "checked" if config.notify.only_if_added }}>
-        Only if shows added
-        <small>Suppress success notifications when no new shows were added</small>
-    </label>
+    <fieldset>
+        <legend>Settings</legend>
+        <label>
+            <input type="checkbox" name="enabled" {{ "checked" if config.notify.enabled }}>
+            Enabled
+            <small>Enable notifications after each sync cycle</small>
+        </label>
+        <label>
+            Apprise URLs
+            <textarea name="urls" rows="4" placeholder="pushover://user@token&#10;discord://webhook_id/webhook_token">{{ config.notify.urls | join('\n') }}</textarea>
+            <small>One Apprise URL per line. Supports 100+ services (Pushover, Discord, Telegram, ntfy, etc.)</small>
+        </label>
+        <label>
+            <input type="checkbox" name="on_success" {{ "checked" if config.notify.on_success }}>
+            Notify on success
+            <small>Send a notification after a successful sync</small>
+        </label>
+        <label>
+            <input type="checkbox" name="on_failure" {{ "checked" if config.notify.on_failure }}>
+            Notify on failure
+            <small>Send a notification after a failed sync</small>
+        </label>
+        <label>
+            <input type="checkbox" name="only_if_added" {{ "checked" if config.notify.only_if_added }}>
+            Only if shows added
+            <small>Suppress success notifications when no new shows were added</small>
+        </label>
+    </fieldset>
     <button type="submit">Save Notification Settings</button>
 </form>
 {% endblock %}

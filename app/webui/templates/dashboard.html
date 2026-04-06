@@ -6,9 +6,9 @@
     <p class="page-description">Overview of your SnakeCharmer configuration and sync status.</p>
 </div>
 
-<div class="grid">
-    <article>
-        <header><span class="card-icon">&#127916;</span> Trakt</header>
+<div class="card-grid">
+    <div class="card">
+        <div class="card-header"><span class="card-icon">&#127916;</span> Trakt</div>
         <div class="info-row">
             <span class="info-label">Username</span>
             <span class="info-value">{{ config.trakt.username or "Not set" }}</span>
@@ -28,11 +28,11 @@
             <span class="info-label">Limit</span>
             <span class="info-value">{{ config.trakt.limit }}</span>
         </div>
-        <footer><a href="/config/trakt" role="button" class="outline">Edit</a></footer>
-    </article>
+        <div class="card-footer"><a href="/config/trakt" class="btn-outline">Edit</a></div>
+    </div>
 
-    <article>
-        <header><span class="card-icon">&#128225;</span> Medusa</header>
+    <div class="card">
+        <div class="card-header"><span class="card-icon">&#128225;</span> Medusa</div>
         <div class="info-row">
             <span class="info-label">URL</span>
             <span class="info-value">{{ config.medusa.url or "Not set" }}</span>
@@ -41,13 +41,11 @@
             <span class="info-label">API Key</span>
             <span class="info-value">{{ "***" ~ config.medusa.api_key[-4:] if config.medusa.api_key else "Not set" }}</span>
         </div>
-        <footer><a href="/config/medusa" role="button" class="outline">Edit</a></footer>
-    </article>
-</div>
+        <div class="card-footer"><a href="/config/medusa" class="btn-outline">Edit</a></div>
+    </div>
 
-<div class="grid">
-    <article>
-        <header><span class="card-icon">&#128260;</span> Sync</header>
+    <div class="card">
+        <div class="card-header"><span class="card-icon">&#128260;</span> Sync</div>
         <div class="info-row">
             <span class="info-label">Dry Run</span>
             <span class="info-value">
@@ -62,11 +60,11 @@
             <span class="info-label">Log Format</span>
             <span class="info-value">{{ config.sync.log_format }}</span>
         </div>
-        <footer><a href="/config/sync" role="button" class="outline">Edit</a></footer>
-    </article>
+        <div class="card-footer"><a href="/config/sync" class="btn-outline">Edit</a></div>
+    </div>
 
-    <article>
-        <header><span class="card-icon">&#128154;</span> Health</header>
+    <div class="card">
+        <div class="card-header"><span class="card-icon">&#128154;</span> Health</div>
         <div class="info-row">
             <span class="info-label">Enabled</span>
             <span class="info-value">
@@ -89,13 +87,11 @@
             <span class="info-value">{{ health.uptime_seconds | int }}s</span>
         </div>
         {% endif %}
-        <footer><a href="/config/health" role="button" class="outline">Edit</a></footer>
-    </article>
-</div>
+        <div class="card-footer"><a href="/config/health" class="btn-outline">Edit</a></div>
+    </div>
 
-<div class="grid">
-    <article>
-        <header><span class="card-icon">&#128276;</span> Notifications</header>
+    <div class="card">
+        <div class="card-header"><span class="card-icon">&#128276;</span> Notifications</div>
         <div class="info-row">
             <span class="info-label">Enabled</span>
             <span class="info-value">
@@ -112,12 +108,12 @@
                 <span class="config-badge{{ '' if config.notify.on_success else ' off' }}">{{ "On" if config.notify.on_success else "Off" }}</span>
             </span>
         </div>
-        <footer><a href="/config/notify" role="button" class="outline">Edit</a></footer>
-    </article>
+        <div class="card-footer"><a href="/config/notify" class="btn-outline">Edit</a></div>
+    </div>
 
     {% if health and health.last_sync %}
-    <article>
-        <header><span class="card-icon">&#128202;</span> Last Sync</header>
+    <div class="card">
+        <div class="card-header"><span class="card-icon">&#128202;</span> Last Sync</div>
         <div class="info-row">
             <span class="info-label">Timestamp</span>
             <span class="info-value">{{ health.last_sync.timestamp }}</span>
@@ -140,7 +136,7 @@
                 <span class="metric-label">Failed</span>
             </div>
         </div>
-    </article>
+    </div>
     {% endif %}
 </div>
 {% endblock %}
