@@ -2,7 +2,7 @@
 <div class="source-row" id="source-{{ i }}">
     <div class="source-header">
         <span class="source-number">Source {{ i + 1 }}</span>
-        <button type="button" class="outline btn-remove"
+        <button type="button" class="btn-remove"
                 hx-delete="/config/trakt/sources/{{ i }}"
                 hx-target="#source-{{ i }}"
                 hx-swap="outerHTML"
@@ -10,7 +10,7 @@
             Remove
         </button>
     </div>
-    <div class="grid">
+    <div class="source-grid">
         <label>
             Type
             <select name="source_{{ i }}_type" onchange="toggleSourceFields(this, {{ i }})">
@@ -32,7 +32,7 @@
             </label>
         </div>
     </div>
-    <div class="grid">
+    <div class="source-grid">
         <label>
             <input type="checkbox" name="source_{{ i }}_auth" {{ "checked" if source.auth }}>
             Requires OAuth

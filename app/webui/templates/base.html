@@ -1,35 +1,37 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
     <title>{% block title %}SnakeCharmer{% endblock %}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
 </head>
 <body>
-    <nav class="container-fluid">
-        <ul>
-            <li class="nav-brand"><strong><span class="brand-icon">&#129415;</span> SnakeCharmer</strong></li>
-        </ul>
-        <ul>
-            <li><a href="/" {% if active_page == "dashboard" %}aria-current="page"{% endif %}>Dashboard</a></li>
-            <li><a href="/config/trakt" {% if active_page == "trakt" %}aria-current="page"{% endif %}>Trakt</a></li>
-            <li><a href="/config/medusa" {% if active_page == "medusa" %}aria-current="page"{% endif %}>Medusa</a></li>
-            <li><a href="/config/sync" {% if active_page == "sync" %}aria-current="page"{% endif %}>Sync</a></li>
-            <li><a href="/config/health" {% if active_page == "health" %}aria-current="page"{% endif %}>Health</a></li>
-            <li><a href="/config/notify" {% if active_page == "notify" %}aria-current="page"{% endif %}>Notify</a></li>
-        </ul>
-    </nav>
-    <main class="container">
-        <div id="result-banner"></div>
-        {% block content %}{% endblock %}
-    </main>
-    <footer class="container">
-        <small>Config changes are written to the YAML file. Comments in the file will be removed on save.<br>SnakeCharmer is free and open source. <a href="https://github.com/sponsors/2wenty2wo" target="_blank">Support development</a>.</small>
-    </footer>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-logo"><span class="logo-icon">&#129415;</span> SnakeCharmer</div>
+            <nav class="sidebar-nav">
+                <a href="/" {% if active_page == "dashboard" %}class="active"{% endif %}>Dashboard</a>
+                <a href="/config/trakt" {% if active_page == "trakt" %}class="active"{% endif %}>Trakt</a>
+                <a href="/config/medusa" {% if active_page == "medusa" %}class="active"{% endif %}>Medusa</a>
+                <a href="/config/sync" {% if active_page == "sync" %}class="active"{% endif %}>Sync</a>
+                <a href="/config/health" {% if active_page == "health" %}class="active"{% endif %}>Health</a>
+                <a href="/config/notify" {% if active_page == "notify" %}class="active"{% endif %}>Notify</a>
+            </nav>
+        </aside>
+        <main class="main-content">
+            <div id="result-banner"></div>
+            {% block content %}{% endblock %}
+            <footer class="app-footer">
+                <small>Config changes are written to the YAML file. Comments in the file will be removed on save.<br>SnakeCharmer is free and open source. <a href="https://github.com/sponsors/2wenty2wo" target="_blank">Support development</a>.</small>
+            </footer>
+        </main>
+    </div>
     <script>
     document.body.addEventListener("htmx:afterSwap", function(event) {
         if (event.detail.target.id === "result-banner") {
