@@ -5,7 +5,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import ConfigError, TraktSource
+from app.trakt import TraktClient
 from app.webui.config_io import config_to_dict, load_config_dict, save_config
+from app.webui.token_service import TokenService
 
 log = logging.getLogger(__name__)
 
@@ -49,10 +51,11 @@ async def dashboard(request: Request):
 @router.get("/config/trakt", response_class=HTMLResponse)
 async def config_trakt(request: Request):
     config = _holder(request).get()
+    token_context = _build_trakt_token_context(config)
     return _templates(request).TemplateResponse(
         request,
         "config/trakt.html",
-        context={"config": config, "active_page": "trakt"},
+        context={"config": config, "active_page": "trakt", "token": token_context},
     )
 
 
@@ -90,6 +93,56 @@ async def add_source(request: Request):
 @router.delete("/config/trakt/sources/{index}", response_class=HTMLResponse)
 async def delete_source(request: Request, index: int):
     return HTMLResponse("")
+
+
+@router.get("/config/trakt/token", response_class=HTMLResponse)
+async def trakt_token_status(request: Request):
+    config = _holder(request).get()
+    token_context = _build_trakt_token_context(config)
+    return _templates(request).TemplateResponse(
+        request,
+        "config/trakt_token_status.html",
+        context={"token": token_context},
+    )
+
+
+@router.post("/config/trakt/token/refresh", response_class=HTMLResponse)
+async def trakt_token_refresh(request: Request):
+    config = _holder(request).get()
+    client = TraktClient(config.trakt, config_dir=config.config_dir)
+    success, message = client.refresh_access_token()
+    level = "success" if success else "error"
+    return HTMLResponse(f'<div class="banner {level}" role="alert">{message}</div>')
+
+
+@router.post("/config/trakt/token/start-device-auth", response_class=HTMLResponse)
+async def trakt_token_start_device_auth(request: Request):
+    config = _holder(request).get()
+    client = TraktClient(config.trakt, config_dir=config.config_dir)
+    try:
+        device_flow = client.start_device_auth()
+        return _templates(request).TemplateResponse(
+            request,
+            "config/trakt_device_auth.html",
+            context={"device": device_flow},
+        )
+    except Exception as e:
+        log.warning("Failed to start Trakt device auth: %s", e)
+        return HTMLResponse(
+            '<div class="banner error" role="alert">Failed to start device auth.</div>'
+        )
+
+
+@router.delete("/config/trakt/token", response_class=HTMLResponse)
+async def trakt_token_delete(request: Request):
+    config = _holder(request).get()
+    token_service = TokenService(_token_path_for_config(config))
+    deleted = token_service.delete()
+    if deleted:
+        return HTMLResponse(
+            '<div class="banner success" role="alert">Token removed successfully.</div>'
+        )
+    return HTMLResponse('<div class="banner error" role="alert">No token file found.</div>')
 
 
 # --- Medusa Config ---
@@ -279,3 +332,19 @@ def _save_and_respond(request: Request, config_dict: dict, holder, section: str)
     except Exception as e:
         log.exception("Failed to save config")
         return HTMLResponse(f'<div class="banner error" role="alert">Failed to save: {e}</div>')
+
+
+def _token_path_for_config(config) -> str:
+    client = TraktClient(config.trakt, config_dir=config.config_dir)
+    return client.token_path
+
+
+def _build_trakt_token_context(config) -> dict:
+    token_service = TokenService(_token_path_for_config(config))
+    metadata = token_service.read_metadata()
+    return {
+        "status": token_service.status(),
+        "created_at": metadata.created_at if metadata else None,
+        "expires_in": metadata.expires_in if metadata else None,
+        "has_refresh_token": metadata.has_refresh_token if metadata else False,
+    }

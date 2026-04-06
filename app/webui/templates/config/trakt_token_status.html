@@ -1,0 +1,10 @@
+<div>
+    <p><strong>Status:</strong> {{ token.status }}</p>
+    {% if token.created_at %}
+    <p><strong>Created At (epoch):</strong> {{ token.created_at }}</p>
+    {% endif %}
+    {% if token.expires_in %}
+    <p><strong>Expires In (seconds):</strong> {{ token.expires_in }}</p>
+    {% endif %}
+    <p><strong>Refresh Token Present:</strong> {{ "yes" if token.has_refresh_token else "no" }}</p>
+</div>

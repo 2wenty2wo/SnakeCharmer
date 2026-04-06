@@ -289,11 +289,57 @@ class TraktClient:
         log.error("Authentication failed or timed out")
         raise SystemExit(1)
 
+    def refresh_access_token(self) -> tuple[bool, str]:
+        """Refresh the stored OAuth token via refresh_token grant."""
+        token = self._load_raw_token()
+        if token is None:
+            return False, "No token is stored."
+        if not token.get("refresh_token"):
+            return False, "Stored token cannot be refreshed (missing refresh token)."
+
+        refreshed = self._refresh_token(token)
+        if refreshed is None:
+            return False, "Token refresh failed."
+
+        access_token = refreshed.get("access_token")
+        if access_token:
+            self.session.headers["Authorization"] = f"Bearer {access_token}"
+        return True, "Token refreshed successfully."
+
+    def start_device_auth(self) -> dict:
+        """Start OAuth device flow and return user-facing verification details."""
+        resp = self._request(
+            "POST",
+            "/oauth/device/code",
+            json={
+                "client_id": self.config.client_id,
+            },
+        )
+        device = resp.json()
+        return {
+            "user_code": device.get("user_code", ""),
+            "verification_url": device.get("verification_url", ""),
+            "expires_in": int(device.get("expires_in", 0)),
+            "interval": int(device.get("interval", 0)),
+            "polling_status": "waiting_for_authorization",
+        }
+
     def _save_token(self, token: dict) -> None:
         """Persist OAuth token to disk."""
         with open(self.token_path, "w") as f:
             json.dump(token, f, indent=2)
         log.debug("Token saved to %s", self.token_path)
+
+    def _load_raw_token(self) -> dict | None:
+        """Load token from disk without validation/refresh side effects."""
+        if not os.path.exists(self.token_path):
+            return None
+        try:
+            with open(self.token_path) as f:
+                token = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+        return token if isinstance(token, dict) else None
 
     # --- HTTP Helpers ---
 

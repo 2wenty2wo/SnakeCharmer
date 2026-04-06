@@ -6,6 +6,34 @@
     <p class="page-description">Configure your Trakt API credentials and show sources.</p>
 </div>
 
+<fieldset>
+    <legend>Token Status</legend>
+    <div id="token-status" hx-get="/config/trakt/token" hx-trigger="load" hx-swap="innerHTML">
+        {% include "config/trakt_token_status.html" %}
+    </div>
+    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem;">
+        <button type="button"
+                hx-post="/config/trakt/token/refresh"
+                hx-target="#token-result"
+                hx-swap="innerHTML">
+            Refresh Token
+        </button>
+        <button type="button"
+                hx-post="/config/trakt/token/start-device-auth"
+                hx-target="#token-result"
+                hx-swap="innerHTML">
+            Re-authenticate
+        </button>
+        <button type="button"
+                hx-delete="/config/trakt/token"
+                hx-target="#token-result"
+                hx-swap="innerHTML">
+            Remove Token
+        </button>
+    </div>
+    <div id="token-result" style="margin-top: 1rem;"></div>
+</fieldset>
+
 <form hx-post="/config/trakt" hx-target="#result-banner" hx-swap="innerHTML">
     <fieldset>
         <legend>Credentials</legend>
@@ -47,4 +75,5 @@
 
     <button type="submit">Save Trakt Settings</button>
 </form>
+<div id="result-banner"></div>
 {% endblock %}

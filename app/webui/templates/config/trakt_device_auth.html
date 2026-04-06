@@ -1,0 +1,7 @@
+<div class="banner success" role="alert">
+    Device authorization started. Visit <strong>{{ device.verification_url }}</strong> and enter code
+    <strong>{{ device.user_code }}</strong>.
+</div>
+<p><strong>Polling status:</strong> {{ device.polling_status }}</p>
+<p><strong>Code expires in:</strong> {{ device.expires_in }} seconds</p>
+<p><strong>Poll interval:</strong> {{ device.interval }} seconds</p>

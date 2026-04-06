@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 import yaml
 from fastapi.testclient import TestClient
@@ -184,6 +186,46 @@ class TestTraktConfig:
         response = client.delete("/config/trakt/sources/0")
         assert response.status_code == 200
         assert response.text == ""
+
+    def test_get_trakt_token_status_partial(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/config/trakt/token")
+        assert response.status_code == 200
+        assert "Status:" in response.text
+        assert "missing" in response.text
+
+    def test_refresh_trakt_token_route(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch("app.webui.routes.TraktClient.refresh_access_token", return_value=(True, "ok")):
+            response = client.post("/config/trakt/token/refresh")
+        assert response.status_code == 200
+        assert "ok" in response.text
+
+    def test_start_device_auth_route(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch(
+            "app.webui.routes.TraktClient.start_device_auth",
+            return_value={
+                "verification_url": "https://trakt.tv/activate",
+                "user_code": "ABCD",
+                "expires_in": 600,
+                "interval": 5,
+                "polling_status": "waiting_for_authorization",
+            },
+        ):
+            response = client.post("/config/trakt/token/start-device-auth")
+        assert response.status_code == 200
+        assert "https://trakt.tv/activate" in response.text
+        assert "ABCD" in response.text
+
+    def test_delete_trakt_token_route(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        token_file = tmp_path / "trakt_token.json"
+        token_file.write_text("{}")
+        response = client.request("DELETE", "/config/trakt/token")
+        assert response.status_code == 200
+        assert "removed successfully" in response.text.lower()
+        assert not token_file.exists()
 
 
 class TestMedusaConfig:
