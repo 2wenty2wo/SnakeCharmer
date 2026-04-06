@@ -736,6 +736,23 @@ class TestTestConnections:
         assert response.status_code == 200
         assert "Cannot reach" in response.text
 
+    def test_test_medusa_connection_error_escapes_url(self, tmp_path):
+        import requests
+
+        client, _, _ = _create_client(tmp_path)
+        with patch.object(
+            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
+            "get_existing_tvdb_ids",
+            side_effect=requests.ConnectionError("Failed"),
+        ):
+            response = client.post(
+                "/test/medusa",
+                data={"url": '<img src=x onerror="alert(1)">', "api_key": "testkey"},
+            )
+        assert response.status_code == 200
+        assert "&lt;img" in response.text
+        assert "<img" not in response.text
+
 
 class TestTestNotification:
     def test_test_notify_no_urls(self, tmp_path):

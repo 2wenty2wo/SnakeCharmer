@@ -141,13 +141,23 @@ def main() -> None:
         if config.sync.interval > 0:
             while True:
                 run_config = config_holder.get() if webui_enabled else config
-                result = run_sync(run_config)
-                if sync_status is not None:
-                    sync_status.update(result)
-                try:
-                    send_notification(run_config.notify, result, dry_run=run_config.sync.dry_run)
-                except Exception as exc:
-                    log.warning("Notification error: %s", exc)
+                if webui_enabled:
+                    result = sync_manager.run_sync_blocking()
+                    if result is None:
+                        log.info("Skipping scheduled sync because another sync is already running")
+                        log.info("Sleeping %ds until next sync...", run_config.sync.interval)
+                        time.sleep(run_config.sync.interval)
+                        continue
+                else:
+                    result = run_sync(run_config)
+                    if sync_status is not None:
+                        sync_status.update(result)
+                    try:
+                        send_notification(
+                            run_config.notify, result, dry_run=run_config.sync.dry_run
+                        )
+                    except Exception as exc:
+                        log.warning("Notification error: %s", exc)
                 log.info("Sleeping %ds until next sync...", run_config.sync.interval)
                 time.sleep(run_config.sync.interval)
         else:

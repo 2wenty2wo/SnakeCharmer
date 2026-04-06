@@ -1,5 +1,6 @@
 import logging
 import re
+from html import escape
 
 import requests
 from fastapi import APIRouter, Request
@@ -340,9 +341,10 @@ async def test_medusa(request: Request):
             f"Medusa connection successful! Found {len(tvdb_ids)} show(s) in library.</div>"
         )
     except requests.ConnectionError:
+        safe_url = escape(url)
         return HTMLResponse(
             '<div class="banner error" role="alert">'
-            f"Cannot reach Medusa at {url}. Is it running?</div>"
+            f"Cannot reach Medusa at {safe_url}. Is it running?</div>"
         )
     except requests.HTTPError as e:
         status = e.response.status_code if e.response is not None else "unknown"

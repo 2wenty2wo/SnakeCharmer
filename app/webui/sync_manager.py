@@ -21,15 +21,18 @@ class SyncManager:
 
     def start_sync(self) -> bool:
         """Start a sync in a background thread. Returns False if already running."""
-        with self._lock:
-            if self._running:
-                return False
-            self._running = True
-            self._error = None
+        if not self._begin_sync():
+            return False
 
         thread = threading.Thread(target=self._run_sync, daemon=True)
         thread.start()
         return True
+
+    def run_sync_blocking(self) -> SyncResult | None:
+        """Run a sync in the current thread if no other sync is active."""
+        if not self._begin_sync():
+            return None
+        return self._run_sync()
 
     def is_running(self) -> bool:
         with self._lock:
@@ -53,11 +56,20 @@ class SyncManager:
                 }
             return state
 
-    def _run_sync(self) -> None:
-        """Execute sync in background thread."""
+    def _begin_sync(self) -> bool:
+        with self._lock:
+            if self._running:
+                return False
+            self._running = True
+            self._error = None
+            return True
+
+    def _run_sync(self) -> SyncResult | None:
+        """Execute sync."""
+        result: SyncResult | None = None
         try:
             config = self.config_holder.get()
-            log.info("Manual sync triggered from web UI")
+            log.info("Sync triggered (web UI/scheduler coordinator)")
             result = run_sync(config)
             with self._lock:
                 self._last_result = result
@@ -71,11 +83,13 @@ class SyncManager:
             except Exception as exc:
                 log.warning("Notification error after manual sync: %s", exc)
 
-            log.info("Manual sync completed: added=%d, failed=%d", result.added, result.failed)
+            log.info("Sync completed: added=%d, failed=%d", result.added, result.failed)
         except Exception as exc:
-            log.exception("Manual sync failed")
+            log.exception("Sync failed")
             with self._lock:
                 self._error = str(exc)
+            raise
         finally:
             with self._lock:
                 self._running = False
+        return result
