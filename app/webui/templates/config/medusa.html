@@ -19,6 +19,15 @@
             <input type="password" name="api_key" value="{{ config.medusa.api_key }}" placeholder="Your Medusa API key" required>
         </label>
     </fieldset>
-    <button type="submit">Save Medusa Settings</button>
+    <div class="page-actions">
+        <button type="submit">Save Medusa Settings</button>
+        <button type="button" class="btn-secondary"
+                hx-post="/test/medusa"
+                hx-target="#result-banner"
+                hx-swap="innerHTML"
+                hx-include="[name='url'],[name='api_key']">
+            Test Connection
+        </button>
+    </div>
 </form>
 {% endblock %}

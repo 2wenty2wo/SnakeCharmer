@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Sync History - SnakeCharmer{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Sync History</h1>
+    <p class="page-description">Recent sync results (last {{ history | length }} of max 20).</p>
+    <div class="page-actions">
+        <button type="button" class="btn-primary"
+                hx-post="/sync/run"
+                hx-target="#result-banner"
+                hx-swap="innerHTML">
+            Sync Now
+        </button>
+    </div>
+</div>
+
+{% if history %}
+<div hx-get="/sync/history" hx-trigger="every 30s" hx-select=".history-table" hx-target=".history-table" hx-swap="outerHTML">
+<table class="history-table">
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Added</th>
+            <th>Skipped</th>
+            <th>Failed</th>
+            <th>Unique</th>
+            <th>In Library</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in history %}
+        <tr>
+            <td>{{ entry.timestamp }}</td>
+            <td>{{ entry.duration_seconds }}s</td>
+            <td>
+                <span class="status-badge {{ 'status-ok' if entry.success else 'status-degraded' }}">
+                    {{ "ok" if entry.success else "failed" }}
+                </span>
+            </td>
+            <td><span class="metric-value added" style="font-size:14px">{{ entry.added }}</span></td>
+            <td><span class="metric-value skipped" style="font-size:14px">{{ entry.skipped }}</span></td>
+            <td><span class="metric-value failed" style="font-size:14px">{{ entry.failed }}</span></td>
+            <td>{{ entry.unique_shows }}</td>
+            <td>{{ entry.already_in_medusa }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<div class="empty-state">No sync history yet. Run a sync to see results here.</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,11 @@
+<div class="source-preview">
+    <div class="preview-header">{{ shows | length }} show{{ "s" if shows | length != 1 else "" }} found</div>
+    <ul class="preview-list">
+        {% for show in shows %}
+        <li>
+            <span class="preview-show-title">{{ show.title }}{% if show.year %} ({{ show.year }}){% endif %}</span>
+            <span class="preview-show-meta">tvdb:{{ show.tvdb_id }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>

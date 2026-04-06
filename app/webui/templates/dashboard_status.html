@@ -1,0 +1,55 @@
+{% if sync_running %}
+<div class="card">
+    <div class="card-header"><span class="card-icon">&#128260;</span> Sync In Progress</div>
+    <div class="sync-indicator">
+        <span class="spinner"></span>
+        <span>Syncing shows from Trakt to Medusa...</span>
+    </div>
+</div>
+{% endif %}
+
+{% if health %}
+<div class="card">
+    <div class="card-header"><span class="card-icon">&#128154;</span> Status</div>
+    <div class="info-row">
+        <span class="info-label">Health</span>
+        <span class="info-value">
+            <span class="status-badge status-{{ health.status }}">{{ health.status }}</span>
+        </span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Uptime</span>
+        <span class="info-value">{{ health.uptime_seconds | int }}s</span>
+    </div>
+</div>
+{% endif %}
+
+{% if health and health.last_sync %}
+<div class="card">
+    <div class="card-header"><span class="card-icon">&#128202;</span> Last Sync</div>
+    <div class="info-row">
+        <span class="info-label">Timestamp</span>
+        <span class="info-value">{{ health.last_sync.timestamp }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Duration</span>
+        <span class="info-value">{{ "%.1f" | format(health.last_sync.duration_seconds) }}s</span>
+    </div>
+    <div class="sync-metrics">
+        <div class="metric">
+            <span class="metric-value added">{{ health.last_sync.added }}</span>
+            <span class="metric-label">Added</span>
+        </div>
+        <div class="metric">
+            <span class="metric-value skipped">{{ health.last_sync.skipped }}</span>
+            <span class="metric-label">Skipped</span>
+        </div>
+        <div class="metric">
+            <span class="metric-value failed">{{ health.last_sync.failed }}</span>
+            <span class="metric-label">Failed</span>
+        </div>
+    </div>
+</div>
+{% elif not health %}
+<div class="empty-state">No sync data yet. Run a sync to see status here.</div>
+{% endif %}

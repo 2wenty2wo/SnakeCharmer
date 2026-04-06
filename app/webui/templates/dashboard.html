@@ -4,6 +4,14 @@
 <div class="page-header">
     <h1>Dashboard</h1>
     <p class="page-description">Overview of your SnakeCharmer configuration and sync status.</p>
+    <div class="page-actions">
+        <button type="button" class="btn-primary"
+                hx-post="/sync/run"
+                hx-target="#result-banner"
+                hx-swap="innerHTML">
+            Sync Now
+        </button>
+    </div>
 </div>
 
 <div class="card-grid">
@@ -64,33 +72,6 @@
     </div>
 
     <div class="card">
-        <div class="card-header"><span class="card-icon">&#128154;</span> Health</div>
-        <div class="info-row">
-            <span class="info-label">Enabled</span>
-            <span class="info-value">
-                <span class="config-badge{{ '' if config.health.enabled else ' off' }}">{{ "On" if config.health.enabled else "Off" }}</span>
-            </span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Port</span>
-            <span class="info-value">{{ config.health.port }}</span>
-        </div>
-        {% if health %}
-        <div class="info-row">
-            <span class="info-label">Status</span>
-            <span class="info-value">
-                <span class="status-badge status-{{ health.status }}">{{ health.status }}</span>
-            </span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Uptime</span>
-            <span class="info-value">{{ health.uptime_seconds | int }}s</span>
-        </div>
-        {% endif %}
-        <div class="card-footer"><a href="/config/health" class="btn-outline">Edit</a></div>
-    </div>
-
-    <div class="card">
         <div class="card-header"><span class="card-icon">&#128276;</span> Notifications</div>
         <div class="info-row">
             <span class="info-label">Enabled</span>
@@ -111,32 +92,11 @@
         <div class="card-footer"><a href="/config/notify" class="btn-outline">Edit</a></div>
     </div>
 
-    {% if health and health.last_sync %}
-    <div class="card">
-        <div class="card-header"><span class="card-icon">&#128202;</span> Last Sync</div>
-        <div class="info-row">
-            <span class="info-label">Timestamp</span>
-            <span class="info-value">{{ health.last_sync.timestamp }}</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Duration</span>
-            <span class="info-value">{{ "%.1f" | format(health.last_sync.duration_seconds) }}s</span>
-        </div>
-        <div class="sync-metrics">
-            <div class="metric">
-                <span class="metric-value added">{{ health.last_sync.added }}</span>
-                <span class="metric-label">Added</span>
-            </div>
-            <div class="metric">
-                <span class="metric-value skipped">{{ health.last_sync.skipped }}</span>
-                <span class="metric-label">Skipped</span>
-            </div>
-            <div class="metric">
-                <span class="metric-value failed">{{ health.last_sync.failed }}</span>
-                <span class="metric-label">Failed</span>
-            </div>
-        </div>
+    <div id="live-status"
+         hx-get="/dashboard/status"
+         hx-trigger="every 10s"
+         hx-swap="innerHTML">
+        {% include "dashboard_status.html" %}
     </div>
-    {% endif %}
 </div>
 {% endblock %}

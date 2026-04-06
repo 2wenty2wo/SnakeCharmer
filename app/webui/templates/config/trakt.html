@@ -28,6 +28,16 @@
         </label>
     </fieldset>
 
+    <div class="page-actions">
+        <button type="button" class="btn-secondary"
+                hx-post="/test/trakt"
+                hx-target="#result-banner"
+                hx-swap="innerHTML"
+                hx-include="[name='client_id'],[name='client_secret'],[name='username']">
+            Test Connection
+        </button>
+    </div>
+
     <fieldset>
         <legend>Sources</legend>
         <div id="sources-list">

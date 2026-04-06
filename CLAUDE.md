@@ -67,10 +67,11 @@ app/medusa.py              MedusaClient: library listing and show addition via M
 app/sync.py                run_sync(): orchestrates fetch → diff → add cycle, returns SyncResult metrics
 app/health.py              HTTP health endpoint: SyncStatus tracking, /health JSON responses (200 ok / 503 degraded)
 app/webui/__init__.py      FastAPI app factory (create_app), ConfigHolder thread-safe wrapper
-app/webui/routes.py        HTMX-driven routes: dashboard, config sections (trakt/medusa/sync/health), /health JSON
+app/webui/routes.py        HTMX-driven routes: dashboard, config sections, sync control, test connections, library, /health JSON
 app/webui/config_io.py     Config serialization: AppConfig ↔ dict ↔ YAML file, atomic writes, validation
+app/webui/sync_manager.py  SyncManager: thread-safe manual sync trigger from web UI, background execution
 app/notify.py              Apprise-based notifications: sends alerts on sync success/failure to 100+ services
-app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, config section partials)
+app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, config section partials, sync history, library)
 app/webui/static/style.css Green Deck design system: custom CSS with design tokens, sidebar layout, DM Sans typography
 DESIGN.md                  Green Deck design system spec: colors, typography, components, spacing, elevation rules
 ```
@@ -130,9 +131,15 @@ Apprise-based notification system supporting 100+ services (Pushover, Discord, T
 Optional browser-based config management built with FastAPI + Jinja2 + HTMX, styled with the Green Deck design system (`DESIGN.md`). Enabled via `--webui` CLI flag or `webui.enabled: true` in config. **All web UI changes must follow the Green Deck spec in `DESIGN.md`.**
 
 - Runs on `webui.port` (default 8089) in a daemon thread using uvicorn
-- **Dashboard** (`/`): shows current config summary and sync status in a card grid
+- **Dashboard** (`/`): shows current config summary and sync status in a card grid, auto-refreshes status every 10s via HTMX polling
+- **Sync Now** (`POST /sync/run`): triggers a manual sync from the dashboard or history page via `SyncManager`
+- **Sync History** (`/sync/history`): table of last 20 sync results with status, counts, and duration
 - **Config sections** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`, `/config/notify`): edit and save each config section via HTMX form submissions
 - **Source management**: add/remove Trakt sources dynamically with per-source Medusa quality and required_words overrides
+- **Source Preview** (`POST /config/trakt/sources/preview`): fetches and displays shows from a Trakt source inline
+- **Test Connection** (`POST /test/trakt`, `POST /test/medusa`): validates API credentials without saving
+- **Test Notification** (`POST /test/notify`): sends a test notification to configured Apprise URLs
+- **Library** (`/library`): browse all shows in the Medusa library with client-side filtering
 - **Atomic saves**: config is written to a temp file then `os.replace()`'d to prevent corruption
 - **Validation**: config is validated before saving; validation errors are shown as HTMX banners
 - **Live reload**: `ConfigHolder` (thread-safe dataclass with `threading.Lock`) allows the sync loop to pick up config changes on the next cycle
@@ -140,6 +147,7 @@ Optional browser-based config management built with FastAPI + Jinja2 + HTMX, sty
 
 Key classes:
 - `ConfigHolder` (`app/webui/__init__.py`): thread-safe mutable holder for the active `AppConfig`, shared between web UI and sync loop
+- `SyncManager` (`app/webui/sync_manager.py`): thread-safe manager for triggering manual syncs from the web UI, runs sync in a background thread
 - `config_to_dict()` / `save_config()` / `load_config_dict()` (`app/webui/config_io.py`): round-trip serialization between `AppConfig` dataclasses and YAML files
 
 ### Web UI Design (`DESIGN.md` — Green Deck)
@@ -230,5 +238,5 @@ Two log formats are available, configured via `sync.log_format` or `--log-format
 - Token refresh in trakt.py can silently fail and fall through to device auth
 - No removal/unsync support — shows added to Medusa are never removed if removed from a Trakt list
 - Legacy `list`/`lists` config keys are still supported but undocumented in README; env vars `SNAKECHARMER_TRAKT_LIST` and `SNAKECHARMER_TRAKT_LISTS` trigger the legacy path
-- Web UI does not support OAuth token management or triggering a manual sync
+- Web UI does not support OAuth token management
 - Web UI does not support editing WebUI settings (intentional — cannot change UI port/enabled from within the UI)

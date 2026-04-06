@@ -1,10 +1,13 @@
 import logging
 import re
 
+import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.config import ConfigError, TraktSource
+from app.config import ConfigError, MedusaConfig, TraktConfig, TraktSource
+from app.medusa import MedusaClient
+from app.trakt import TraktClient
 from app.webui.config_io import config_to_dict, load_config_dict, save_config
 
 log = logging.getLogger(__name__)
@@ -24,6 +27,10 @@ def _sync_status(request: Request):
     return request.app.state.sync_status
 
 
+def _sync_manager(request: Request):
+    return request.app.state.sync_manager
+
+
 # --- Dashboard ---
 
 
@@ -32,13 +39,33 @@ async def dashboard(request: Request):
     config = _holder(request).get()
     sync_status = _sync_status(request)
     health_snapshot = sync_status.snapshot() if sync_status else None
+    sync_manager = _sync_manager(request)
+    sync_running = sync_manager.is_running() if sync_manager else False
     return _templates(request).TemplateResponse(
         request,
         "dashboard.html",
         context={
             "config": config,
             "health": health_snapshot,
+            "sync_running": sync_running,
             "active_page": "dashboard",
+        },
+    )
+
+
+@router.get("/dashboard/status", response_class=HTMLResponse)
+async def dashboard_status(request: Request):
+    """Auto-refresh partial for dashboard status cards."""
+    sync_status = _sync_status(request)
+    health_snapshot = sync_status.snapshot() if sync_status else None
+    sync_manager = _sync_manager(request)
+    sync_running = sync_manager.is_running() if sync_manager else False
+    return _templates(request).TemplateResponse(
+        request,
+        "dashboard_status.html",
+        context={
+            "health": health_snapshot,
+            "sync_running": sync_running,
         },
     )
 
@@ -214,6 +241,238 @@ async def health_json(request: Request):
     snapshot = sync_status.snapshot()
     status_code = 200 if snapshot.get("status") != "degraded" else 503
     return JSONResponse(snapshot, status_code=status_code)
+
+
+# --- Sync Now ---
+
+
+@router.post("/sync/run", response_class=HTMLResponse)
+async def sync_run(request: Request):
+    """Trigger a manual sync from the web UI."""
+    sync_manager = _sync_manager(request)
+    if sync_manager is None:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">Sync manager not available.</div>'
+        )
+    if sync_manager.start_sync():
+        return HTMLResponse('<div class="banner success" role="alert">Sync started.</div>')
+    return HTMLResponse('<div class="banner error" role="alert">A sync is already running.</div>')
+
+
+@router.get("/sync/state", response_class=JSONResponse)
+async def sync_state(request: Request):
+    """Return current sync manager state for polling."""
+    sync_manager = _sync_manager(request)
+    if sync_manager is None:
+        return JSONResponse({"running": False})
+    return JSONResponse(sync_manager.get_state())
+
+
+# --- Sync History ---
+
+
+@router.get("/sync/history", response_class=HTMLResponse)
+async def sync_history(request: Request):
+    sync_status = _sync_status(request)
+    history = sync_status.get_history() if sync_status else []
+    return _templates(request).TemplateResponse(
+        request,
+        "sync/history.html",
+        context={"history": history, "active_page": "history"},
+    )
+
+
+# --- Test Connections ---
+
+
+@router.post("/test/trakt", response_class=HTMLResponse)
+async def test_trakt(request: Request):
+    """Test Trakt API connection using current form values."""
+    form = await request.form()
+    client_id = form.get("client_id", "").strip()
+    if not client_id:
+        return HTMLResponse('<div class="banner error" role="alert">Client ID is required.</div>')
+    try:
+        trakt_config = TraktConfig(
+            client_id=client_id,
+            client_secret=form.get("client_secret", ""),
+            username=form.get("username", ""),
+            sources=[TraktSource(type="trending")],
+            limit=1,
+        )
+        client = TraktClient(trakt_config, max_retries=1, retry_backoff=1.0)
+        shows = client.get_shows(TraktSource(type="trending"))
+        return HTMLResponse(
+            '<div class="banner success" role="alert">'
+            f"Trakt connection successful! Fetched {len(shows)} trending show(s).</div>"
+        )
+    except requests.ConnectionError:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            "Cannot reach Trakt API. Check your network connection.</div>"
+        )
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "unknown"
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            f"Trakt API error (HTTP {status}). Check your Client ID.</div>"
+        )
+    except Exception as e:
+        return HTMLResponse(f'<div class="banner error" role="alert">Trakt test failed: {e}</div>')
+
+
+@router.post("/test/medusa", response_class=HTMLResponse)
+async def test_medusa(request: Request):
+    """Test Medusa API connection using current form values."""
+    form = await request.form()
+    url = form.get("url", "").strip()
+    api_key = form.get("api_key", "").strip()
+    if not url or not api_key:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">URL and API Key are required.</div>'
+        )
+    try:
+        medusa_config = MedusaConfig(url=url.rstrip("/"), api_key=api_key)
+        client = MedusaClient(medusa_config, max_retries=1, retry_backoff=1.0)
+        tvdb_ids = client.get_existing_tvdb_ids()
+        return HTMLResponse(
+            '<div class="banner success" role="alert">'
+            f"Medusa connection successful! Found {len(tvdb_ids)} show(s) in library.</div>"
+        )
+    except requests.ConnectionError:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            f"Cannot reach Medusa at {url}. Is it running?</div>"
+        )
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "unknown"
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            f"Medusa API error (HTTP {status}). Check your API key.</div>"
+        )
+    except Exception as e:
+        return HTMLResponse(f'<div class="banner error" role="alert">Medusa test failed: {e}</div>')
+
+
+# --- Test Notification ---
+
+
+@router.post("/test/notify", response_class=HTMLResponse)
+async def test_notify(request: Request):
+    """Send a test notification using current form URLs."""
+    form = await request.form()
+    urls_raw = form.get("urls", "")
+    urls = [u.strip() for u in urls_raw.splitlines() if u.strip()]
+    if not urls:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">No notification URLs configured.</div>'
+        )
+    try:
+        import apprise
+
+        ap = apprise.Apprise()
+        for url in urls:
+            ap.add(url)
+        result = ap.notify(
+            title="SnakeCharmer: Test Notification",
+            body="This is a test notification from the SnakeCharmer web UI.",
+        )
+        if result:
+            return HTMLResponse(
+                '<div class="banner success" role="alert">'
+                f"Test notification sent to {len(urls)} URL(s).</div>"
+            )
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            "Notification delivery failed. Check your URLs.</div>"
+        )
+    except Exception as e:
+        return HTMLResponse(
+            f'<div class="banner error" role="alert">Notification test failed: {e}</div>'
+        )
+
+
+# --- Source Preview ---
+
+
+@router.post("/config/trakt/sources/preview", response_class=HTMLResponse)
+async def source_preview(request: Request):
+    """Preview shows from a Trakt source."""
+    form = await request.form()
+    client_id = form.get("client_id", "").strip()
+    if not client_id:
+        return HTMLResponse(
+            '<div class="source-preview">'
+            '<div class="preview-header" style="color:var(--gd-error)">'
+            "Client ID required for preview</div></div>"
+        )
+
+    source_index = form.get("source_index", "0")
+    source_type = form.get(f"source_{source_index}_type", "trending")
+    source_owner = form.get(f"source_{source_index}_owner", "")
+    source_slug = form.get(f"source_{source_index}_list_slug", "")
+    source_auth = form.get(f"source_{source_index}_auth") == "on"
+
+    try:
+        trakt_config = TraktConfig(
+            client_id=client_id,
+            client_secret=form.get("client_secret", ""),
+            username=form.get("username", ""),
+            sources=[],
+            limit=10,
+        )
+        source = TraktSource(
+            type=source_type,
+            owner=source_owner,
+            list_slug=source_slug,
+            auth=source_auth if source_auth else None,
+        )
+        config = _holder(request).get()
+        client = TraktClient(
+            trakt_config,
+            config_dir=config.config_dir,
+            max_retries=1,
+            retry_backoff=1.0,
+        )
+        shows = client.get_shows(source)
+        return _templates(request).TemplateResponse(
+            request,
+            "config/source_preview.html",
+            context={"shows": shows},
+        )
+    except Exception as e:
+        return HTMLResponse(
+            '<div class="source-preview">'
+            f'<div class="preview-header" style="color:var(--gd-error)">'
+            f"Preview failed: {e}</div></div>"
+        )
+
+
+# --- Library ---
+
+
+@router.get("/library", response_class=HTMLResponse)
+async def library(request: Request):
+    """Show the current Medusa library."""
+    config = _holder(request).get()
+    shows = []
+    error = None
+    try:
+        client = MedusaClient(config.medusa, max_retries=1, retry_backoff=1.0)
+        shows = client.get_series_list()
+    except requests.ConnectionError:
+        error = f"Cannot reach Medusa at {config.medusa.url}. Is it running?"
+    except requests.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "unknown"
+        error = f"Medusa API error (HTTP {status}). Check your API key."
+    except Exception as e:
+        error = f"Failed to fetch library: {e}"
+
+    return _templates(request).TemplateResponse(
+        request,
+        "library.html",
+        context={"shows": shows, "error": error, "active_page": "library"},
+    )
 
 
 # --- Helpers ---

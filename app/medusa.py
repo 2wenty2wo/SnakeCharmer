@@ -98,6 +98,30 @@ class MedusaClient:
         log.info("Found %d existing shows in Medusa", len(tvdb_ids))
         return tvdb_ids
 
+    def get_series_list(self) -> list[dict]:
+        """Fetch all series from Medusa with display info."""
+        resp = self._request("GET", "/series")
+        series_list = resp.json()
+
+        shows = []
+        for series in series_list:
+            tvdb_id = series.get("id", {}).get("tvdb")
+            if not tvdb_id:
+                continue
+            shows.append(
+                {
+                    "title": series.get("title", "Unknown"),
+                    "tvdb_id": int(tvdb_id),
+                    "imdb_id": series.get("id", {}).get("imdb"),
+                    "year": series.get("year"),
+                    "status": series.get("status"),
+                    "network": series.get("network"),
+                }
+            )
+        shows.sort(key=lambda s: s["title"].lower())
+        log.info("Fetched %d shows from Medusa library", len(shows))
+        return shows
+
     def add_show(self, tvdb_id: int, title: str, add_options: dict | None = None) -> bool:
         """Add a show to Medusa by TVDB ID.
 

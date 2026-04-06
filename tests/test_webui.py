@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 import yaml
 from fastapi.testclient import TestClient
@@ -12,8 +14,11 @@ from app.config import (
     TraktSource,
     WebUIConfig,
 )
+from app.health import SyncStatus
+from app.sync import SyncResult
 from app.webui import ConfigHolder, create_app
 from app.webui.config_io import save_app_config
+from app.webui.sync_manager import SyncManager
 
 
 def _make_config(**overrides) -> AppConfig:
@@ -35,14 +40,19 @@ def _make_config(**overrides) -> AppConfig:
     return AppConfig(**defaults)
 
 
-def _create_client(tmp_path, config=None):
+def _create_client(tmp_path, config=None, with_sync=False):
     config = config or _make_config()
     config_path = str(tmp_path / "config.yaml")
     save_app_config(config, config_path)
     config.config_dir = str(tmp_path)
 
     holder = ConfigHolder(config=config, config_path=config_path)
-    app = create_app(holder)
+    sync_status = None
+    sync_manager = None
+    if with_sync:
+        sync_status = SyncStatus()
+        sync_manager = SyncManager(config_holder=holder, sync_status=sync_status)
+    app = create_app(holder, sync_status=sync_status, sync_manager=sync_manager)
     return TestClient(app), holder, config_path
 
 
@@ -568,3 +578,332 @@ class TestWebuiFormEdgeCases:
         updated = holder.get()
         assert updated.trakt.sources[0].medusa.quality is None
         assert updated.trakt.sources[0].medusa.required_words == []
+
+
+class TestDashboardStatus:
+    def test_dashboard_status_partial(self, tmp_path):
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+        response = client.get("/dashboard/status")
+        assert response.status_code == 200
+        assert "Status" in response.text
+        assert "unknown" in response.text
+
+    def test_dashboard_status_with_sync_result(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(SyncResult(added=3, skipped=1, failed=0, success=True))
+        sync_manager = SyncManager(config_holder=holder, sync_status=sync_status)
+        app = create_app(holder, sync_status=sync_status, sync_manager=sync_manager)
+        client = TestClient(app)
+
+        response = client.get("/dashboard/status")
+        assert response.status_code == 200
+        assert "Last Sync" in response.text
+        assert "3" in response.text  # added count
+
+
+class TestSyncNow:
+    def test_sync_run_starts(self, tmp_path):
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+        with patch("app.webui.sync_manager.run_sync", return_value=SyncResult(success=True)):
+            response = client.post("/sync/run")
+        assert response.status_code == 200
+        assert "Sync started" in response.text
+
+    def test_sync_run_no_manager(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post("/sync/run")
+        assert response.status_code == 200
+        assert "not available" in response.text
+
+    def test_sync_state_not_running(self, tmp_path):
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+        response = client.get("/sync/state")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["running"] is False
+
+    def test_sync_state_no_manager(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/sync/state")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["running"] is False
+
+
+class TestSyncHistory:
+    def test_sync_history_empty(self, tmp_path):
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+        response = client.get("/sync/history")
+        assert response.status_code == 200
+        assert "No sync history yet" in response.text
+
+    def test_sync_history_with_entries(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(SyncResult(added=5, failed=0, success=True, unique_shows=10))
+        app = create_app(holder, sync_status=sync_status)
+        client = TestClient(app)
+
+        response = client.get("/sync/history")
+        assert response.status_code == 200
+        assert "History" in response.text
+        assert "5" in response.text  # added count
+
+
+class TestTestConnections:
+    def test_test_trakt_missing_client_id(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post("/test/trakt", data={"client_id": ""})
+        assert response.status_code == 200
+        assert "Client ID is required" in response.text
+
+    def test_test_trakt_success(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_shows = [MagicMock(title="Test Show", tvdb_id=123)]
+        with patch.object(
+            __import__("app.trakt", fromlist=["TraktClient"]).TraktClient,
+            "get_shows",
+            return_value=mock_shows,
+        ):
+            response = client.post(
+                "/test/trakt",
+                data={"client_id": "test_id", "client_secret": "secret", "username": "user"},
+            )
+        assert response.status_code == 200
+        assert "successful" in response.text
+
+    def test_test_trakt_connection_error(self, tmp_path):
+        import requests
+
+        client, _, _ = _create_client(tmp_path)
+        with patch.object(
+            __import__("app.trakt", fromlist=["TraktClient"]).TraktClient,
+            "get_shows",
+            side_effect=requests.ConnectionError("Failed"),
+        ):
+            response = client.post(
+                "/test/trakt",
+                data={"client_id": "test_id", "client_secret": "secret", "username": "user"},
+            )
+        assert response.status_code == 200
+        assert "Cannot reach" in response.text
+
+    def test_test_medusa_missing_fields(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post("/test/medusa", data={"url": "", "api_key": ""})
+        assert response.status_code == 200
+        assert "required" in response.text
+
+    def test_test_medusa_success(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch.object(
+            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
+            "get_existing_tvdb_ids",
+            return_value={1, 2, 3},
+        ):
+            response = client.post(
+                "/test/medusa",
+                data={"url": "http://localhost:8081", "api_key": "testkey"},
+            )
+        assert response.status_code == 200
+        assert "successful" in response.text
+        assert "3" in response.text
+
+    def test_test_medusa_connection_error(self, tmp_path):
+        import requests
+
+        client, _, _ = _create_client(tmp_path)
+        with patch.object(
+            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
+            "get_existing_tvdb_ids",
+            side_effect=requests.ConnectionError("Failed"),
+        ):
+            response = client.post(
+                "/test/medusa",
+                data={"url": "http://localhost:8081", "api_key": "testkey"},
+            )
+        assert response.status_code == 200
+        assert "Cannot reach" in response.text
+
+
+class TestTestNotification:
+    def test_test_notify_no_urls(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post("/test/notify", data={"urls": ""})
+        assert response.status_code == 200
+        assert "No notification URLs" in response.text
+
+    def test_test_notify_success(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch("apprise.Apprise") as mock_cls:
+            mock_ap = MagicMock()
+            mock_ap.notify.return_value = True
+            mock_cls.return_value = mock_ap
+            response = client.post("/test/notify", data={"urls": "json://localhost"})
+        assert response.status_code == 200
+        assert "sent" in response.text
+
+    def test_test_notify_failure(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch("apprise.Apprise") as mock_cls:
+            mock_ap = MagicMock()
+            mock_ap.notify.return_value = False
+            mock_cls.return_value = mock_ap
+            response = client.post("/test/notify", data={"urls": "json://localhost"})
+        assert response.status_code == 200
+        assert "failed" in response.text.lower()
+
+
+class TestSourcePreview:
+    def test_preview_missing_client_id(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt/sources/preview",
+            data={"client_id": "", "source_index": "0", "source_0_type": "trending"},
+        )
+        assert response.status_code == 200
+        assert "Client ID required" in response.text
+
+    def test_preview_success(self, tmp_path):
+        from app.trakt import TraktShow
+
+        client, _, _ = _create_client(tmp_path)
+        mock_shows = [
+            TraktShow(title="Show One", tvdb_id=100, year=2024),
+            TraktShow(title="Show Two", tvdb_id=200, year=2023),
+        ]
+        with patch.object(
+            __import__("app.trakt", fromlist=["TraktClient"]).TraktClient,
+            "get_shows",
+            return_value=mock_shows,
+        ):
+            response = client.post(
+                "/config/trakt/sources/preview",
+                data={
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "username": "user",
+                    "limit": "10",
+                    "source_index": "0",
+                    "source_0_type": "trending",
+                },
+            )
+        assert response.status_code == 200
+        assert "Show One" in response.text
+        assert "Show Two" in response.text
+        assert "tvdb:100" in response.text
+
+    def test_preview_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch.object(
+            __import__("app.trakt", fromlist=["TraktClient"]).TraktClient,
+            "get_shows",
+            side_effect=Exception("API error"),
+        ):
+            response = client.post(
+                "/config/trakt/sources/preview",
+                data={
+                    "client_id": "test_id",
+                    "source_index": "0",
+                    "source_0_type": "trending",
+                },
+            )
+        assert response.status_code == 200
+        assert "Preview failed" in response.text
+
+
+class TestLibrary:
+    def test_library_success(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_shows = [
+            {
+                "title": "Breaking Bad",
+                "tvdb_id": 81189,
+                "year": 2008,
+                "status": "Ended",
+                "network": "AMC",
+                "imdb_id": "tt0903747",
+            },
+            {
+                "title": "The Wire",
+                "tvdb_id": 79126,
+                "year": 2002,
+                "status": "Ended",
+                "network": "HBO",
+                "imdb_id": None,
+            },
+        ]
+        with patch.object(
+            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
+            "get_series_list",
+            return_value=mock_shows,
+        ):
+            response = client.get("/library")
+        assert response.status_code == 200
+        assert "Breaking Bad" in response.text
+        assert "The Wire" in response.text
+        assert "2 shows" in response.text
+
+    def test_library_empty(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch.object(
+            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
+            "get_series_list",
+            return_value=[],
+        ):
+            response = client.get("/library")
+        assert response.status_code == 200
+        assert "No shows" in response.text
+
+    def test_library_connection_error(self, tmp_path):
+        import requests
+
+        client, _, _ = _create_client(tmp_path)
+        with patch.object(
+            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
+            "get_series_list",
+            side_effect=requests.ConnectionError("Failed"),
+        ):
+            response = client.get("/library")
+        assert response.status_code == 200
+        assert "Cannot reach" in response.text
+
+
+class TestSyncStatusHistory:
+    def test_history_empty(self):
+        status = SyncStatus()
+        assert status.get_history() == []
+
+    def test_history_records_entries(self):
+        status = SyncStatus()
+        status.update(SyncResult(added=1, success=True))
+        status.update(SyncResult(added=2, failed=1, success=False))
+        history = status.get_history()
+        assert len(history) == 2
+        assert history[0]["added"] == 2  # newest first
+        assert history[0]["success"] is False
+        assert history[1]["added"] == 1
+
+    def test_history_max_entries(self):
+        status = SyncStatus()
+        for i in range(25):
+            status.update(SyncResult(added=i, success=True))
+        history = status.get_history()
+        assert len(history) == 20
+        assert history[0]["added"] == 24  # newest first
+
+    def test_history_none_result_skipped(self):
+        status = SyncStatus()
+        status.update(None)
+        assert status.get_history() == []

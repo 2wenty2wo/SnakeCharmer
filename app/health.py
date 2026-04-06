@@ -16,11 +16,17 @@ class SyncStatus:
     _last_sync_time: float = 0.0
     _last_result: object = None
     _start_time: float = field(default_factory=time.monotonic)
+    _history: list = field(default_factory=list, repr=False)
+    _max_history: int = 20
 
     def update(self, result) -> None:
         with self._lock:
             self._last_sync_time = time.time()
             self._last_result = result
+            if result is not None:
+                entry = self._result_to_entry(result, self._last_sync_time)
+                self._history.insert(0, entry)
+                self._history = self._history[: self._max_history]
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -48,6 +54,25 @@ class SyncStatus:
                 "already_in_medusa": result.already_in_medusa,
             }
             return data
+
+    def get_history(self) -> list[dict]:
+        """Return a copy of the sync history (newest first)."""
+        with self._lock:
+            return list(self._history)
+
+    @staticmethod
+    def _result_to_entry(result, sync_time: float) -> dict:
+        return {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(sync_time)),
+            "duration_seconds": round(result.duration_seconds, 1),
+            "added": result.added,
+            "skipped": result.skipped,
+            "failed": result.failed,
+            "unique_shows": result.unique_shows,
+            "already_in_medusa": result.already_in_medusa,
+            "success": result.success,
+            "per_source": dict(result.per_source),
+        }
 
 
 class _HealthHandler(BaseHTTPRequestHandler):

@@ -108,6 +108,7 @@ def main() -> None:
         import uvicorn
 
         from app.webui import ConfigHolder, create_app
+        from app.webui.sync_manager import SyncManager
 
         if sync_status is None:
             from app.health import SyncStatus
@@ -115,7 +116,8 @@ def main() -> None:
             sync_status = SyncStatus()
 
         config_holder = ConfigHolder(config=config, config_path=args.config)
-        app = create_app(config_holder, sync_status=sync_status)
+        sync_manager = SyncManager(config_holder=config_holder, sync_status=sync_status)
+        app = create_app(config_holder, sync_status=sync_status, sync_manager=sync_manager)
 
         webui_port = args.webui_port or config.webui.port
         log.info("Starting web UI on port %d", webui_port)
