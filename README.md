@@ -308,9 +308,15 @@ Use port **8089** when the web UI is enabled (`--webui`), or port **8095** for t
 
 When enabled, SnakeCharmer runs a browser-based config management interface built with FastAPI, Jinja2, and HTMX. Enable it via the `--webui` CLI flag or `webui.enabled: true` in config. Runs on port 8089 by default.
 
-- **Dashboard** (`/`): shows current config summary and sync status
+- **Dashboard** (`/`): shows current config summary and sync status, auto-refreshes every 10s
+- **Sync Now** (`POST /sync/run`): trigger a manual sync from the dashboard or history page
+- **Sync History** (`/sync/history`): table of last 20 sync results with status, counts, and duration
 - **Config editors** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`, `/config/notify`): edit and save each config section
 - **Source management**: add/remove Trakt sources with per-source Medusa quality and required_words overrides
+- **Source Preview** (`POST /config/trakt/sources/preview`): fetch and display shows from a Trakt source inline
+- **Test Connection** (`POST /test/trakt`, `POST /test/medusa`): validate API credentials without saving
+- **Test Notification** (`POST /test/notify`): send a test notification to configured Apprise URLs
+- **Library** (`/library`): browse all shows in the Medusa library with client-side filtering
 - **Atomic saves**: config is written to a temp file then atomically replaced to prevent corruption
 - **Validation**: config is validated before saving; errors are shown inline
 - **Live reload**: the sync loop picks up config changes on the next cycle
@@ -370,17 +376,24 @@ snakecharmer/
 │       ├── __init__.py
 │       ├── config_io.py
 │       ├── routes.py
+│       ├── sync_manager.py
 │       ├── static/
 │       │   └── style.css
 │       └── templates/
 │           ├── base.html
 │           ├── dashboard.html
-│           └── config/
-│               ├── health.html
-│               ├── medusa.html
-│               ├── source_row.html
-│               ├── sync.html
-│               └── trakt.html
+│           ├── dashboard_status.html
+│           ├── library.html
+│           ├── config/
+│           │   ├── health.html
+│           │   ├── medusa.html
+│           │   ├── notify.html
+│           │   ├── source_preview.html
+│           │   ├── source_row.html
+│           │   ├── sync.html
+│           │   └── trakt.html
+│           └── sync/
+│               └── history.html
 ├── tests/
 │   ├── __init__.py
 │   ├── test_config.py
@@ -394,6 +407,7 @@ snakecharmer/
 │   └── test_webui.py
 ├── .gitignore
 ├── CLAUDE.md
+├── DESIGN.md
 ├── Dockerfile
 ├── config.yaml.example
 ├── logo.webp
