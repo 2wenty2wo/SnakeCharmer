@@ -2,6 +2,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 import yaml
 from fastapi.testclient import TestClient
 
@@ -1009,6 +1010,126 @@ class TestTraktOAuth:
             )
         assert response.status_code == 200
         assert "denied" in response.text.lower()
+
+    def test_oauth_start_request_failure(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch(
+            "app.webui.routes.requests.post",
+            side_effect=requests.RequestException("network error"),
+        ):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert "Failed to start device auth" in response.text
+
+    def test_oauth_poll_missing_parameters(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/oauth/trakt/poll",
+            data={
+                "device_code": "",
+                "client_id": "test_id",
+                "client_secret": "secret",
+                "interval": "5",
+                "expires_in": "600",
+            },
+        )
+        assert response.status_code == 200
+        assert "Missing OAuth parameters" in response.text
+
+    def test_oauth_poll_request_failure(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch(
+            "app.webui.routes.requests.post",
+            side_effect=requests.RequestException("timeout"),
+        ):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "Poll request failed" in response.text
+
+    def test_oauth_poll_invalid_device_code(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "Invalid device code" in response.text
+
+    def test_oauth_poll_code_already_used(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 409
+        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "Code already used" in response.text
+
+    def test_oauth_poll_slow_down_increases_interval(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "delay:6s" in response.text
+        assert "Waiting for authorization" in response.text
+
+    def test_oauth_poll_unexpected_status(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "Unexpected response (HTTP 500)" in response.text
 
 
 class TestTraktTokenStatus:
