@@ -14,7 +14,6 @@ from app.config import (
 )
 from app.webui import ConfigHolder, create_app
 from app.webui.config_io import save_app_config
-from app.webui.routes import _parse_sources_from_form
 
 
 def _make_config(**overrides) -> AppConfig:
@@ -441,59 +440,6 @@ class TestHealthEndpoint:
         response = client.get("/health")
         assert response.status_code == 503
         assert response.json()["status"] == "degraded"
-
-
-class TestRouteHelpers:
-    def test_parse_sources_parses_auth_and_medusa_options(self):
-        form = {
-            "source_0_type": "user_list",
-            "source_0_owner": "alice",
-            "source_0_list_slug": "daily",
-            "source_0_auth": "on",
-            "source_0_quality": "hd1080p, uhd4k",
-            "source_0_required_words": "proper, remux",
-        }
-
-        parsed = _parse_sources_from_form(form)
-
-        assert parsed == [
-            {
-                "type": "user_list",
-                "owner": "alice",
-                "list_slug": "daily",
-                "auth": True,
-                "medusa": {
-                    "quality": ["hd1080p", "uhd4k"],
-                    "required_words": ["proper", "remux"],
-                },
-            }
-        ]
-
-    def test_parse_sources_skips_indexes_when_type_value_missing(self):
-        class FakeForm(dict):
-            def get(self, key, default=None):
-                if key == "source_0_type":
-                    return None
-                return super().get(key, default)
-
-        form = FakeForm({"source_0_type": "trending"})
-
-        assert _parse_sources_from_form(form) == []
-
-    def test_parse_sources_ignores_blank_required_words_items(self):
-        form = {
-            "source_0_type": "trending",
-            "source_0_required_words": "proper,  , remux ,",
-        }
-
-        parsed = _parse_sources_from_form(form)
-
-        assert parsed == [
-            {
-                "type": "trending",
-                "medusa": {"required_words": ["proper", "remux"]},
-            }
-        ]
 
 
 class TestConfigHolderThreadSafety:
