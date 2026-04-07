@@ -1,12 +1,13 @@
 import argparse
 import json
 import logging
+import os
 import sys
 import threading
 import time
 from datetime import datetime, timezone
 
-from app.config import load_config
+from app.config import get_config_errors, load_config
 from app.notify import send_notification
 from app.sync import run_sync
 
@@ -78,7 +79,14 @@ def main() -> None:
 
     # Minimal logging until config is loaded
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-    config = load_config(args.config)
+
+    # Detect webui mode early so we can skip validation (config may not exist yet)
+    webui_early = args.webui or os.environ.get("SNAKECHARMER_WEBUI_ENABLED", "").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    config = load_config(args.config, skip_validate=webui_early)
 
     # Now reconfigure logging with the chosen format
     log_format = args.log_format or config.sync.log_format
@@ -142,6 +150,14 @@ def main() -> None:
             while True:
                 run_config = config_holder.get() if webui_enabled else config
                 if webui_enabled:
+                    config_errors = get_config_errors(run_config)
+                    if config_errors:
+                        log.info(
+                            "Config incomplete, waiting for setup via web UI: %s",
+                            "; ".join(config_errors),
+                        )
+                        time.sleep(30)
+                        continue
                     result = sync_manager.run_sync_blocking()
                     if result is None:
                         log.info("Skipping scheduled sync because another sync is already running")
@@ -161,19 +177,26 @@ def main() -> None:
                 log.info("Sleeping %ds until next sync...", run_config.sync.interval)
                 time.sleep(run_config.sync.interval)
         else:
-            result = run_sync(config)
-            if sync_status is not None:
-                sync_status.update(result)
-            try:
-                send_notification(config.notify, result, dry_run=config.sync.dry_run)
-            except Exception as exc:
-                log.warning("Notification error: %s", exc)
-            if webui_enabled:
+            if webui_enabled and get_config_errors(config):
                 log.info(
-                    "Sync complete. Web UI running on port %d. Press Ctrl+C to exit.",
+                    "Config incomplete. Web UI running on port %d for setup. Press Ctrl+C to exit.",
                     webui_port,
                 )
                 webui_thread.join()
+            else:
+                result = run_sync(config)
+                if sync_status is not None:
+                    sync_status.update(result)
+                try:
+                    send_notification(config.notify, result, dry_run=config.sync.dry_run)
+                except Exception as exc:
+                    log.warning("Notification error: %s", exc)
+                if webui_enabled:
+                    log.info(
+                        "Sync complete. Web UI running on port %d. Press Ctrl+C to exit.",
+                        webui_port,
+                    )
+                    webui_thread.join()
     except KeyboardInterrupt:
         log.info("Shutting down")
         sys.exit(0)

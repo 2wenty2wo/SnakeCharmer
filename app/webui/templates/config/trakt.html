@@ -39,6 +39,28 @@
     </div>
 
     <fieldset>
+        <legend>OAuth Authentication</legend>
+        <small>Required for watchlist and private list access.</small>
+        <div style="margin: 12px 0 8px">
+            {% if trakt_token_status == "valid" %}
+            <span class="config-badge">Authenticated</span>
+            {% elif trakt_token_status == "expired" %}
+            <span class="config-badge off">Token Expired</span>
+            {% else %}
+            <span class="config-badge off">Not Authenticated</span>
+            {% endif %}
+        </div>
+        <button type="button" class="btn-secondary"
+                hx-post="/oauth/trakt/start"
+                hx-target="#oauth-flow"
+                hx-swap="innerHTML"
+                hx-include="[name='client_id'],[name='client_secret']">
+            Authenticate with Trakt
+        </button>
+        <div id="oauth-flow"></div>
+    </fieldset>
+
+    <fieldset>
         <legend>Sources</legend>
         <div id="sources-list">
             {% for source in config.trakt.sources %}

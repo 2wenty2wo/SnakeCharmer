@@ -399,3 +399,45 @@ class TestMainIntegration:
 
         root = logging.getLogger()
         assert any(isinstance(h.formatter, main.JsonFormatter) for h in root.handlers)
+
+
+class TestWebuiNoConfig:
+    def test_webui_flag_skips_validation(self, tmp_path):
+        """--webui with no config file should not sys.exit."""
+        config_file = tmp_path / "nonexistent.yaml"
+        with (
+            patch("main.parse_args", return_value=_mock_args(webui=True, config=str(config_file))),
+            patch("app.webui.ConfigHolder") as mock_holder,
+            patch("app.webui.sync_manager.SyncManager"),
+            patch("app.webui.create_app"),
+            patch("main.threading.Thread") as mock_thread,
+        ):
+            mock_holder.return_value.get.return_value = AppConfig()
+            mock_thread.return_value.join.return_value = None
+            # Should not raise SystemExit
+            main.main()
+
+    def test_webui_env_var_skips_validation(self, tmp_path, monkeypatch):
+        """SNAKECHARMER_WEBUI_ENABLED=true with no config should not sys.exit."""
+        config_file = tmp_path / "nonexistent.yaml"
+        monkeypatch.setenv("SNAKECHARMER_WEBUI_ENABLED", "true")
+        with (
+            patch("main.parse_args", return_value=_mock_args(config=str(config_file))),
+            patch("app.webui.ConfigHolder") as mock_holder,
+            patch("app.webui.sync_manager.SyncManager"),
+            patch("app.webui.create_app"),
+            patch("main.threading.Thread") as mock_thread,
+        ):
+            mock_holder.return_value.get.return_value = AppConfig()
+            mock_thread.return_value.join.return_value = None
+            main.main()
+
+    def test_no_webui_flag_still_validates(self, tmp_path):
+        """Without --webui, missing config fields should still cause exit."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("trakt:\n  client_id: ''\n")
+        with (
+            patch("main.parse_args", return_value=_mock_args(config=str(config_file))),
+            pytest.raises(SystemExit),
+        ):
+            main.main()

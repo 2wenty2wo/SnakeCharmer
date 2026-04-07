@@ -2,6 +2,7 @@ import logging
 import threading
 from dataclasses import dataclass, field
 
+from app.config import get_config_errors
 from app.health import SyncStatus
 from app.sync import SyncResult, run_sync
 
@@ -20,7 +21,16 @@ class SyncManager:
     _error: str | None = None
 
     def start_sync(self) -> bool:
-        """Start a sync in a background thread. Returns False if already running."""
+        """Start a sync in a background thread.
+
+        Returns False if already running or config is incomplete.
+        """
+        config = self.config_holder.get()
+        errors = get_config_errors(config)
+        if errors:
+            with self._lock:
+                self._error = "Config incomplete: " + "; ".join(errors)
+            return False
         if not self._begin_sync():
             return False
 

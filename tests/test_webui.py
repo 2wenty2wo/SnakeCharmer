@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -820,6 +821,217 @@ class TestSourcePreview:
         assert "Show One" in response.text
         assert "Show Two" in response.text
         assert "tvdb:100" in response.text
+
+
+def _make_incomplete_config(**overrides) -> AppConfig:
+    """Create a config with missing required fields (no client_id, no medusa)."""
+    defaults = {
+        "trakt": TraktConfig(client_id="", sources=[]),
+        "medusa": MedusaConfig(url="", api_key=""),
+        "sync": SyncConfig(),
+        "health": HealthConfig(),
+        "webui": WebUIConfig(),
+        "config_dir": ".",
+    }
+    defaults.update(overrides)
+    return AppConfig(**defaults)
+
+
+def _create_incomplete_client(tmp_path, with_sync=False):
+    config = _make_incomplete_config(config_dir=str(tmp_path))
+    config_path = str(tmp_path / "config.yaml")
+    # Don't save — simulates no config file existing yet
+    holder = ConfigHolder(config=config, config_path=config_path)
+    sync_status = None
+    sync_manager = None
+    if with_sync:
+        sync_status = SyncStatus()
+        sync_manager = SyncManager(config_holder=holder, sync_status=sync_status)
+    app = create_app(holder, sync_status=sync_status, sync_manager=sync_manager)
+    return TestClient(app), holder, config_path
+
+
+class TestOnboardingBanner:
+    def test_dashboard_shows_setup_banner_when_config_incomplete(self, tmp_path):
+        client, _, _ = _create_incomplete_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Setup Required" in response.text
+        assert "trakt.client_id is required" in response.text
+
+    def test_dashboard_no_banner_when_config_complete(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Setup Required" not in response.text
+
+    def test_sync_now_disabled_when_config_incomplete(self, tmp_path):
+        client, _, _ = _create_incomplete_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "disabled" in response.text
+
+    def test_sync_run_blocked_when_config_incomplete(self, tmp_path):
+        client, _, _ = _create_incomplete_client(tmp_path, with_sync=True)
+        response = client.post("/sync/run")
+        assert response.status_code == 200
+        assert "Config incomplete" in response.text
+
+
+class TestTraktOAuth:
+    def test_oauth_start_missing_client_id(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/oauth/trakt/start",
+            data={"client_id": "", "client_secret": "secret"},
+        )
+        assert response.status_code == 200
+        assert "Client ID is required" in response.text
+
+    def test_oauth_start_missing_client_secret(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/oauth/trakt/start",
+            data={"client_id": "test_id", "client_secret": ""},
+        )
+        assert response.status_code == 200
+        assert "Client Secret is required" in response.text
+
+    def test_oauth_start_success(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "device_code": "abc123",
+            "user_code": "ABCD1234",
+            "verification_url": "https://trakt.tv/activate",
+            "expires_in": 600,
+            "interval": 5,
+        }
+        mock_resp.raise_for_status = MagicMock()
+        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert "ABCD1234" in response.text
+        assert "trakt.tv/activate" in response.text
+        assert "oauth-code" in response.text
+
+    def test_oauth_poll_success_saves_token(self, tmp_path):
+        client, holder, _ = _create_client(tmp_path)
+        holder.get().config_dir = str(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "access_token": "tok123",
+            "refresh_token": "ref456",
+            "created_at": 1000,
+            "expires_in": 100000,
+        }
+        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "successful" in response.text
+
+        # Verify token was saved
+        token_path = tmp_path / "trakt_token.json"
+        assert token_path.exists()
+        with open(token_path) as f:
+            token = json.load(f)
+        assert token["access_token"] == "tok123"
+
+    def test_oauth_poll_pending_continues(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 400
+        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "Waiting for authorization" in response.text
+        assert "hx-post" in response.text  # continues polling
+
+    def test_oauth_poll_expired(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 410
+        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "expired" in response.text.lower()
+
+    def test_oauth_poll_denied(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 418
+        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "denied" in response.text.lower()
+
+
+class TestTraktTokenStatus:
+    def test_trakt_config_page_shows_not_authenticated(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/config/trakt")
+        assert response.status_code == 200
+        assert "Not Authenticated" in response.text
+
+    def test_trakt_config_page_shows_authenticated(self, tmp_path):
+        config = _make_config(config_dir=str(tmp_path))
+        # Write a valid token file
+        import time
+
+        token = {
+            "access_token": "tok",
+            "refresh_token": "ref",
+            "created_at": int(time.time()),
+            "expires_in": 7776000,
+        }
+        (tmp_path / "trakt_token.json").write_text(json.dumps(token))
+
+        client, _, _ = _create_client(tmp_path, config=config)
+        response = client.get("/config/trakt")
+        assert response.status_code == 200
+        assert "Authenticated" in response.text
+        assert "Not Authenticated" not in response.text
 
     def test_preview_error(self, tmp_path):
         client, _, _ = _create_client(tmp_path)

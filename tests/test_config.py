@@ -3,11 +3,14 @@ import yaml
 
 from app.config import (
     PUBLIC_LISTS,
+    AppConfig,
+    MedusaConfig,
     TraktConfig,
     TraktSource,
     _normalize_trakt_lists,
     _normalize_trakt_sources,
     _to_bool,
+    get_config_errors,
     load_config,
 )
 
@@ -349,6 +352,71 @@ class TestLoadConfig:
 
         with pytest.raises(SystemExit):
             load_config(path)
+
+
+class TestGetConfigErrors:
+    def test_valid_config_returns_empty(self):
+        config = AppConfig(
+            trakt=TraktConfig(client_id="id", sources=[TraktSource(type="trending")]),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
+        )
+        assert get_config_errors(config) == []
+
+    def test_missing_client_id(self):
+        config = AppConfig(
+            trakt=TraktConfig(client_id="", sources=[TraktSource(type="trending")]),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
+        )
+        errors = get_config_errors(config)
+        assert any("trakt.client_id" in e for e in errors)
+
+    def test_missing_medusa_url(self):
+        config = AppConfig(
+            trakt=TraktConfig(client_id="id", sources=[TraktSource(type="trending")]),
+            medusa=MedusaConfig(url="", api_key="key"),
+        )
+        errors = get_config_errors(config)
+        assert any("medusa.url" in e for e in errors)
+
+    def test_missing_medusa_api_key(self):
+        config = AppConfig(
+            trakt=TraktConfig(client_id="id", sources=[TraktSource(type="trending")]),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key=""),
+        )
+        errors = get_config_errors(config)
+        assert any("medusa.api_key" in e for e in errors)
+
+    def test_no_sources(self):
+        config = AppConfig(
+            trakt=TraktConfig(client_id="id", sources=[]),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
+        )
+        errors = get_config_errors(config)
+        assert any("sources" in e for e in errors)
+
+    def test_empty_config_returns_all_errors(self):
+        config = AppConfig()
+        errors = get_config_errors(config)
+        assert len(errors) >= 3  # client_id, medusa.url, medusa.api_key, sources
+
+
+class TestSkipValidate:
+    def test_skip_validate_returns_config_without_exit(self, tmp_path):
+        data = {"trakt": {}, "medusa": {}}
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert config.trakt.client_id == ""
+        assert config.medusa.url == ""
+
+    def test_skip_validate_false_still_exits(self, tmp_path):
+        data = {"trakt": {}, "medusa": {}}
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path, skip_validate=False)
+
+    def test_missing_file_with_skip_validate(self, tmp_path):
+        config = load_config(str(tmp_path / "nonexistent.yaml"), skip_validate=True)
+        assert config.trakt.client_id == ""
 
 
 class TestToBool:
