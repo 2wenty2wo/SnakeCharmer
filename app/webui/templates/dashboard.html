@@ -8,11 +8,25 @@
         <button type="button" class="btn-primary"
                 hx-post="/sync/run"
                 hx-target="#result-banner"
-                hx-swap="innerHTML">
+                hx-swap="innerHTML"
+                {% if config_errors %}disabled title="Complete setup first"{% endif %}>
             Sync Now
         </button>
     </div>
 </div>
+
+{% if config_errors %}
+<div class="banner warning" role="alert">
+    <strong>&#9888; Setup Required</strong>
+    <p>Complete the following to start syncing:</p>
+    <ul>
+        {% for error in config_errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+    <p style="margin-top: 12px"><a href="/config/trakt" class="btn-primary" style="display: inline-block">Start Setup</a></p>
+</div>
+{% endif %}
 
 <div class="card-grid">
     <div class="card">

@@ -146,7 +146,7 @@ ENV_MAP = {
 }
 
 
-def load_config(path: str) -> AppConfig:
+def load_config(path: str, skip_validate: bool = False) -> AppConfig:
     """Load configuration from YAML file with environment variable overrides."""
     raw = {}
     try:
@@ -246,12 +246,13 @@ def load_config(path: str) -> AppConfig:
         config_dir=os.path.dirname(os.path.abspath(path)),
     )
 
-    try:
-        _validate(config)
-    except ConfigError as e:
-        for err in e.errors:
-            log.error("Config error: %s", err)
-        sys.exit(1)
+    if not skip_validate:
+        try:
+            _validate(config)
+        except ConfigError as e:
+            for err in e.errors:
+                log.error("Config error: %s", err)
+            sys.exit(1)
 
     return config
 
@@ -348,8 +349,8 @@ def _parse_medusa_add_options(raw_options) -> MedusaAddOptions:
     )
 
 
-def _validate(config: AppConfig) -> None:
-    """Validate required configuration fields."""
+def get_config_errors(config: AppConfig) -> list[str]:
+    """Return validation error messages, or empty list if config is valid."""
     errors = []
 
     if not config.trakt.client_id:
@@ -415,5 +416,11 @@ def _validate(config: AppConfig) -> None:
                     "trakt.sources[].medusa.required_words must be a list of non-empty strings"
                 )
 
+    return errors
+
+
+def _validate(config: AppConfig) -> None:
+    """Validate required configuration fields."""
+    errors = get_config_errors(config)
     if errors:
         raise ConfigError(errors)
