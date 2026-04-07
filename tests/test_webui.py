@@ -909,7 +909,7 @@ class TestTraktOAuth:
             "interval": 5,
         }
         mock_resp.raise_for_status = MagicMock()
-        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+        with patch("app.webui.routes.requests.post", return_value=mock_resp) as mock_post:
             response = client.post(
                 "/oauth/trakt/start",
                 data={"client_id": "test_id", "client_secret": "secret"},
@@ -918,6 +918,8 @@ class TestTraktOAuth:
         assert "ABCD1234" in response.text
         assert "trakt.tv/activate" in response.text
         assert "oauth-code" in response.text
+        _, kwargs = mock_post.call_args
+        assert kwargs["headers"]["trakt-api-key"] == "test_id"
 
     def test_oauth_poll_success_saves_token(self, tmp_path):
         client, holder, _ = _create_client(tmp_path)
@@ -930,7 +932,7 @@ class TestTraktOAuth:
             "created_at": 1000,
             "expires_in": 100000,
         }
-        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+        with patch("app.webui.routes.requests.post", return_value=mock_resp) as mock_post:
             response = client.post(
                 "/oauth/trakt/poll",
                 data={
@@ -943,6 +945,8 @@ class TestTraktOAuth:
             )
         assert response.status_code == 200
         assert "successful" in response.text
+        _, kwargs = mock_post.call_args
+        assert kwargs["headers"]["trakt-api-key"] == "test_id"
 
         # Verify token was saved
         token_path = tmp_path / "trakt_token.json"

@@ -515,6 +515,7 @@ async def oauth_trakt_start(request: Request):
             json={"client_id": client_id},
             headers={
                 "Content-Type": "application/json",
+                "trakt-api-key": client_id,
                 "trakt-api-version": "2",
             },
             timeout=15,
@@ -578,6 +579,7 @@ async def oauth_trakt_poll(request: Request):
             },
             headers={
                 "Content-Type": "application/json",
+                "trakt-api-key": client_id,
                 "trakt-api-version": "2",
             },
             timeout=15,

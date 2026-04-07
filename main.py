@@ -182,7 +182,24 @@ def main() -> None:
                     "Config incomplete. Web UI running on port %d for setup. Press Ctrl+C to exit.",
                     webui_port,
                 )
-                webui_thread.join()
+                while True:
+                    run_config = config_holder.get()
+                    config_errors = get_config_errors(run_config)
+                    if not config_errors and run_config.sync.interval > 0:
+                        result = sync_manager.run_sync_blocking()
+                        if result is None:
+                            log.info("Skipping scheduled sync because another sync is already running")
+                            log.info("Sleeping %ds until next sync...", run_config.sync.interval)
+                            time.sleep(run_config.sync.interval)
+                            continue
+
+                        log.info("Sleeping %ds until next sync...", run_config.sync.interval)
+                        time.sleep(run_config.sync.interval)
+                        continue
+
+                    webui_thread.join(timeout=30)
+                    if not webui_thread.is_alive():
+                        break
             else:
                 result = run_sync(config)
                 if sync_status is not None:

@@ -231,6 +231,39 @@ class TestMain:
 
         mock_thread.return_value.join.assert_called_once()
 
+    def test_webui_incomplete_config_starts_scheduled_sync_after_setup(self, base_config):
+        base_config.sync.interval = 0
+        updated_config = AppConfig(
+            trakt=base_config.trakt,
+            medusa=base_config.medusa,
+            sync=SyncConfig(dry_run=False, interval=15),
+            health=base_config.health,
+            webui=base_config.webui,
+            config_dir=base_config.config_dir,
+        )
+        mock_holder = MagicMock()
+        mock_holder.get.side_effect = [base_config, updated_config, updated_config]
+        sync_manager = MagicMock()
+        sync_manager.run_sync_blocking.side_effect = [MagicMock(), KeyboardInterrupt]
+        error_calls = iter([["missing"], [], [], []])
+
+        with (
+            patch("main.parse_args", return_value=_mock_args(webui=True)),
+            patch("main.load_config", return_value=base_config),
+            patch("app.webui.ConfigHolder", return_value=mock_holder),
+            patch("app.webui.sync_manager.SyncManager", return_value=sync_manager),
+            patch("app.webui.create_app"),
+            patch("main.threading.Thread"),
+            patch("main.get_config_errors", side_effect=lambda _: next(error_calls)),
+            patch("main.time.sleep") as mock_sleep,
+            patch("main.sys.exit", side_effect=SystemExit(0)),
+            pytest.raises(SystemExit),
+        ):
+            main.main()
+
+        sync_manager.run_sync_blocking.assert_called()
+        mock_sleep.assert_any_call(15)
+
     def test_sync_status_updated_in_single_run(self, base_config):
         base_config.health.enabled = True
         mock_result = MagicMock()
@@ -414,6 +447,7 @@ class TestWebuiNoConfig:
         ):
             mock_holder.return_value.get.return_value = AppConfig()
             mock_thread.return_value.join.return_value = None
+            mock_thread.return_value.is_alive.return_value = False
             # Should not raise SystemExit
             main.main()
 
@@ -430,6 +464,7 @@ class TestWebuiNoConfig:
         ):
             mock_holder.return_value.get.return_value = AppConfig()
             mock_thread.return_value.join.return_value = None
+            mock_thread.return_value.is_alive.return_value = False
             main.main()
 
     def test_no_webui_flag_still_validates(self, tmp_path):
