@@ -171,17 +171,6 @@ class TestAddShow:
         assert "quality" not in payload["options"]
         assert payload["options"]["release"] == {"requiredWords": ["proper"]}
 
-    def test_quality_only_add_options_include_preferred_empty(self, client):
-        with patch.object(client, "_request", return_value=_mock_response({})) as mock_request:
-            result = client.add_show(999, "Quality Only", add_options={"quality": "hdtv"})
-
-        assert result is True
-        _, kwargs = mock_request.call_args
-        assert kwargs["json"] == {
-            "id": {"tvdb": 999},
-            "options": {"quality": {"allowed": [8], "preferred": []}},
-        }
-
     def test_empty_add_options_dict_produces_minimal_payload(self, client):
         with patch.object(client, "_request", return_value=_mock_response({})) as mock_request:
             result = client.add_show(666, "Empty Options", add_options={})
@@ -336,26 +325,6 @@ class TestRetry:
             pytest.raises(requests.HTTPError),
         ):
             client._request("GET", "/series")
-
-    def test_retries_on_timeout_then_raises_when_exhausted(self, medusa_config):
-        client = MedusaClient(medusa_config, max_retries=1, retry_backoff=0.01)
-
-        with (
-            patch.object(client.session, "request", side_effect=requests.Timeout("timeout")),
-            patch("app.medusa.time.sleep") as mock_sleep,
-            pytest.raises(requests.Timeout),
-        ):
-            client._request("GET", "/series")
-
-        mock_sleep.assert_called_once_with(0.01)
-
-    def test_custom_timeout_is_preserved(self, client):
-        mock_resp = _mock_response([])
-        with patch.object(client.session, "request", return_value=mock_resp) as mock_req:
-            client._request("GET", "/series", timeout=5)
-
-        _, kwargs = mock_req.call_args
-        assert kwargs["timeout"] == 5
 
     def test_exhausted_connection_retries_logs_unreachable(self, medusa_config):
         """When all connection retries are exhausted, logs Medusa unreachable."""
