@@ -63,7 +63,7 @@ Config is in `pyproject.toml`. Rules: `E`, `F`, `W`, `I`, `UP`, `B`, `SIM`. Line
 main.py                    CLI entry point, argparse, logging setup (text/JSON), health server init, web UI init, optional interval loop
 app/config.py              Dataclass-based config: YAML loading → env var overrides → validation
 app/trakt.py               TraktClient: public list fetching, OAuth device flow, token persistence, retry with backoff
-app/medusa.py              MedusaClient: library listing and show addition via Medusa v2 API, retry with backoff
+app/medusa.py              MedusaClient: library listing (get_existing_tvdb_ids, get_series_list), show addition, quality resolution via Medusa v2 API, retry with backoff
 app/sync.py                run_sync(): orchestrates fetch → diff → add cycle, returns SyncResult metrics
 app/health.py              HTTP health endpoint: SyncStatus tracking, /health JSON responses (200 ok / 503 degraded)
 app/webui/__init__.py      FastAPI app factory (create_app), ConfigHolder thread-safe wrapper
@@ -71,7 +71,7 @@ app/webui/routes.py        HTMX-driven routes: dashboard, config sections, sync 
 app/webui/config_io.py     Config serialization: AppConfig ↔ dict ↔ YAML file, atomic writes, validation
 app/webui/sync_manager.py  SyncManager: thread-safe manual sync trigger from web UI, background execution
 app/notify.py              Apprise-based notifications: sends alerts on sync success/failure to 100+ services
-app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, config section partials, sync history, library)
+app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, dashboard_status.html, library.html, config/*.html, sync/history.html)
 app/webui/static/style.css Green Deck design system: custom CSS with design tokens, sidebar layout, DM Sans typography
 DESIGN.md                  Green Deck design system spec: colors, typography, components, spacing, elevation rules
 ```
