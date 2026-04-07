@@ -2,13 +2,23 @@
 <div class="source-row" id="source-{{ i }}">
     <div class="source-header">
         <span class="source-number">Source {{ i + 1 }}</span>
-        <button type="button" class="btn-remove"
-                hx-delete="/config/trakt/sources/{{ i }}"
-                hx-target="#source-{{ i }}"
-                hx-swap="outerHTML"
-                hx-confirm="Remove this source?">
-            Remove
-        </button>
+        <div style="display:flex;gap:8px">
+            <button type="button" class="btn-secondary"
+                    hx-post="/config/trakt/sources/preview"
+                    hx-target="#preview-{{ i }}"
+                    hx-swap="innerHTML"
+                    hx-include="[name='client_id'],[name='client_secret'],[name='username'],[name='limit'],[name='source_{{ i }}_type'],[name='source_{{ i }}_owner'],[name='source_{{ i }}_list_slug'],[name='source_{{ i }}_auth']"
+                    hx-vals='{"source_index": "{{ i }}"}'>
+                Preview
+            </button>
+            <button type="button" class="btn-remove"
+                    hx-delete="/config/trakt/sources/{{ i }}"
+                    hx-target="#source-{{ i }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Remove this source?">
+                Remove
+            </button>
+        </div>
     </div>
     <div class="source-grid">
         <label>
@@ -52,6 +62,7 @@
             <small>Comma-separated keywords</small>
         </label>
     </div>
+    <div id="preview-{{ i }}"></div>
 </div>
 <script>
 function toggleSourceFields(select, index) {

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Library - SnakeCharmer{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Library</h1>
+    <p class="page-description">Shows currently in your Medusa library.</p>
+</div>
+
+{% if error %}
+<div class="banner error" role="alert">{{ error }}</div>
+{% elif shows %}
+<input type="text" class="search-input" placeholder="Filter shows..."
+       oninput="filterLibrary(this.value)">
+<p class="library-count">{{ shows | length }} show{{ "s" if shows | length != 1 else "" }} in library</p>
+
+<div class="card-grid" id="library-grid">
+    {% for show in shows %}
+    <div class="card library-card" data-title="{{ show.title | lower }}">
+        <div class="card-header">{{ show.title }}</div>
+        {% if show.year %}
+        <div class="info-row">
+            <span class="info-label">Year</span>
+            <span class="info-value">{{ show.year }}</span>
+        </div>
+        {% endif %}
+        {% if show.network %}
+        <div class="info-row">
+            <span class="info-label">Network</span>
+            <span class="info-value">{{ show.network }}</span>
+        </div>
+        {% endif %}
+        {% if show.status %}
+        <div class="info-row">
+            <span class="info-label">Status</span>
+            <span class="info-value">
+                <span class="status-badge {{ 'status-continuing' if show.status == 'Continuing' else 'status-ended' }}">{{ show.status }}</span>
+            </span>
+        </div>
+        {% endif %}
+        <div class="info-row">
+            <span class="info-label">TVDB</span>
+            <span class="info-value" style="font-family:'JetBrains Mono',monospace;font-size:13px">{{ show.tvdb_id }}</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+function filterLibrary(query) {
+    var q = query.toLowerCase();
+    var cards = document.querySelectorAll('#library-grid .library-card');
+    for (var i = 0; i < cards.length; i++) {
+        var title = cards[i].getAttribute('data-title');
+        cards[i].style.display = title.indexOf(q) !== -1 ? '' : 'none';
+    }
+}
+</script>
+{% else %}
+<div class="empty-state">No shows in your Medusa library yet.</div>
+{% endif %}
+{% endblock %}

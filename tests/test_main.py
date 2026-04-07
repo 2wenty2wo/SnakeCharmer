@@ -96,13 +96,15 @@ class TestMain:
         )
         mock_holder = MagicMock()
         mock_holder.get.return_value = updated_config
+        sync_manager = MagicMock()
+        sync_manager.run_sync_blocking.side_effect = [MagicMock(), KeyboardInterrupt]
         with (
             patch("main.parse_args", return_value=_mock_args(webui=True)),
             patch("main.load_config", return_value=base_config),
             patch("app.webui.ConfigHolder", return_value=mock_holder),
+            patch("app.webui.sync_manager.SyncManager", return_value=sync_manager),
             patch("app.webui.create_app"),
             patch("main.threading.Thread") as mock_thread,
-            patch("main.run_sync", side_effect=[None, KeyboardInterrupt]) as mock_run_sync,
             patch("main.time.sleep") as mock_sleep,
             patch("main.sys.exit", side_effect=SystemExit(0)) as mock_exit,
             pytest.raises(SystemExit) as exc_info,
@@ -110,7 +112,7 @@ class TestMain:
             main.main()
 
         assert exc_info.value.code == 0
-        assert mock_run_sync.call_count == 2
+        assert sync_manager.run_sync_blocking.call_count == 2
         mock_sleep.assert_has_calls([call(15)])
         mock_thread.return_value.start.assert_called_once()
         mock_exit.assert_called_once_with(0)
@@ -192,6 +194,29 @@ class TestMain:
             pytest.raises(SystemExit),
         ):
             main.main()
+
+    def test_interval_mode_webui_uses_sync_manager_coordinator(self, base_config):
+        base_config.sync.interval = 30
+        sync_result = MagicMock()
+        sync_manager = MagicMock()
+        sync_manager.run_sync_blocking.side_effect = [sync_result, KeyboardInterrupt]
+
+        with (
+            patch("main.parse_args", return_value=_mock_args(webui=True)),
+            patch("main.load_config", return_value=base_config),
+            patch("app.webui.ConfigHolder"),
+            patch("app.webui.sync_manager.SyncManager", return_value=sync_manager),
+            patch("app.webui.create_app"),
+            patch("main.threading.Thread"),
+            patch("main.run_sync") as mock_run_sync,
+            patch("main.time.sleep"),
+            patch("main.sys.exit", side_effect=SystemExit(0)),
+            pytest.raises(SystemExit),
+        ):
+            main.main()
+
+        sync_manager.run_sync_blocking.assert_called()
+        mock_run_sync.assert_not_called()
 
     def test_single_run_with_webui_joins_thread(self, base_config):
         with (

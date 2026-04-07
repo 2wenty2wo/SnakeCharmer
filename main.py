@@ -108,6 +108,7 @@ def main() -> None:
         import uvicorn
 
         from app.webui import ConfigHolder, create_app
+        from app.webui.sync_manager import SyncManager
 
         if sync_status is None:
             from app.health import SyncStatus
@@ -115,7 +116,8 @@ def main() -> None:
             sync_status = SyncStatus()
 
         config_holder = ConfigHolder(config=config, config_path=args.config)
-        app = create_app(config_holder, sync_status=sync_status)
+        sync_manager = SyncManager(config_holder=config_holder, sync_status=sync_status)
+        app = create_app(config_holder, sync_status=sync_status, sync_manager=sync_manager)
 
         webui_port = args.webui_port or config.webui.port
         log.info("Starting web UI on port %d", webui_port)
@@ -139,13 +141,23 @@ def main() -> None:
         if config.sync.interval > 0:
             while True:
                 run_config = config_holder.get() if webui_enabled else config
-                result = run_sync(run_config)
-                if sync_status is not None:
-                    sync_status.update(result)
-                try:
-                    send_notification(run_config.notify, result, dry_run=run_config.sync.dry_run)
-                except Exception as exc:
-                    log.warning("Notification error: %s", exc)
+                if webui_enabled:
+                    result = sync_manager.run_sync_blocking()
+                    if result is None:
+                        log.info("Skipping scheduled sync because another sync is already running")
+                        log.info("Sleeping %ds until next sync...", run_config.sync.interval)
+                        time.sleep(run_config.sync.interval)
+                        continue
+                else:
+                    result = run_sync(run_config)
+                    if sync_status is not None:
+                        sync_status.update(result)
+                    try:
+                        send_notification(
+                            run_config.notify, result, dry_run=run_config.sync.dry_run
+                        )
+                    except Exception as exc:
+                        log.warning("Notification error: %s", exc)
                 log.info("Sleeping %ds until next sync...", run_config.sync.interval)
                 time.sleep(run_config.sync.interval)
         else:

@@ -35,6 +35,15 @@
             <small>Suppress success notifications when no new shows were added</small>
         </label>
     </fieldset>
-    <button type="submit">Save Notification Settings</button>
+    <div class="page-actions">
+        <button type="submit">Save Notification Settings</button>
+        <button type="button" class="btn-secondary"
+                hx-post="/test/notify"
+                hx-target="#result-banner"
+                hx-swap="innerHTML"
+                hx-include="[name='urls']">
+            Send Test
+        </button>
+    </div>
 </form>
 {% endblock %}
