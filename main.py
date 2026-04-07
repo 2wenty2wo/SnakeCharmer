@@ -160,9 +160,7 @@ def main() -> None:
                         continue
                     result = sync_manager.run_sync_blocking()
                     if result is None:
-                        log.info(
-                            "Skipping scheduled sync because another sync is already running"
-                        )
+                        log.info("Skipping scheduled sync because another sync is already running")
                         log.info("Sleeping %ds until next sync...", run_config.sync.interval)
                         time.sleep(run_config.sync.interval)
                         continue

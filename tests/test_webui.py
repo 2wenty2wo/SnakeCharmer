@@ -19,6 +19,7 @@ from app.config import (
 from app.health import SyncStatus
 from app.sync import SyncResult
 from app.webui import ConfigHolder, create_app
+from app.webui import routes as webui_routes
 from app.webui.config_io import save_app_config
 from app.webui.sync_manager import SyncManager
 
@@ -686,8 +687,6 @@ class TestTestConnections:
         assert "successful" in response.text
 
     def test_test_trakt_connection_error(self, tmp_path):
-        import requests
-
         client, _, _ = _create_client(tmp_path)
         with patch.object(
             __import__("app.trakt", fromlist=["TraktClient"]).TraktClient,
@@ -700,6 +699,35 @@ class TestTestConnections:
             )
         assert response.status_code == 200
         assert "Cannot reach" in response.text
+
+    def test_test_trakt_http_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        http_error = requests.HTTPError(response=MagicMock(status_code=401))
+        with patch.object(
+            __import__("app.trakt", fromlist=["TraktClient"]).TraktClient,
+            "get_shows",
+            side_effect=http_error,
+        ):
+            response = client.post(
+                "/test/trakt",
+                data={"client_id": "test_id", "client_secret": "secret", "username": "user"},
+            )
+        assert response.status_code == 200
+        assert "Trakt API error (HTTP 401)" in response.text
+
+    def test_test_trakt_unexpected_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch.object(
+            __import__("app.trakt", fromlist=["TraktClient"]).TraktClient,
+            "get_shows",
+            side_effect=RuntimeError("Boom"),
+        ):
+            response = client.post(
+                "/test/trakt",
+                data={"client_id": "test_id", "client_secret": "secret", "username": "user"},
+            )
+        assert response.status_code == 200
+        assert "Trakt test failed: Boom" in response.text
 
     def test_test_medusa_missing_fields(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
@@ -723,8 +751,6 @@ class TestTestConnections:
         assert "3" in response.text
 
     def test_test_medusa_connection_error(self, tmp_path):
-        import requests
-
         client, _, _ = _create_client(tmp_path)
         with patch.object(
             __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
@@ -737,6 +763,35 @@ class TestTestConnections:
             )
         assert response.status_code == 200
         assert "Cannot reach" in response.text
+
+    def test_test_medusa_http_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        http_error = requests.HTTPError(response=MagicMock(status_code=403))
+        with patch.object(
+            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
+            "get_existing_tvdb_ids",
+            side_effect=http_error,
+        ):
+            response = client.post(
+                "/test/medusa",
+                data={"url": "http://localhost:8081", "api_key": "testkey"},
+            )
+        assert response.status_code == 200
+        assert "Medusa API error (HTTP 403)" in response.text
+
+    def test_test_medusa_unexpected_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch.object(
+            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
+            "get_existing_tvdb_ids",
+            side_effect=RuntimeError("Nope"),
+        ):
+            response = client.post(
+                "/test/medusa",
+                data={"url": "http://localhost:8081", "api_key": "testkey"},
+            )
+        assert response.status_code == 200
+        assert "Medusa test failed: Nope" in response.text
 
     def test_test_medusa_connection_error_escapes_url(self, tmp_path):
         import requests
@@ -782,6 +837,14 @@ class TestTestNotification:
             response = client.post("/test/notify", data={"urls": "json://localhost"})
         assert response.status_code == 200
         assert "failed" in response.text.lower()
+
+    def test_test_notify_exception(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch("apprise.Apprise") as mock_cls:
+            mock_cls.side_effect = RuntimeError("notify init failed")
+            response = client.post("/test/notify", data={"urls": "json://localhost"})
+        assert response.status_code == 200
+        assert "Notification test failed: notify init failed" in response.text
 
 
 class TestSourcePreview:
@@ -1221,8 +1284,6 @@ class TestLibrary:
         assert "No shows" in response.text
 
     def test_library_connection_error(self, tmp_path):
-        import requests
-
         client, _, _ = _create_client(tmp_path)
         with patch.object(
             __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
@@ -1232,6 +1293,54 @@ class TestLibrary:
             response = client.get("/library")
         assert response.status_code == 200
         assert "Cannot reach" in response.text
+
+    def test_library_http_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        http_error = requests.HTTPError(response=MagicMock(status_code=401))
+        with patch.object(
+            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
+            "get_series_list",
+            side_effect=http_error,
+        ):
+            response = client.get("/library")
+        assert response.status_code == 200
+        assert "Medusa API error (HTTP 401)" in response.text
+
+    def test_library_unexpected_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        with patch.object(
+            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
+            "get_series_list",
+            side_effect=RuntimeError("bad parser"),
+        ):
+            response = client.get("/library")
+        assert response.status_code == 200
+        assert "Failed to fetch library: bad parser" in response.text
+
+
+class TestRouteHelpers:
+    def test_get_trakt_token_status_expired_and_invalid(self, tmp_path):
+        config = _make_config(config_dir=str(tmp_path))
+
+        expired_token = {
+            "access_token": "tok",
+            "created_at": 1,
+            "expires_in": 10,
+        }
+        (tmp_path / "trakt_token.json").write_text(json.dumps(expired_token))
+        assert webui_routes._get_trakt_token_status(config) == "expired"
+
+        (tmp_path / "trakt_token.json").write_text("{not valid json")
+        assert webui_routes._get_trakt_token_status(config) == "none"
+
+    def test_parse_sources_from_form_skips_missing_type(self):
+        form = {
+            "source_0_type": "trending",
+            "source_1_owner": "missing_type",
+        }
+        parsed = webui_routes._parse_sources_from_form(form)
+        assert len(parsed) == 1
+        assert parsed[0]["type"] == "trending"
 
 
 class TestSyncStatusHistory:
