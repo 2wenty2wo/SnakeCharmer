@@ -64,6 +64,48 @@ class TestGetExistingTvdbIds:
             client.get_existing_tvdb_ids()
 
 
+class TestGetSeriesList:
+    def test_normalizes_dict_year_to_start(self, client):
+        series = [
+            {
+                "title": "Future Show",
+                "id": {"tvdb": 123, "imdb": "tt123"},
+                "year": {"start": 2025, "end": 2026},
+                "status": "continuing",
+                "network": "Net",
+            }
+        ]
+        with patch.object(client, "_request", return_value=_mock_response(series)):
+            shows = client.get_series_list()
+
+        assert shows[0]["year"] == 2025
+
+    def test_normalizes_dict_year_to_end_when_start_missing(self, client):
+        series = [
+            {
+                "title": "Ended Show",
+                "id": {"tvdb": 456},
+                "year": {"end": 2019},
+            }
+        ]
+        with patch.object(client, "_request", return_value=_mock_response(series)):
+            shows = client.get_series_list()
+
+        assert shows[0]["year"] == 2019
+
+    def test_keeps_scalar_year_values(self, client):
+        series = [
+            {"title": "Show A", "id": {"tvdb": 1}, "year": "2024"},
+            {"title": "Show B", "id": {"tvdb": 2}, "year": 2023},
+        ]
+        with patch.object(client, "_request", return_value=_mock_response(series)):
+            shows = client.get_series_list()
+
+        years = [show["year"] for show in shows]
+        assert "2024" in years
+        assert 2023 in years
+
+
 class TestAddShow:
     def test_adds_show_successfully(self, client):
         with patch.object(client, "_request", return_value=_mock_response({})) as mock_request:
