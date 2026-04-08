@@ -942,6 +942,83 @@ class TestOnboardingBanner:
         assert "Config incomplete" in response.text
 
 
+class TestOnboardingPartialSave:
+    """Verify that config sections can be saved independently during onboarding."""
+
+    def test_save_trakt_with_empty_medusa(self, tmp_path):
+        """Saving valid Trakt settings should succeed even when Medusa is not configured."""
+        client, holder, config_path = _create_incomplete_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "my_id",
+                "client_secret": "my_secret",
+                "username": "myuser",
+                "limit": "50",
+                "source_0_type": "trending",
+            },
+        )
+        assert response.status_code == 200
+        assert "saved" in response.text.lower()
+        assert holder.get().trakt.client_id == "my_id"
+
+        with open(config_path) as f:
+            raw = yaml.safe_load(f)
+        assert raw["trakt"]["client_id"] == "my_id"
+
+    def test_save_medusa_with_empty_trakt(self, tmp_path):
+        """Saving valid Medusa settings should succeed even when Trakt is not configured."""
+        client, holder, config_path = _create_incomplete_client(tmp_path)
+        response = client.post(
+            "/config/medusa",
+            data={"url": "http://localhost:8081", "api_key": "my_key"},
+        )
+        assert response.status_code == 200
+        assert "saved" in response.text.lower()
+        assert holder.get().medusa.url == "http://localhost:8081"
+        assert holder.get().medusa.api_key == "my_key"
+
+    def test_save_trakt_invalid_still_errors_during_onboarding(self, tmp_path):
+        """Section-specific errors are still caught even when other sections are empty."""
+        client, _, _ = _create_incomplete_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "",
+                "client_secret": "",
+                "username": "",
+                "limit": "50",
+                "source_0_type": "trending",
+            },
+        )
+        assert response.status_code == 200
+        assert "error" in response.text.lower()
+        assert "trakt.client_id" in response.text
+
+    def test_partial_save_writes_yaml(self, tmp_path):
+        """Partial config saves should write the YAML file to disk."""
+        client, _, config_path = _create_incomplete_client(tmp_path)
+        client.post(
+            "/config/medusa",
+            data={"url": "http://medusa:8081", "api_key": "key123"},
+        )
+        with open(config_path) as f:
+            raw = yaml.safe_load(f)
+        assert raw["medusa"]["url"] == "http://medusa:8081"
+        assert raw["medusa"]["api_key"] == "key123"
+
+    def test_partial_save_updates_holder(self, tmp_path):
+        """Partial config saves should update the in-memory ConfigHolder."""
+        client, holder, _ = _create_incomplete_client(tmp_path)
+        assert holder.get().medusa.url == ""
+
+        client.post(
+            "/config/medusa",
+            data={"url": "http://medusa:8081", "api_key": "key123"},
+        )
+        assert holder.get().medusa.url == "http://medusa:8081"
+
+
 class TestTraktOAuth:
     def test_oauth_start_missing_client_id(self, tmp_path):
         client, _, _ = _create_client(tmp_path)

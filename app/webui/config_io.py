@@ -103,8 +103,8 @@ def reload_config(path: str) -> AppConfig:
     return load_config_dict(raw, path)
 
 
-def load_config_dict(raw: dict, path: str) -> AppConfig:
-    """Build and validate AppConfig from an in-memory dict."""
+def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfig:
+    """Build and optionally validate AppConfig from an in-memory dict."""
     # Re-use load_config internals but we need to avoid sys.exit.
     from app.config import (
         HealthConfig,
@@ -187,5 +187,6 @@ def load_config_dict(raw: dict, path: str) -> AppConfig:
         config_dir=os.path.dirname(os.path.abspath(path)),
     )
 
-    _validate(config)
+    if validate:
+        _validate(config)
     return config
