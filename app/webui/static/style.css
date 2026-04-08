@@ -257,8 +257,8 @@ ul, ol {
     border-radius: var(--gd-radius-pill);
     font-size: 11px;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    text-transform: none;
+    letter-spacing: normal;
 }
 
 .status-ok {
@@ -578,8 +578,8 @@ button[type="submit"] {
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    letter-spacing: normal;
+    text-transform: none;
     cursor: pointer;
     transition: background-color 0.2s ease, transform 0.15s ease;
     width: auto;
@@ -617,8 +617,8 @@ button[type="submit"]:disabled {
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
     font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    letter-spacing: normal;
+    text-transform: none;
     cursor: pointer;
     text-decoration: none;
     transition: background-color 0.2s ease, transform 0.15s ease;
