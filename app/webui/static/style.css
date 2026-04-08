@@ -763,6 +763,14 @@ button[type="submit"]:disabled {
     color: var(--gd-text-secondary);
 }
 
+.sync-indicator-inline {
+    display: none;
+}
+
+.sync-indicator-inline.htmx-request {
+    display: flex;
+}
+
 .spinner {
     width: 16px;
     height: 16px;
