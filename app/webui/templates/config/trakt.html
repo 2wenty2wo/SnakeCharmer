@@ -9,19 +9,19 @@
 <form hx-post="/config/trakt" hx-target="#result-banner" hx-swap="innerHTML">
     <fieldset>
         <legend>Credentials</legend>
-        <label>
+        <label class="field-label">
             Client ID
             <input type="text" name="client_id" value="{{ config.trakt.client_id }}" placeholder="Your Trakt client ID" required>
         </label>
-        <label>
+        <label class="field-label">
             Client Secret
             <input type="password" name="client_secret" value="{{ config.trakt.client_secret }}" placeholder="Your Trakt client secret">
         </label>
-        <label>
+        <label class="field-label">
             Username
             <input type="text" name="username" value="{{ config.trakt.username }}" placeholder="Your Trakt username">
         </label>
-        <label>
+        <label class="field-label">
             Limit
             <input type="number" name="limit" value="{{ config.trakt.limit }}" min="1" max="1000">
             <small>Max shows to fetch from public lists (trending/popular/watched)</small>

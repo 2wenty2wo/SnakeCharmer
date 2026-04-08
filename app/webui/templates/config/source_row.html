@@ -21,7 +21,7 @@
         </div>
     </div>
     <div class="source-grid">
-        <label>
+        <label class="field-label">
             Type
             <select name="source_{{ i }}_type" onchange="toggleSourceFields(this, {{ i }})">
                 <option value="trending" {{ "selected" if source.type == "trending" }}>Trending</option>
@@ -32,29 +32,29 @@
             </select>
         </label>
         <div id="source_{{ i }}_user_list_fields" style="{{ '' if source.type == 'user_list' else 'display:none' }}">
-            <label>
+            <label class="field-label">
                 Owner
                 <input type="text" name="source_{{ i }}_owner" value="{{ source.owner }}" placeholder="List owner username">
             </label>
-            <label>
+            <label class="field-label">
                 List Slug
                 <input type="text" name="source_{{ i }}_list_slug" value="{{ source.list_slug }}" placeholder="list-slug">
             </label>
         </div>
     </div>
     <div class="source-grid">
-        <label>
+        <label class="field-label">
             <input type="checkbox" name="source_{{ i }}_auth" {{ "checked" if source.auth }}>
             Requires OAuth
         </label>
-        <label>
+        <label class="field-label">
             Quality
             <input type="text" name="source_{{ i }}_quality"
                    value="{{ source.medusa.quality | join(', ') if source.medusa.quality is iterable and source.medusa.quality is not string else source.medusa.quality or '' }}"
                    placeholder="e.g. hd1080p or hd,uhd4k">
             <small>Preset or comma-separated values</small>
         </label>
-        <label>
+        <label class="field-label">
             Required Words
             <input type="text" name="source_{{ i }}_required_words"
                    value="{{ source.medusa.required_words | join(', ') if source.medusa.required_words else '' }}"

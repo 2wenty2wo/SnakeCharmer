@@ -42,7 +42,7 @@ html {
 body {
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 22px;
     font-weight: 400;
     color: var(--gd-text);
     background: var(--gd-bg);
@@ -408,17 +408,31 @@ form {
     max-width: 720px;
 }
 
-label {
+.field-label {
     display: block;
     margin-bottom: 16px;
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
     color: var(--gd-text);
 }
 
-label small {
+.field-label input,
+.field-label select,
+.field-label textarea {
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+.field-label small {
     display: block;
     margin-top: 4px;
+    font-size: 12px;
+    line-height: 18px;
+    letter-spacing: normal;
+    text-transform: none;
     color: var(--gd-text-secondary);
     font-weight: 400;
 }
@@ -505,14 +519,14 @@ input[type="checkbox"]:checked::after {
 }
 
 /* Checkbox labels should be inline */
-label:has(> input[type="checkbox"]) {
+.field-label:has(> input[type="checkbox"]) {
     display: flex;
     align-items: flex-start;
     gap: 0;
     cursor: pointer;
 }
 
-label:has(> input[type="checkbox"]) small {
+.field-label:has(> input[type="checkbox"]) small {
     margin-left: 24px;
 }
 
