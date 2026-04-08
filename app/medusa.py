@@ -115,12 +115,15 @@ class MedusaClient(RetryClient):
             tvdb_id = series.get("id", {}).get("tvdb")
             if not tvdb_id:
                 continue
+            year = series.get("year")
+            if isinstance(year, dict):
+                year = year.get("start") or year.get("end")
             shows.append(
                 {
                     "title": series.get("title", "Unknown"),
                     "tvdb_id": int(tvdb_id),
                     "imdb_id": series.get("id", {}).get("imdb"),
-                    "year": series.get("year"),
+                    "year": year,
                     "status": series.get("status"),
                     "network": series.get("network"),
                 }
