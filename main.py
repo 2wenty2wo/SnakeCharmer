@@ -74,6 +74,110 @@ def _setup_logging(log_format: str) -> None:
     root.addHandler(handler)
 
 
+def _run_once(config, sync_status, log) -> None:
+    """Run a single sync cycle with notification and status update."""
+    result = run_sync(config)
+    if sync_status is not None:
+        sync_status.update(result)
+    try:
+        send_notification(config.notify, result, dry_run=config.sync.dry_run)
+    except Exception as exc:
+        log.warning("Notification error: %s", exc)
+
+
+def _start_webui(config, args, sync_status, log):
+    """Initialize and start the web UI in a daemon thread.
+
+    Returns (webui_thread, config_holder, sync_manager, webui_port).
+    """
+    import uvicorn
+
+    from app.webui import ConfigHolder, create_app
+    from app.webui.sync_manager import SyncManager
+
+    if sync_status is None:
+        from app.health import SyncStatus
+
+        sync_status = SyncStatus()
+
+    config_holder = ConfigHolder(config=config, config_path=args.config)
+    sync_manager = SyncManager(config_holder=config_holder, sync_status=sync_status)
+    app = create_app(config_holder, sync_status=sync_status, sync_manager=sync_manager)
+
+    webui_port = args.webui_port or config.webui.port
+    log.info("Starting web UI on port %d", webui_port)
+    webui_thread = threading.Thread(
+        target=uvicorn.run,
+        args=(app,),
+        kwargs={"host": "0.0.0.0", "port": webui_port, "log_level": "warning"},
+        daemon=True,
+    )
+    webui_thread.start()
+    return webui_thread, config_holder, sync_manager, sync_status, webui_port
+
+
+def _run_webui_sync_cycle(config_holder, sync_manager, log):
+    """Attempt a sync via the web UI sync manager.
+
+    Returns (result, run_config) on success, or None if the config is
+    incomplete or a sync is already running.
+    """
+    run_config = config_holder.get()
+    config_errors = get_config_errors(run_config)
+    if config_errors:
+        log.info(
+            "Config incomplete, waiting for setup via web UI: %s",
+            "; ".join(config_errors),
+        )
+        return None
+    result = sync_manager.run_sync_blocking()
+    if result is None:
+        log.info("Skipping scheduled sync because another sync is already running")
+    return result, run_config
+
+
+def _run_interval_loop(config, config_holder, sync_manager, sync_status, webui_enabled, log):
+    """Run the sync-sleep-repeat loop."""
+    while True:
+        if webui_enabled:
+            outcome = _run_webui_sync_cycle(config_holder, sync_manager, log)
+            if outcome is None:
+                time.sleep(30)
+                continue
+            result, run_config = outcome
+            if result is None:
+                log.info("Sleeping %ds until next sync...", run_config.sync.interval)
+                time.sleep(run_config.sync.interval)
+                continue
+        else:
+            run_config = config
+            _run_once(config, sync_status, log)
+        log.info("Sleeping %ds until next sync...", run_config.sync.interval)
+        time.sleep(run_config.sync.interval)
+
+
+def _run_webui_wait_loop(config_holder, sync_manager, webui_thread, webui_port, log):
+    """Wait for config setup via web UI, then start syncing when ready."""
+    log.info(
+        "Config incomplete. Web UI running on port %d for setup. Press Ctrl+C to exit.",
+        webui_port,
+    )
+    while True:
+        run_config = config_holder.get()
+        config_errors = get_config_errors(run_config)
+        if not config_errors and run_config.sync.interval > 0:
+            result = sync_manager.run_sync_blocking()
+            if result is None:
+                log.info("Skipping scheduled sync because another sync is already running")
+            log.info("Sleeping %ds until next sync...", run_config.sync.interval)
+            time.sleep(run_config.sync.interval)
+            continue
+
+        webui_thread.join(timeout=30)
+        if not webui_thread.is_alive():
+            break
+
+
 def main() -> None:
     args = parse_args()
 
@@ -112,33 +216,15 @@ def main() -> None:
 
     webui_enabled = args.webui or config.webui.enabled
 
+    config_holder = None
+    sync_manager = None
+    webui_thread = None
+    webui_port = None
+
     if webui_enabled:
-        import uvicorn
-
-        from app.webui import ConfigHolder, create_app
-        from app.webui.sync_manager import SyncManager
-
-        if sync_status is None:
-            from app.health import SyncStatus
-
-            sync_status = SyncStatus()
-
-        config_holder = ConfigHolder(config=config, config_path=args.config)
-        sync_manager = SyncManager(config_holder=config_holder, sync_status=sync_status)
-        app = create_app(config_holder, sync_status=sync_status, sync_manager=sync_manager)
-
-        webui_port = args.webui_port or config.webui.port
-        log.info("Starting web UI on port %d", webui_port)
-        webui_thread = threading.Thread(
-            target=uvicorn.run,
-            args=(app,),
-            kwargs={"host": "0.0.0.0", "port": webui_port, "log_level": "warning"},
-            daemon=True,
+        webui_thread, config_holder, sync_manager, sync_status, webui_port = _start_webui(
+            config, args, sync_status, log
         )
-        webui_thread.start()
-
-        # When webui is active, skip starting the stdlib health server
-        # since the webui already serves /health
     elif config.health.enabled:
         from app.health import start_health_server
 
@@ -147,75 +233,17 @@ def main() -> None:
 
     try:
         if config.sync.interval > 0:
-            while True:
-                run_config = config_holder.get() if webui_enabled else config
-                if webui_enabled:
-                    config_errors = get_config_errors(run_config)
-                    if config_errors:
-                        log.info(
-                            "Config incomplete, waiting for setup via web UI: %s",
-                            "; ".join(config_errors),
-                        )
-                        time.sleep(30)
-                        continue
-                    result = sync_manager.run_sync_blocking()
-                    if result is None:
-                        log.info("Skipping scheduled sync because another sync is already running")
-                        log.info("Sleeping %ds until next sync...", run_config.sync.interval)
-                        time.sleep(run_config.sync.interval)
-                        continue
-                else:
-                    result = run_sync(run_config)
-                    if sync_status is not None:
-                        sync_status.update(result)
-                    try:
-                        send_notification(
-                            run_config.notify, result, dry_run=run_config.sync.dry_run
-                        )
-                    except Exception as exc:
-                        log.warning("Notification error: %s", exc)
-                log.info("Sleeping %ds until next sync...", run_config.sync.interval)
-                time.sleep(run_config.sync.interval)
+            _run_interval_loop(config, config_holder, sync_manager, sync_status, webui_enabled, log)
+        elif webui_enabled and get_config_errors(config):
+            _run_webui_wait_loop(config_holder, sync_manager, webui_thread, webui_port, log)
         else:
-            if webui_enabled and get_config_errors(config):
+            _run_once(config, sync_status, log)
+            if webui_enabled:
                 log.info(
-                    "Config incomplete. Web UI running on port %d for setup. Press Ctrl+C to exit.",
+                    "Sync complete. Web UI running on port %d. Press Ctrl+C to exit.",
                     webui_port,
                 )
-                while True:
-                    run_config = config_holder.get()
-                    config_errors = get_config_errors(run_config)
-                    if not config_errors and run_config.sync.interval > 0:
-                        result = sync_manager.run_sync_blocking()
-                        if result is None:
-                            log.info(
-                                "Skipping scheduled sync because another sync is already running"
-                            )
-                            log.info("Sleeping %ds until next sync...", run_config.sync.interval)
-                            time.sleep(run_config.sync.interval)
-                            continue
-
-                        log.info("Sleeping %ds until next sync...", run_config.sync.interval)
-                        time.sleep(run_config.sync.interval)
-                        continue
-
-                    webui_thread.join(timeout=30)
-                    if not webui_thread.is_alive():
-                        break
-            else:
-                result = run_sync(config)
-                if sync_status is not None:
-                    sync_status.update(result)
-                try:
-                    send_notification(config.notify, result, dry_run=config.sync.dry_run)
-                except Exception as exc:
-                    log.warning("Notification error: %s", exc)
-                if webui_enabled:
-                    log.info(
-                        "Sync complete. Web UI running on port %d. Press Ctrl+C to exit.",
-                        webui_port,
-                    )
-                    webui_thread.join()
+                webui_thread.join()
     except KeyboardInterrupt:
         log.info("Shutting down")
         sys.exit(0)

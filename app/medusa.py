@@ -1,13 +1,14 @@
 import logging
-import time
 
 import requests
 
 from app.config import MedusaConfig
+from app.http_client import REQUEST_TIMEOUT, RetryClient
+
+# Re-export for backward compatibility
+__all__ = ["MedusaClient", "REQUEST_TIMEOUT", "resolve_quality"]
 
 log = logging.getLogger(__name__)
-
-REQUEST_TIMEOUT = 30
 
 # Medusa individual quality values (bitmask flags)
 _QUALITY_VALUES = {
@@ -71,17 +72,23 @@ def resolve_quality(quality: str | list[str]) -> list[int]:
     return _bitmask_to_quality_list(combined_bitmask)
 
 
-class MedusaClient:
+class MedusaClient(RetryClient):
+    _service_name = "Medusa"
+
     def __init__(self, config: MedusaConfig, max_retries: int = 3, retry_backoff: float = 2.0):
-        self.base_url = f"{config.url}/api/v2"
-        self.max_retries = max_retries
-        self.retry_backoff = retry_backoff
-        self.session = requests.Session()
-        self.session.headers.update(
+        self._config_url = config.url
+        session = requests.Session()
+        session.headers.update(
             {
                 "Content-Type": "application/json",
                 "x-api-key": config.api_key,
             }
+        )
+        super().__init__(
+            session=session,
+            base_url=f"{config.url}/api/v2",
+            max_retries=max_retries,
+            retry_backoff=retry_backoff,
         )
 
     def get_existing_tvdb_ids(self) -> set[int]:
@@ -157,43 +164,5 @@ class MedusaClient:
                 return False
             raise
 
-    def _request(self, method: str, path: str, **kwargs) -> requests.Response:
-        """Make an HTTP request to the Medusa API with retry on transient failures."""
-        url = f"{self.base_url}{path}"
-        kwargs.setdefault("timeout", REQUEST_TIMEOUT)
-        last_exception = None
-
-        for attempt in range(self.max_retries + 1):
-            try:
-                resp = self.session.request(method, url, **kwargs)
-                if resp.status_code >= 500 and attempt < self.max_retries:
-                    delay = self.retry_backoff ** (attempt + 1)
-                    log.warning(
-                        "Medusa returned %d, retrying in %.1fs (attempt %d/%d)",
-                        resp.status_code,
-                        delay,
-                        attempt + 1,
-                        self.max_retries,
-                    )
-                    time.sleep(delay)
-                    continue
-                resp.raise_for_status()
-                return resp
-            except (requests.ConnectionError, requests.Timeout) as e:
-                last_exception = e
-                if attempt < self.max_retries:
-                    delay = self.retry_backoff ** (attempt + 1)
-                    log.warning(
-                        "Medusa request failed (%s), retrying in %.1fs (attempt %d/%d)",
-                        type(e).__name__,
-                        delay,
-                        attempt + 1,
-                        self.max_retries,
-                    )
-                    time.sleep(delay)
-                    continue
-                if isinstance(e, requests.ConnectionError):
-                    log.error("Cannot reach Medusa at %s - is it running?", self.base_url)
-                raise
-
-        raise last_exception  # type: ignore[misc]
+    def _on_connection_exhausted(self, exc: requests.ConnectionError) -> None:
+        log.error("Cannot reach Medusa at %s - is it running?", self._config_url)

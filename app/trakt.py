@@ -7,12 +7,12 @@ from dataclasses import dataclass
 import requests
 
 from app.config import TraktConfig, TraktSource
+from app.http_client import REQUEST_TIMEOUT, RetryClient
 
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://api.trakt.tv"
 TOKEN_FILE = "trakt_token.json"
-REQUEST_TIMEOUT = 30
 
 
 @dataclass
@@ -23,7 +23,9 @@ class TraktShow:
     year: int | None = None
 
 
-class TraktClient:
+class TraktClient(RetryClient):
+    _service_name = "Trakt"
+
     def __init__(
         self,
         config: TraktConfig,
@@ -33,15 +35,19 @@ class TraktClient:
     ):
         self.config = config
         self.token_path = os.path.join(config_dir, TOKEN_FILE)
-        self.max_retries = max_retries
-        self.retry_backoff = retry_backoff
-        self.session = requests.Session()
-        self.session.headers.update(
+        session = requests.Session()
+        session.headers.update(
             {
                 "Content-Type": "application/json",
                 "trakt-api-version": "2",
                 "trakt-api-key": config.client_id,
             }
+        )
+        super().__init__(
+            session=session,
+            base_url=BASE_URL,
+            max_retries=max_retries,
+            retry_backoff=retry_backoff,
         )
 
     def get_shows(self, source: TraktSource | str) -> list[TraktShow]:
@@ -86,15 +92,24 @@ class TraktClient:
             auth=True,
         )
 
-    def _fetch_public(
-        self, path: str, source_list: str, nested_key: str | None = None
+    def _fetch_shows(
+        self,
+        path: str,
+        source_list: str,
+        nested_key: str | None = None,
+        limit: int | None = None,
     ) -> list[TraktShow]:
-        """Fetch shows from a public Trakt endpoint with limit support."""
-        page_size = min(self.config.limit, 100)
-        params = {"limit": page_size, "page": 1}
-        shows = []
+        """Fetch shows from a Trakt endpoint with pagination.
 
-        while len(shows) < self.config.limit:
+        When *limit* is given, at most that many shows are returned and the page
+        size is capped accordingly.  When *limit* is ``None`` all pages are
+        fetched.
+        """
+        page_size = min(limit, 100) if limit is not None else 100
+        params: dict = {"limit": page_size, "page": 1}
+        shows: list[TraktShow] = []
+
+        while limit is None or len(shows) < limit:
             resp = self._request("GET", path, params=params)
             items = resp.json()
             if not items:
@@ -111,36 +126,22 @@ class TraktClient:
                 break
             params["page"] += 1
 
-        shows = shows[: self.config.limit]
+        if limit is not None:
+            shows = shows[:limit]
         log.info("Fetched %d shows from Trakt list '%s'", len(shows), source_list)
         return shows
+
+    def _fetch_public(
+        self, path: str, source_list: str, nested_key: str | None = None
+    ) -> list[TraktShow]:
+        """Fetch shows from a public Trakt endpoint with limit support."""
+        return self._fetch_shows(path, source_list, nested_key, limit=self.config.limit)
 
     def _fetch_user_list(
         self, path: str, source_list: str, nested_key: str | None = None
     ) -> list[TraktShow]:
         """Fetch shows from a user-specific Trakt endpoint with pagination."""
-        params = {"page": 1, "limit": 100}
-        shows = []
-
-        while True:
-            resp = self._request("GET", path, params=params)
-            items = resp.json()
-            if not items:
-                break
-
-            for item in items:
-                show_data = item.get(nested_key, item) if nested_key else item
-                show = self._parse_show(show_data)
-                if show:
-                    shows.append(show)
-
-            page_count = int(resp.headers.get("X-Pagination-Page-Count", 1))
-            if params["page"] >= page_count:
-                break
-            params["page"] += 1
-
-        log.info("Fetched %d shows from Trakt list '%s'", len(shows), source_list)
-        return shows
+        return self._fetch_shows(path, source_list, nested_key, limit=None)
 
     def _parse_show(self, data: dict) -> TraktShow | None:
         """Parse a show object from Trakt API response."""
@@ -297,52 +298,16 @@ class TraktClient:
 
     # --- HTTP Helpers ---
 
-    def _request(self, method: str, path: str, **kwargs) -> requests.Response:
-        """Make an HTTP request to the Trakt API with retry on transient failures."""
-        url = f"{BASE_URL}{path}"
-        kwargs.setdefault("timeout", REQUEST_TIMEOUT)
-
-        for attempt in range(self.max_retries + 1):
-            try:
-                resp = self.session.request(method, url, **kwargs)
-
-                # Rate limit: wait and retry without consuming an attempt
-                if resp.status_code == 429:
-                    retry_after = int(resp.headers.get("Retry-After", 10))
-                    log.warning("Rate limited, waiting %ds", retry_after)
-                    time.sleep(retry_after)
-                    resp = self.session.request(method, url, **kwargs)
-                    if resp.status_code == 429:
-                        resp.raise_for_status()
-
-                if resp.status_code >= 500 and attempt < self.max_retries:
-                    delay = self.retry_backoff ** (attempt + 1)
-                    log.warning(
-                        "Trakt returned %d, retrying in %.1fs (attempt %d/%d)",
-                        resp.status_code,
-                        delay,
-                        attempt + 1,
-                        self.max_retries,
-                    )
-                    time.sleep(delay)
-                    continue
-
-                resp.raise_for_status()
-                return resp
-            except (requests.ConnectionError, requests.Timeout) as e:
-                if attempt < self.max_retries:
-                    delay = self.retry_backoff ** (attempt + 1)
-                    log.warning(
-                        "Trakt request failed (%s), retrying in %.1fs (attempt %d/%d)",
-                        type(e).__name__,
-                        delay,
-                        attempt + 1,
-                        self.max_retries,
-                    )
-                    time.sleep(delay)
-                    continue
-                raise
-
-        # All retry attempts exhausted with 5xx responses
-        resp.raise_for_status()  # type: ignore[possibly-undefined]
-        return resp  # type: ignore[possibly-undefined]
+    def _handle_rate_limit(
+        self, resp: requests.Response, method: str, url: str, **kwargs
+    ) -> requests.Response | None:
+        """Handle Trakt 429 rate limiting using the Retry-After header."""
+        if resp.status_code != 429:
+            return None
+        retry_after = int(resp.headers.get("Retry-After", 10))
+        log.warning("Rate limited, waiting %ds", retry_after)
+        time.sleep(retry_after)
+        resp = self.session.request(method, url, **kwargs)
+        if resp.status_code == 429:
+            resp.raise_for_status()
+        return resp

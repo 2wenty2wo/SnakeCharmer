@@ -45,8 +45,12 @@ def create_app(config_holder: ConfigHolder, sync_status=None, sync_manager=None)
     app.state.sync_status = sync_status
     app.state.sync_manager = sync_manager
 
+    from app.webui.oauth import router as oauth_router
     from app.webui.routes import router
+    from app.webui.test_routes import router as test_router
 
     app.include_router(router)
+    app.include_router(oauth_router)
+    app.include_router(test_router)
 
     return app
