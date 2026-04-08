@@ -195,7 +195,7 @@ ul, ol {
 .card {
     background: var(--gd-surface);
     border-radius: var(--gd-radius-lg);
-    padding: 20px;
+    padding: 16px;
     transition: background-color 0.2s ease;
 }
 
@@ -206,7 +206,7 @@ ul, ol {
 .card-header {
     font-size: 16px;
     font-weight: 700;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     display: flex;
     align-items: flex-start;
     flex-wrap: wrap;
@@ -219,8 +219,8 @@ ul, ol {
 }
 
 .card-footer {
-    margin-top: 14px;
-    padding-top: 10px;
+    margin-top: 12px;
+    padding-top: 8px;
 }
 
 /* === Info Rows === */
