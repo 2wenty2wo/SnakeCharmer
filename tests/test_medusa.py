@@ -253,7 +253,7 @@ class TestRetry:
                 "request",
                 side_effect=[requests.ConnectionError("refused"), success],
             ),
-            patch("app.medusa.time.sleep"),
+            patch("app.http_client.time.sleep"),
         ):
             resp = client._request("GET", "/series")
 
@@ -266,7 +266,7 @@ class TestRetry:
 
         with (
             patch.object(client.session, "request", side_effect=[error_resp, success]),
-            patch("app.medusa.time.sleep"),
+            patch("app.http_client.time.sleep"),
         ):
             resp = client._request("GET", "/series")
 
@@ -292,7 +292,7 @@ class TestRetry:
                 "request",
                 side_effect=requests.ConnectionError("refused"),
             ),
-            patch("app.medusa.time.sleep"),
+            patch("app.http_client.time.sleep"),
             pytest.raises(requests.ConnectionError),
         ):
             client._request("GET", "/series")
@@ -307,7 +307,7 @@ class TestRetry:
                 "request",
                 side_effect=[requests.Timeout("timeout"), success],
             ),
-            patch("app.medusa.time.sleep"),
+            patch("app.http_client.time.sleep"),
         ):
             resp = client._request("GET", "/series")
 
@@ -321,7 +321,7 @@ class TestRetry:
 
         with (
             patch.object(client.session, "request", return_value=error_resp),
-            patch("app.medusa.time.sleep"),
+            patch("app.http_client.time.sleep"),
             pytest.raises(requests.HTTPError),
         ):
             client._request("GET", "/series")
@@ -336,7 +336,7 @@ class TestRetry:
                 "request",
                 side_effect=requests.ConnectionError("refused"),
             ),
-            patch("app.medusa.time.sleep"),
+            patch("app.http_client.time.sleep"),
             patch("app.medusa.log.error") as mock_log_error,
             pytest.raises(requests.ConnectionError),
         ):
@@ -357,7 +357,7 @@ class TestRetry:
                 "request",
                 side_effect=[error_resp, error_resp, error_resp, success],
             ),
-            patch("app.medusa.time.sleep") as mock_sleep,
+            patch("app.http_client.time.sleep") as mock_sleep,
         ):
             client._request("GET", "/series")
 
@@ -378,7 +378,7 @@ class TestRetry:
                     success,
                 ],
             ),
-            patch("app.medusa.time.sleep") as mock_sleep,
+            patch("app.http_client.time.sleep") as mock_sleep,
         ):
             client._request("GET", "/series")
 

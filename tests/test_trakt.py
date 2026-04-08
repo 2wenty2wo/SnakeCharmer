@@ -538,7 +538,7 @@ class TestRetry:
                 "request",
                 side_effect=[requests.ConnectionError("refused"), success],
             ),
-            patch("app.trakt.time.sleep"),
+            patch("app.http_client.time.sleep"),
         ):
             resp = client._request("GET", "/test")
 
@@ -551,7 +551,7 @@ class TestRetry:
 
         with (
             patch.object(client.session, "request", side_effect=[error_resp, success]),
-            patch("app.trakt.time.sleep"),
+            patch("app.http_client.time.sleep"),
         ):
             resp = client._request("GET", "/test")
 
@@ -566,7 +566,7 @@ class TestRetry:
                 "request",
                 side_effect=requests.ConnectionError("refused"),
             ),
-            patch("app.trakt.time.sleep"),
+            patch("app.http_client.time.sleep"),
             pytest.raises(requests.ConnectionError),
         ):
             client._request("GET", "/test")
@@ -579,7 +579,7 @@ class TestRetry:
 
         with (
             patch.object(client.session, "request", return_value=error_resp),
-            patch("app.trakt.time.sleep"),
+            patch("app.http_client.time.sleep"),
             pytest.raises(requests.HTTPError),
         ):
             client._request("GET", "/test")
@@ -596,7 +596,7 @@ class TestRetry:
                 "request",
                 side_effect=[error_resp, error_resp, error_resp, success],
             ),
-            patch("app.trakt.time.sleep") as mock_sleep,
+            patch("app.http_client.time.sleep") as mock_sleep,
         ):
             client._request("GET", "/test")
 
@@ -617,7 +617,7 @@ class TestRetry:
                     success,
                 ],
             ),
-            patch("app.trakt.time.sleep") as mock_sleep,
+            patch("app.http_client.time.sleep") as mock_sleep,
         ):
             client._request("GET", "/test")
 
