@@ -8,9 +8,15 @@
         <button type="button" class="btn-primary"
                 hx-post="/sync/run"
                 hx-target="#result-banner"
-                hx-swap="innerHTML">
+                hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                hx-indicator="#history-sync-indicator">
             Sync Now
         </button>
+        <span id="history-sync-indicator" class="sync-indicator sync-indicator-inline htmx-indicator" aria-live="polite">
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Syncing…</span>
+        </span>
     </div>
 </div>
 
