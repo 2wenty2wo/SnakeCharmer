@@ -419,6 +419,13 @@ form {
     color: var(--gd-text);
 }
 
+.field-label input,
+.field-label select,
+.field-label textarea {
+    letter-spacing: normal;
+    text-transform: none;
+}
+
 .field-label small {
     display: block;
     margin-top: 4px;
