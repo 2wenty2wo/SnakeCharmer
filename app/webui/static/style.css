@@ -135,12 +135,12 @@ ul, ol {
     display: flex;
     flex-direction: column;
     padding: 0 12px;
-    gap: 2px;
+    gap: 4px;
 }
 
 .sidebar-nav a {
     display: block;
-    padding: 10px 16px;
+    padding: 12px 16px;
     color: var(--gd-neutral);
     font-size: 14px;
     font-weight: 700;
@@ -171,7 +171,7 @@ ul, ol {
 
 /* === Page Headers === */
 .page-header {
-    margin-bottom: 32px;
+    margin-bottom: 40px;
 }
 
 .page-header h1 {
@@ -188,14 +188,14 @@ ul, ol {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 24px;
-    margin-bottom: 24px;
+    margin-bottom: 40px;
 }
 
 /* === Cards === */
 .card {
     background: var(--gd-surface);
     border-radius: var(--gd-radius-lg);
-    padding: 16px;
+    padding: 24px;
     transition: background-color 0.2s ease;
 }
 
@@ -226,7 +226,7 @@ ul, ol {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 0;
+    padding: 8px 0;
     font-size: 14px;
 }
 
@@ -410,7 +410,7 @@ form {
 
 .field-label {
     display: block;
-    margin-bottom: 16px;
+    margin-bottom: 24px;
     font-size: 11px;
     line-height: 16px;
     font-weight: 700;
@@ -428,7 +428,7 @@ form {
 
 .field-label small {
     display: block;
-    margin-top: 4px;
+    margin-top: 8px;
     font-size: 12px;
     line-height: 18px;
     letter-spacing: normal;
@@ -454,14 +454,14 @@ textarea {
     padding: 0 12px;
     font-family: 'DM Sans', sans-serif;
     font-size: 14px;
-    margin-top: 6px;
+    margin-top: 8px;
     transition: border-color 0.2s ease;
     outline: none;
 }
 
 textarea {
     height: auto;
-    padding: 10px 12px;
+    padding: 12px;
     min-height: 100px;
     resize: vertical;
 }
@@ -535,8 +535,8 @@ fieldset {
     background: var(--gd-surface);
     border: none;
     border-radius: var(--gd-radius-lg);
-    padding: 20px;
-    margin-bottom: 24px;
+    padding: 24px;
+    margin-bottom: 40px;
 }
 
 fieldset legend {
@@ -717,7 +717,7 @@ button[type="submit"]:disabled {
     display: flex;
     gap: 12px;
     align-items: center;
-    margin-top: 8px;
+    margin-top: 16px;
 }
 
 /* === Sync Running Indicator === */
