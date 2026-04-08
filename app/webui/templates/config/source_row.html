@@ -2,7 +2,7 @@
 <div class="source-row" id="source-{{ i }}">
     <div class="source-header">
         <span class="source-number">Source {{ i + 1 }}</span>
-        <div style="display:flex;gap:8px">
+        <div class="inline-action-row">
             <button type="button" class="btn-secondary"
                     hx-post="/config/trakt/sources/preview"
                     hx-target="#preview-{{ i }}"
@@ -31,7 +31,7 @@
                 <option value="user_list" {{ "selected" if source.type == "user_list" }}>User List</option>
             </select>
         </label>
-        <div id="source_{{ i }}_user_list_fields" style="{{ '' if source.type == 'user_list' else 'display:none' }}">
+        <div id="source_{{ i }}_user_list_fields" class="visibility-wrapper{{ '' if source.type == 'user_list' else ' is-hidden' }}">
             <label class="field-label">
                 Owner
                 <input type="text" name="source_{{ i }}_owner" value="{{ source.owner }}" placeholder="List owner username">
@@ -68,9 +68,9 @@
 function toggleSourceFields(select, index) {
     var fields = document.getElementById('source_' + index + '_user_list_fields');
     if (select.value === 'user_list') {
-        fields.style.display = '';
+        fields.classList.remove('is-hidden');
     } else {
-        fields.style.display = 'none';
+        fields.classList.add('is-hidden');
     }
 }
 </script>

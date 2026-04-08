@@ -39,9 +39,9 @@
                     {{ "ok" if entry.success else "failed" }}
                 </span>
             </td>
-            <td><span class="metric-value added" style="font-size:14px">{{ entry.added }}</span></td>
-            <td><span class="metric-value skipped" style="font-size:14px">{{ entry.skipped }}</span></td>
-            <td><span class="metric-value failed" style="font-size:14px">{{ entry.failed }}</span></td>
+            <td><span class="metric-value compact added">{{ entry.added }}</span></td>
+            <td><span class="metric-value compact skipped">{{ entry.skipped }}</span></td>
+            <td><span class="metric-value compact failed">{{ entry.failed }}</span></td>
             <td>{{ entry.unique_shows }}</td>
             <td>{{ entry.already_in_medusa }}</td>
         </tr>

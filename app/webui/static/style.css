@@ -344,6 +344,10 @@ ul, ol {
     color: var(--gd-error);
 }
 
+.metric-value.compact {
+    font-size: 14px;
+}
+
 .metric-label {
     display: block;
     font-size: 11px;
@@ -731,6 +735,25 @@ button[type="submit"]:disabled {
     margin-top: 16px;
 }
 
+/* === Utility Helpers === */
+.space-top-md {
+    margin-top: 12px;
+}
+
+.space-block-compact {
+    margin: 12px 0 8px;
+}
+
+.inline-action-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.visibility-wrapper.is-hidden {
+    display: none;
+}
+
 /* === Sync Running Indicator === */
 .sync-indicator {
     display: flex;
@@ -825,6 +848,11 @@ button[type="submit"]:disabled {
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
     color: var(--gd-text-secondary);
+}
+
+.mono-compact-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
 }
 
 /* === Search Input (Library) === */

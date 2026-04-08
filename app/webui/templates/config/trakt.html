@@ -41,7 +41,7 @@
     <fieldset>
         <legend>OAuth Authentication</legend>
         <small>Required for watchlist and private list access.</small>
-        <div style="margin: 12px 0 8px">
+        <div class="space-block-compact">
             {% if trakt_token_status == "valid" %}
             <span class="config-badge">Authenticated</span>
             {% elif trakt_token_status == "expired" %}
