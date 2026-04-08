@@ -40,11 +40,12 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-- Tests live in `tests/` mirroring the `app/` structure (e.g., `tests/test_health.py` for `app/health.py`, `tests/test_webui.py` for `app/webui/`)
+- Tests live in `tests/` mirroring the `app/` structure (e.g., `tests/test_health.py` for `app/health.py`, `tests/test_webui.py` for `app/webui/`, `tests/test_http_client.py` for `app/http_client.py`)
 - All HTTP calls are mocked (requests.Session) — never hit real APIs in tests
 - Web UI tests use `httpx.AsyncClient` with FastAPI's `TestClient` pattern
 - Use `tmp_path` for config file tests, `monkeypatch` for env var tests
 - Use `patch.object` on client methods or `session.request` for API tests
+- Retry sleep patches: use `patch("app.http_client.time.sleep")` for retry backoff, `patch("app.trakt.time.sleep")` for rate-limit handling
 
 ## Linting
 
@@ -60,17 +61,21 @@ Config is in `pyproject.toml`. Rules: `E`, `F`, `W`, `I`, `UP`, `B`, `SIM`. Line
 ## Architecture
 
 ```
-main.py                    CLI entry point, argparse, logging setup (text/JSON), health server init, web UI init, optional interval loop
-app/config.py              Dataclass-based config: YAML loading → env var overrides → validation
-app/trakt.py               TraktClient: public list fetching, OAuth device flow, token persistence, retry with backoff
-app/medusa.py              MedusaClient: library listing (get_existing_tvdb_ids, get_series_list), show addition, quality resolution via Medusa v2 API, retry with backoff
+main.py                    CLI entry point, argparse, logging setup (text/JSON); orchestrates via helpers: _run_once, _start_webui, _run_interval_loop, _run_webui_wait_loop
+app/models.py              Config dataclass definitions: AppConfig, TraktConfig, MedusaConfig, SyncConfig, HealthConfig, WebUIConfig, NotifyConfig, TraktSource, MedusaAddOptions, ConfigError
+app/config.py              Config loading: YAML parsing → env var overrides → validation; re-exports all models from app/models.py
+app/http_client.py         RetryClient base class: exponential backoff retry on 5xx/connection errors, hook methods (_handle_rate_limit, _on_connection_exhausted)
+app/trakt.py               TraktClient(RetryClient): public list fetching, OAuth device flow, token persistence, 429 rate-limit handling
+app/medusa.py              MedusaClient(RetryClient): library listing (get_existing_tvdb_ids, get_series_list), show addition, quality resolution via Medusa v2 API
 app/sync.py                run_sync(): orchestrates fetch → diff → add cycle, returns SyncResult metrics
 app/health.py              HTTP health endpoint: SyncStatus tracking, /health JSON responses (200 ok / 503 degraded)
-app/webui/__init__.py      FastAPI app factory (create_app), ConfigHolder thread-safe wrapper
-app/webui/routes.py        HTMX-driven routes: dashboard, config sections, sync control, test connections, library, /health JSON
+app/notify.py              Apprise-based notifications: sends alerts on sync success/failure to 100+ services
+app/webui/__init__.py      FastAPI app factory (create_app), ConfigHolder thread-safe wrapper, includes all route modules
+app/webui/routes.py        HTMX-driven routes: dashboard, config sections, sync control, source preview, library, /health JSON
+app/webui/oauth.py         Trakt OAuth device code flow: oauth_trakt_start, oauth_trakt_poll, _get_trakt_token_status
+app/webui/test_routes.py   Test connection routes: test_trakt, test_medusa, test_notify
 app/webui/config_io.py     Config serialization: AppConfig ↔ dict ↔ YAML file, atomic writes, validation
 app/webui/sync_manager.py  SyncManager: thread-safe manual sync trigger from web UI, background execution
-app/notify.py              Apprise-based notifications: sends alerts on sync success/failure to 100+ services
 app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, dashboard_status.html, library.html, config/*.html, sync/history.html)
 app/webui/static/style.css Green Deck design system: custom CSS with design tokens, sidebar layout, DM Sans typography
 DESIGN.md                  Green Deck design system spec: colors, typography, components, spacing, elevation rules
@@ -90,14 +95,16 @@ Data flow: `main.py` loads config, optionally starts the health server and/or we
 8. Add to Medusa (or log in dry-run mode)
 9. Return `SyncResult` with metrics (added, skipped, failed, duration, per-source counts)
 
-### Retry logic
+### Retry logic (`app/http_client.py`)
 
-Both `TraktClient` and `MedusaClient` implement exponential backoff retry in their `_request()` methods:
+`RetryClient` is the base class for both `TraktClient` and `MedusaClient`, providing shared exponential backoff retry in its `_request()` method:
 
 - Retries on 5xx server errors and connection/timeout exceptions
 - Configurable via `sync.max_retries` (default 3) and `sync.retry_backoff` (default 2.0)
-- TraktClient additionally handles 429 rate limits using the `Retry-After` header
-- Backoff formula: `retry_backoff ** attempt` seconds between retries
+- Backoff formula: `retry_backoff ** (attempt + 1)` seconds between retries
+- Hook methods for subclass customization:
+  - `_handle_rate_limit(resp, method, url, **kwargs)` — `TraktClient` overrides this to handle 429 rate limits using the `Retry-After` header
+  - `_on_connection_exhausted(exc)` — `MedusaClient` overrides this to log "Cannot reach Medusa" when all retries fail
 
 ### Health endpoint (`app/health.py`)
 
@@ -169,14 +176,15 @@ Core: `requests`, `pyyaml`, `apprise`. Web UI: `fastapi`, `uvicorn[standard]`, `
 ## Data Models
 
 - `TraktShow` (`app/trakt.py`): `title`, `tvdb_id`, `imdb_id`, `year` — the unit of data flowing from Trakt to the sync engine
-- `TraktSource` (`app/config.py`): describes one source to fetch — `type`, `owner`, `list_slug`, `auth`, `medusa` (add options)
-- `MedusaAddOptions` (`app/config.py`): per-source Medusa overrides — `quality` (preset name, individual value, or list), `required_words` (list of strings)
+- `TraktSource` (`app/models.py`): describes one source to fetch — `type`, `owner`, `list_slug`, `auth`, `medusa` (add options)
+- `MedusaAddOptions` (`app/models.py`): per-source Medusa overrides — `quality` (preset name, individual value, or list), `required_words` (list of strings)
 - `SyncResult` (`app/sync.py`): sync cycle metrics — `total_fetched`, `unique_shows`, `already_in_medusa`, `added`, `skipped`, `failed`, `duration_seconds`, `per_source`, `success`
 - `SyncStatus` (`app/health.py`): thread-safe container for last sync result and application uptime
 - `ConfigHolder` (`app/webui/__init__.py`): thread-safe mutable holder for the active `AppConfig`
-- `NotifyConfig` (`app/config.py`): notification settings — `enabled`, `urls` (list of Apprise URLs), `on_success`, `on_failure`, `only_if_added`
-- `ConfigError` (`app/config.py`): exception with `errors: list[str]` for validation failures
-- Config hierarchy: `AppConfig` → `TraktConfig` / `MedusaConfig` / `SyncConfig` / `HealthConfig` / `WebUIConfig` / `NotifyConfig`
+- `NotifyConfig` (`app/models.py`): notification settings — `enabled`, `urls` (list of Apprise URLs), `on_success`, `on_failure`, `only_if_added`
+- `ConfigError` (`app/models.py`): exception with `errors: list[str]` for validation failures
+- Config hierarchy (`app/models.py`): `AppConfig` → `TraktConfig` / `MedusaConfig` / `SyncConfig` / `HealthConfig` / `WebUIConfig` / `NotifyConfig`
+- All models are re-exported from `app/config.py` for backward compatibility — existing `from app.config import AppConfig` imports continue to work
 
 ### Quality resolution (`app/medusa.py`)
 
@@ -217,7 +225,8 @@ Priority: CLI flags > env vars > YAML config file.
 ## Code Conventions
 
 - Python 3.10+ with type hints (use `str | None` style, not `Optional`)
-- Dataclasses for config (`AppConfig`, `TraktConfig`, `MedusaConfig`, `SyncConfig`, `HealthConfig`, `WebUIConfig`, `NotifyConfig`) and data models (`TraktShow`, `SyncResult`, `SyncStatus`, `ConfigHolder`)
+- Dataclasses for config (`app/models.py`: `AppConfig`, `TraktConfig`, `MedusaConfig`, `SyncConfig`, `HealthConfig`, `WebUIConfig`, `NotifyConfig`) and data models (`TraktShow`, `SyncResult`, `SyncStatus`, `ConfigHolder`)
+- API clients extend `RetryClient` from `app/http_client.py` for shared retry logic; customize via hook methods (`_handle_rate_limit`, `_on_connection_exhausted`)
 - `requests.Session` per client for connection reuse and shared headers
 - Module-level `log = logging.getLogger(__name__)` in every file
 - Private methods prefixed with `_` (e.g., `_request`, `_parse_show`, `_validate`)
