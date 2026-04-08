@@ -6,7 +6,7 @@ import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.config import ConfigError, TraktConfig, TraktSource, get_config_errors
+from app.config import ConfigError, TraktConfig, TraktSource, get_config_errors, get_section_errors
 from app.medusa import MedusaClient
 from app.trakt import TraktClient
 from app.webui.config_io import config_to_dict, load_config_dict, save_config
@@ -420,7 +420,10 @@ def _save_and_respond(request: Request, config_dict: dict, holder, section: str)
     """Save config dict to file, reload, update holder, return HTMX banner."""
     config_path = holder.config_path
     try:
-        new_config = load_config_dict(config_dict, config_path)
+        new_config = load_config_dict(config_dict, config_path, validate=False)
+        section_errors = get_section_errors(new_config, section)
+        if section_errors:
+            raise ConfigError(section_errors)
         save_config(config_dict, config_path)
         holder.update(new_config)
         return HTMLResponse(

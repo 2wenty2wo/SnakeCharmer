@@ -318,6 +318,12 @@ def get_config_errors(config: AppConfig) -> list[str]:
     return errors
 
 
+def get_section_errors(config: AppConfig, section: str) -> list[str]:
+    """Return only validation errors relevant to a specific config section."""
+    prefix = section + "."
+    return [e for e in get_config_errors(config) if e.startswith(prefix)]
+
+
 def _validate(config: AppConfig) -> None:
     """Validate required configuration fields."""
     errors = get_config_errors(config)

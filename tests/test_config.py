@@ -11,6 +11,7 @@ from app.config import (
     _normalize_trakt_sources,
     _to_bool,
     get_config_errors,
+    get_section_errors,
     load_config,
 )
 
@@ -398,6 +399,37 @@ class TestGetConfigErrors:
         config = AppConfig()
         errors = get_config_errors(config)
         assert len(errors) >= 3  # client_id, medusa.url, medusa.api_key, sources
+
+
+class TestGetSectionErrors:
+    def test_returns_only_trakt_errors(self):
+        config = AppConfig()
+        errors = get_section_errors(config, "trakt")
+        assert all(e.startswith("trakt.") for e in errors)
+        assert len(errors) >= 1
+
+    def test_returns_only_medusa_errors(self):
+        config = AppConfig()
+        errors = get_section_errors(config, "medusa")
+        assert all(e.startswith("medusa.") for e in errors)
+        assert len(errors) >= 2  # url and api_key
+
+    def test_no_medusa_errors_when_medusa_valid(self):
+        config = AppConfig(medusa=MedusaConfig(url="http://localhost", api_key="key"))
+        errors = get_section_errors(config, "medusa")
+        assert errors == []
+
+    def test_no_trakt_errors_when_trakt_valid(self):
+        config = AppConfig(
+            trakt=TraktConfig(client_id="id", sources=[TraktSource(type="trending")])
+        )
+        errors = get_section_errors(config, "trakt")
+        assert errors == []
+
+    def test_unknown_section_returns_empty(self):
+        config = AppConfig()
+        errors = get_section_errors(config, "nonexistent")
+        assert errors == []
 
 
 class TestSkipValidate:
