@@ -136,6 +136,27 @@
             setDirty(hasStateDiff);
         }
 
+        function markUserInteraction(event) {
+            if (!event.isTrusted) {
+                return;
+            }
+
+            var clickedForm = event.target.closest("form");
+            if (clickedForm && configPathPattern.test(clickedForm.getAttribute("hx-post") || "")) {
+                userInteracted = true;
+                return;
+            }
+
+            var htmxTrigger = event.target.closest("[hx-post], [hx-delete]");
+            if (!htmxTrigger) {
+                return;
+            }
+            var requestPath = htmxTrigger.getAttribute("hx-post") || htmxTrigger.getAttribute("hx-delete") || "";
+            if (requestPath === window.location.pathname || traktSourcesPathPattern.test(requestPath)) {
+                userInteracted = true;
+            }
+        }
+
         setBaselineToCurrentState();
         setDirty(false);
         window.addEventListener("load", function() {
@@ -147,6 +168,7 @@
 
         document.body.addEventListener("input", markDirty);
         document.body.addEventListener("change", markDirty);
+        document.body.addEventListener("click", markUserInteraction, true);
 
         document.body.addEventListener("htmx:afterRequest", function(event) {
             var detail = event.detail || {};
