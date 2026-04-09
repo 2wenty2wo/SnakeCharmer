@@ -81,7 +81,10 @@ class TestTraktConfig:
         assert response.status_code == 200
         assert "Trakt" in response.text
         assert "test_id" in response.text
-        assert "var traktSourcesPathPattern = /^\\/config\\/trakt\\/sources(?:\\/|$)/;" in response.text
+        assert (
+            "var traktSourcesPathPattern = /^\\/config\\/trakt\\/sources(?:\\/|$)/;"
+            in response.text
+        )
         assert "if (requestPath === window.location.pathname && detail.successful)" in response.text
 
     def test_save_trakt(self, tmp_path):
