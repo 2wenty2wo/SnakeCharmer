@@ -1,5 +1,6 @@
 config.yaml
 trakt_token.json
+.playwright-mcp/
 __pycache__/
 *.pyc
 *.pyo
