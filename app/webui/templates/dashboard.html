@@ -46,7 +46,7 @@
         </div>
         <div class="info-row">
             <span class="info-label">Sources</span>
-            <span class="info-value">{{ config.trakt.sources | length }}</span>
+            <span class="info-value">{{ config.trakt.sources | length }} ({{ config.trakt.sources | map(attribute='type') | join(', ') }})</span>
         </div>
         <div class="info-row">
             <span class="info-label">Limit</span>

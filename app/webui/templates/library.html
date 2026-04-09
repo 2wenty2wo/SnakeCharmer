@@ -11,7 +11,7 @@
 {% elif shows %}
 <input type="text" class="search-input" placeholder="Filter shows..."
        oninput="filterLibrary(this.value)">
-<p class="library-count"><strong>{{ shows | length }}</strong> show{{ "s" if shows | length != 1 else "" }} in library</p>
+<p class="library-count">{{ shows | length }} show{{ "s" if shows | length != 1 else "" }} in library</p>
 
 <div class="card-grid" id="library-grid">
     {% for show in shows %}
