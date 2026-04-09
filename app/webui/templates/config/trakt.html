@@ -26,17 +26,16 @@
             <input type="number" name="limit" value="{{ config.trakt.limit }}" min="1" max="1000">
             <small>Max shows to fetch from public lists (trending/popular/watched)</small>
         </label>
+        <div class="inline-action-row space-top-md">
+            <button type="button" class="btn-secondary"
+                    hx-post="/test/trakt"
+                    hx-target="#result-banner"
+                    hx-swap="innerHTML"
+                    hx-include="[name='client_id'],[name='client_secret'],[name='username']">
+                Test Connection
+            </button>
+        </div>
     </fieldset>
-
-    <div class="page-actions">
-        <button type="button" class="btn-secondary"
-                hx-post="/test/trakt"
-                hx-target="#result-banner"
-                hx-swap="innerHTML"
-                hx-include="[name='client_id'],[name='client_secret'],[name='username']">
-            Test Connection
-        </button>
-    </div>
 
     <fieldset>
         <legend>OAuth Authentication</legend>

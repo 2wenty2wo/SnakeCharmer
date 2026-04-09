@@ -49,10 +49,17 @@
         </label>
         <label class="field-label">
             Quality
-            <input type="text" name="source_{{ i }}_quality"
-                   value="{{ source.medusa.quality | join(', ') if source.medusa.quality is iterable and source.medusa.quality is not string else source.medusa.quality or '' }}"
-                   placeholder="e.g. hd1080p or hd,uhd4k">
-            <small>Preset or comma-separated values</small>
+            <select name="source_{{ i }}_quality">
+                <option value="">-- Select quality --</option>
+                <option value="any" {{ "selected" if source.medusa.quality == "any" }}>Any</option>
+                <option value="sd" {{ "selected" if source.medusa.quality == "sd" }}>SD</option>
+                <option value="hd" {{ "selected" if source.medusa.quality == "hd" }}>HD</option>
+                <option value="hd720p" {{ "selected" if source.medusa.quality == "hd720p" }}>HD 720p</option>
+                <option value="hd1080p" {{ "selected" if source.medusa.quality == "hd1080p" }}>HD 1080p</option>
+                <option value="uhd4k" {{ "selected" if source.medusa.quality == "uhd4k" }}>UHD 4K</option>
+                <option value="uhd8k" {{ "selected" if source.medusa.quality == "uhd8k" }}>UHD 8K</option>
+            </select>
+            <small>Quality preset for shows added from this source</small>
         </label>
         <label class="field-label">
             Required Words
@@ -71,6 +78,16 @@ function toggleSourceFields(select, index) {
         fields.classList.remove('is-hidden');
     } else {
         fields.classList.add('is-hidden');
+    }
+}
+
+function addQuality(index, value) {
+    var input = document.getElementById('quality-' + index);
+    var current = input.value.trim();
+    var values = current ? current.split(',').map(function(v) { return v.trim(); }) : [];
+    if (!values.includes(value)) {
+        values.push(value);
+        input.value = values.join(', ');
     }
 }
 </script>

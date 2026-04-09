@@ -8,13 +8,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=2">
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
 <body>
     <div class="app-layout">
         <aside class="sidebar">
-            <div class="sidebar-logo"><span class="logo-icon">&#129415;</span> SnakeCharmer</div>
+            <div class="sidebar-logo"><img src="/static/logo.webp" alt="SnakeCharmer" class="logo-img"></div>
             <nav class="sidebar-nav">
                 <a href="/" {% if active_page == "dashboard" %}class="active"{% endif %}>Dashboard</a>
                 <a href="/config/trakt" {% if active_page == "trakt" %}class="active"{% endif %}>Trakt</a>
@@ -28,7 +29,10 @@
         </aside>
         <main class="main-content">
             <div id="result-banner"></div>
-            <div id="dirty-indicator" class="info-label status-badge status-unknown" hidden>Unsaved changes</div>
+            <div id="dirty-indicator" hidden>
+                <span class="dirty-dot"></span>
+                Unsaved changes
+            </div>
             {% block content %}{% endblock %}
             <footer class="app-footer">
                 <small>Config changes are written to the YAML file. Comments in the file will be removed on save.<br>SnakeCharmer is free and open source. <a href="https://github.com/sponsors/2wenty2wo" target="_blank">Support development</a>.</small>
@@ -201,6 +205,12 @@
             event.returnValue = "";
         });
     })();
+    </script>
+    <script>
+        lucide.createIcons();
+        document.body.addEventListener("htmx:afterSwap", function() {
+            lucide.createIcons();
+        });
     </script>
 </body>
 </html>

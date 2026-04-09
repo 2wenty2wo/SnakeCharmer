@@ -23,20 +23,23 @@
 
 {% if config_errors %}
 <div class="banner warning" role="alert">
-    <strong>&#9888; Setup Required</strong>
-    <p>Complete the following to start syncing:</p>
-    <ul>
-        {% for error in config_errors %}
-        <li>{{ error }}</li>
-        {% endfor %}
-    </ul>
-    <p class="space-top-md"><a href="/config/trakt" class="btn-primary">Start Setup</a></p>
+    <div>
+        <strong>Setup Required</strong>
+        <p>Complete the following to start syncing:</p>
+        <ul>
+            {% for error in config_errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        <p class="space-top-md"><a href="/config/trakt" class="btn-primary">Start Setup</a></p>
+    </div>
 </div>
 {% endif %}
 
-<div class="card-grid">
+<!-- Config Cards -->
+<div class="card-grid config-cards">
     <div class="card">
-        <div class="card-header"><span class="card-icon">&#127916;</span> Trakt</div>
+        <div class="card-header"><i data-lucide="film" class="card-icon"></i> Trakt</div>
         <div class="info-row">
             <span class="info-label">Username</span>
             <span class="info-value">{{ config.trakt.username or "Not set" }}</span>
@@ -45,13 +48,6 @@
             <span class="info-label">Sources</span>
             <span class="info-value">{{ config.trakt.sources | length }}</span>
         </div>
-        {% if config.trakt.sources %}
-        <ul class="source-list">
-            {% for source in config.trakt.sources %}
-            <li>{{ source.label }}</li>
-            {% endfor %}
-        </ul>
-        {% endif %}
         <div class="info-row">
             <span class="info-label">Limit</span>
             <span class="info-value">{{ config.trakt.limit }}</span>
@@ -60,7 +56,7 @@
     </div>
 
     <div class="card">
-        <div class="card-header"><span class="card-icon">&#128225;</span> Medusa</div>
+        <div class="card-header"><i data-lucide="server" class="card-icon"></i> Medusa</div>
         <div class="info-row">
             <span class="info-label">URL</span>
             <span class="info-value">{{ config.medusa.url or "Not set" }}</span>
@@ -73,7 +69,7 @@
     </div>
 
     <div class="card">
-        <div class="card-header"><span class="card-icon">&#128260;</span> Sync</div>
+        <div class="card-header"><i data-lucide="refresh-cw" class="card-icon"></i> Sync</div>
         <div class="info-row">
             <span class="info-label">Dry Run</span>
             <span class="info-value">
@@ -92,7 +88,7 @@
     </div>
 
     <div class="card">
-        <div class="card-header"><span class="card-icon">&#128276;</span> Notifications</div>
+        <div class="card-header"><i data-lucide="bell" class="card-icon"></i> Notifications</div>
         <div class="info-row">
             <span class="info-label">Enabled</span>
             <span class="info-value">
@@ -111,12 +107,13 @@
         </div>
         <div class="card-footer"><a href="/config/notify" class="btn-outline">Edit</a></div>
     </div>
+</div>
 
-    <div id="live-status"
-         hx-get="/dashboard/status"
-         hx-trigger="every 10s"
-         hx-swap="innerHTML">
-        {% include "dashboard_status.html" %}
-    </div>
+<!-- Status Cards -->
+<div id="live-status" class="status-cards"
+     hx-get="/dashboard/status"
+     hx-trigger="every 10s"
+     hx-swap="innerHTML">
+    {% include "dashboard_status.html" %}
 </div>
 {% endblock %}

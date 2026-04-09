@@ -1,6 +1,6 @@
 {% if sync_running %}
 <div class="card">
-    <div class="card-header"><span class="card-icon">&#128260;</span> Sync In Progress</div>
+    <div class="card-header"><i data-lucide="loader" class="card-icon"></i> Sync In Progress</div>
     <div class="sync-indicator">
         <span class="spinner"></span>
         <span>Syncing shows from Trakt to Medusa...</span>
@@ -10,7 +10,7 @@
 
 {% if health %}
 <div class="card">
-    <div class="card-header"><span class="card-icon">&#128154;</span> Status</div>
+    <div class="card-header"><i data-lucide="activity" class="card-icon"></i> Status</div>
     <div class="info-row">
         <span class="info-label">Health</span>
         <span class="info-value">
@@ -26,7 +26,7 @@
 
 {% if health and health.last_sync %}
 <div class="card">
-    <div class="card-header"><span class="card-icon">&#128202;</span> Last Sync</div>
+    <div class="card-header"><i data-lucide="bar-chart-3" class="card-icon"></i> Last Sync</div>
     <div class="info-row">
         <span class="info-label">Timestamp</span>
         <span class="info-value">{{ health.last_sync.timestamp }}</span>
