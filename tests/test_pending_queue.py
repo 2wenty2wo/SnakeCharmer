@@ -3,8 +3,6 @@
 import json
 from datetime import datetime, timezone
 
-import pytest
-
 from app.models import PendingShow
 from app.pending_queue import PendingQueue
 

@@ -107,7 +107,10 @@ def _start_webui(config, args, sync_status, log):
         config_holder=config_holder, sync_status=sync_status, pending_queue=pending_queue
     )
     app = create_app(
-        config_holder, sync_status=sync_status, sync_manager=sync_manager, pending_queue=pending_queue
+        config_holder,
+        sync_status=sync_status,
+        sync_manager=sync_manager,
+        pending_queue=pending_queue,
     )
 
     webui_port = args.webui_port or config.webui.port

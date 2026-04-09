@@ -439,7 +439,8 @@ async def approve_single(request: Request, tvdb_id: int):
         )
     except Exception as e:
         return HTMLResponse(
-            f'<div class="banner error">Failed to add "{escape(show.title)}": {escape(str(e))}</div>'
+            f'<div class="banner error">Failed to add "{escape(show.title)}": '
+            f"{escape(str(e))}</div>"
         )
 
 
@@ -505,17 +506,21 @@ async def bulk_approve(request: Request):
             except Exception as e:
                 failed.append(f"{show.title}: {e}")
     except Exception as e:
-        return HTMLResponse(f'<div class="banner error">Failed to connect to Medusa: {escape(str(e))}</div>')
+        return HTMLResponse(
+            f'<div class="banner error">Failed to connect to Medusa: {escape(str(e))}</div>'
+        )
 
     if failed:
         return HTMLResponse(
-            f'<div class="banner warning">Approved {len(approved)} shows. Failed: {len(failed)}</div>'
+            f'<div class="banner warning">Approved {len(approved)} shows. '
+            f"Failed: {len(failed)}</div>"
         )
 
     # Trigger HTMX to refresh the page
     return HTMLResponse(
-        '<div class="banner success">Approved {} shows. <a href="/pending">Refresh</a></div>'
-        '<script>setTimeout(() => window.location.href = "/pending", 1000);</script>'.format(len(approved))
+        f'<div class="banner success">Approved {len(approved)} shows. '
+        '<a href="/pending">Refresh</a></div>'
+        '<script>setTimeout(() => window.location.href = "/pending", 1000);</script>'
     )
 
 
@@ -536,8 +541,9 @@ async def bulk_reject(request: Request):
 
     # Trigger HTMX to refresh the page
     return HTMLResponse(
-        '<div class="banner success">Rejected {} shows. <a href="/pending">Refresh</a></div>'
-        '<script>setTimeout(() => window.location.href = "/pending", 1000);</script>'.format(len(rejected))
+        f'<div class="banner success">Rejected {len(rejected)} shows. '
+        '<a href="/pending">Refresh</a></div>'
+        '<script>setTimeout(() => window.location.href = "/pending", 1000);</script>'
     )
 
 
@@ -562,10 +568,13 @@ async def pending_count(request: Request):
     count = pending_queue.get_count() if pending_queue else 0
 
     if count == 0:
-        return HTMLResponse('<span id="pending-badge" class="nav-badge" style="display:none"></span>')
+        return HTMLResponse(
+            '<span id="pending-badge" class="nav-badge" style="display:none"></span>'
+        )
 
     return HTMLResponse(
-        f'<span id="pending-badge" class="nav-badge" hx-get="/pending/count" hx-trigger="every 30s" hx-swap="outerHTML">{count}</span>'
+        '<span id="pending-badge" class="nav-badge" hx-get="/pending/count" '
+        f'hx-trigger="every 30s" hx-swap="outerHTML">{count}</span>'
     )
 
 

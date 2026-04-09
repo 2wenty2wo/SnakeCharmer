@@ -214,7 +214,14 @@ class TestHealthSnapshotSchema:
         # Validate types
         assert isinstance(last_sync["timestamp"], str)
         assert isinstance(last_sync["duration_seconds"], float)
-        for int_key in ("added", "queued", "skipped", "failed", "unique_shows", "already_in_medusa"):
+        for int_key in (
+            "added",
+            "queued",
+            "skipped",
+            "failed",
+            "unique_shows",
+            "already_in_medusa",
+        ):
             assert isinstance(last_sync[int_key], int)
 
         # Validate timestamp format (ISO 8601)

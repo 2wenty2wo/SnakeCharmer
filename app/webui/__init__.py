@@ -31,7 +31,9 @@ class ConfigHolder:
             self.config = config
 
 
-def create_app(config_holder: ConfigHolder, sync_status=None, sync_manager=None, pending_queue=None) -> FastAPI:
+def create_app(
+    config_holder: ConfigHolder, sync_status=None, sync_manager=None, pending_queue=None
+) -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(title="SnakeCharmer", docs_url=None, redoc_url=None)
 
