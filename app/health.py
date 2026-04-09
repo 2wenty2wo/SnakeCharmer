@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import logging
 import threading
@@ -6,6 +7,7 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 log = logging.getLogger(__name__)
+BIND_ALL_INTERFACES = str(ipaddress.IPv4Address(0))
 
 
 @dataclass
@@ -103,7 +105,7 @@ class _HealthHandler(BaseHTTPRequestHandler):
 def start_health_server(port: int, sync_status: SyncStatus) -> HTTPServer:
     """Start the health check HTTP server in a daemon thread."""
     handler = type("Handler", (_HealthHandler,), {"sync_status": sync_status})
-    server = HTTPServer(("0.0.0.0", port), handler)
+    server = HTTPServer((BIND_ALL_INTERFACES, port), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     log.info("Health server listening on port %d", port)

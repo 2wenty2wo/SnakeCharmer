@@ -12,7 +12,7 @@ from app.http_client import REQUEST_TIMEOUT, RetryClient
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://api.trakt.tv"
-TOKEN_FILE = "trakt_token.json"
+TOKEN_FILE = "trakt_token.json"  # nosec B105
 
 
 @dataclass

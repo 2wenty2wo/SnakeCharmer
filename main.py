@@ -1,4 +1,5 @@
 import argparse
+import ipaddress
 import json
 import logging
 import os
@@ -10,6 +11,8 @@ from datetime import datetime, timezone
 from app.config import get_config_errors, load_config
 from app.notify import send_notification
 from app.sync import run_sync
+
+BIND_ALL_INTERFACES = str(ipaddress.IPv4Address(0))
 
 
 class JsonFormatter(logging.Formatter):
@@ -118,7 +121,7 @@ def _start_webui(config, args, sync_status, log):
     webui_thread = threading.Thread(
         target=uvicorn.run,
         args=(app,),
-        kwargs={"host": "0.0.0.0", "port": webui_port, "log_level": "warning"},
+        kwargs={"host": BIND_ALL_INTERFACES, "port": webui_port, "log_level": "warning"},
         daemon=True,
     )
     webui_thread.start()
