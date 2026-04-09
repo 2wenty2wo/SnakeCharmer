@@ -17,6 +17,8 @@ from app.config import (
     WebUIConfig,
 )
 from app.health import SyncStatus
+from app.models import PendingShow
+from app.pending_queue import PendingQueue
 from app.sync import SyncResult
 from app.webui import ConfigHolder, create_app
 from app.webui import routes as webui_routes
@@ -43,7 +45,7 @@ def _make_config(**overrides) -> AppConfig:
     return AppConfig(**defaults)
 
 
-def _create_client(tmp_path, config=None, with_sync=False):
+def _create_client(tmp_path, config=None, with_sync=False, pending_queue=None):
     config = config or _make_config()
     config_path = str(tmp_path / "config.yaml")
     save_app_config(config, config_path)
@@ -54,8 +56,17 @@ def _create_client(tmp_path, config=None, with_sync=False):
     sync_manager = None
     if with_sync:
         sync_status = SyncStatus()
-        sync_manager = SyncManager(config_holder=holder, sync_status=sync_status)
-    app = create_app(holder, sync_status=sync_status, sync_manager=sync_manager)
+        sync_manager = SyncManager(
+            config_holder=holder,
+            sync_status=sync_status,
+            pending_queue=pending_queue,
+        )
+    app = create_app(
+        holder,
+        sync_status=sync_status,
+        sync_manager=sync_manager,
+        pending_queue=pending_queue,
+    )
     return TestClient(app), holder, config_path
 
 
@@ -1452,3 +1463,493 @@ class TestSyncStatusHistory:
         status = SyncStatus()
         status.update(None)
         assert status.get_history() == []
+
+
+# --- Pending Queue Routes ---
+
+
+def _make_pending_show(tvdb_id=12345, title="Test Show", **kwargs):
+    defaults = {
+        "tvdb_id": tvdb_id,
+        "title": title,
+        "year": 2024,
+        "imdb_id": "tt1234567",
+        "source_type": "trending",
+        "source_label": "trending",
+        "discovered_at": "2024-01-01T00:00:00Z",
+        "status": "pending",
+    }
+    defaults.update(kwargs)
+    return PendingShow(**defaults)
+
+
+class TestPendingPage:
+    def test_pending_page_with_shows(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(12345, "Show A"))
+        pq.add_show(_make_pending_show(67890, "Show B"))
+
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+        response = client.get("/pending")
+        assert response.status_code == 200
+        assert "Show A" in response.text
+        assert "Show B" in response.text
+
+    def test_pending_page_empty(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+        response = client.get("/pending")
+        assert response.status_code == 200
+
+    def test_pending_page_no_queue(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/pending")
+        assert response.status_code == 200
+
+
+class TestPendingApprove:
+    def test_approve_single_success(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(12345, "Approved Show"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.add_show.return_value = True
+            response = client.post("/pending/approve/12345")
+
+        assert response.status_code == 200
+        assert "Approved" in response.text
+        assert "Approved Show" in response.text
+        assert pq.get_show(12345) is None  # removed from queue
+
+    def test_approve_single_with_quality_and_words(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(
+            _make_pending_show(
+                12345,
+                "Quality Show",
+                quality="hd1080p",
+                required_words=["proper"],
+            )
+        )
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_medusa = mock_cls.return_value
+            mock_medusa.add_show.return_value = True
+            response = client.post("/pending/approve/12345")
+
+        assert response.status_code == 200
+        call_args = mock_medusa.add_show.call_args
+        assert call_args[1]["add_options"]["quality"] == "hd1080p"
+        assert call_args[1]["add_options"]["required_words"] == ["proper"]
+
+    def test_approve_single_show_not_found(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+        response = client.post("/pending/approve/99999")
+        assert response.status_code == 200
+        assert "not found" in response.text.lower()
+
+    def test_approve_single_no_queue(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post("/pending/approve/12345")
+        assert response.status_code == 200
+        assert "not available" in response.text.lower()
+
+    def test_approve_single_medusa_failure(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(12345, "Fail Show"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.add_show.side_effect = requests.ConnectionError("timeout")
+            response = client.post("/pending/approve/12345")
+
+        assert response.status_code == 200
+        assert "Failed" in response.text
+        # Show should remain in queue since add failed
+        assert pq.get_show(12345) is not None
+
+
+class TestPendingReject:
+    def test_reject_single_success(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(12345, "Rejected Show"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.post("/pending/reject/12345")
+        assert response.status_code == 200
+        assert "Rejected" in response.text
+        assert "Rejected Show" in response.text
+        assert pq.get_show(12345) is None
+
+    def test_reject_single_not_found(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.post("/pending/reject/99999")
+        assert response.status_code == 200
+        assert "not found" in response.text.lower()
+
+    def test_reject_single_no_queue(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post("/pending/reject/12345")
+        assert response.status_code == 200
+        assert "not available" in response.text.lower()
+
+
+class TestPendingBulkApprove:
+    def test_bulk_approve_selected(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        pq.add_show(_make_pending_show(222, "Show B"))
+        pq.add_show(_make_pending_show(333, "Show C"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.add_show.return_value = True
+            response = client.post(
+                "/pending/bulk-approve",
+                data={"tvdb_ids": ["111", "222"]},
+            )
+
+        assert response.status_code == 200
+        assert "Approved 2" in response.text
+        assert pq.get_show(111) is None
+        assert pq.get_show(222) is None
+        assert pq.get_show(333) is not None  # not selected
+
+    def test_bulk_approve_select_all(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        pq.add_show(_make_pending_show(222, "Show B"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.add_show.return_value = True
+            response = client.post(
+                "/pending/bulk-approve",
+                data={"select_all": "true"},
+            )
+
+        assert response.status_code == 200
+        assert "Approved 2" in response.text
+
+    def test_bulk_approve_empty_selection(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.post("/pending/bulk-approve", data={})
+        assert response.status_code == 200
+        assert "No shows selected" in response.text
+
+    def test_bulk_approve_no_queue(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post("/pending/bulk-approve", data={"tvdb_ids": ["111"]})
+        assert response.status_code == 200
+        assert "not available" in response.text.lower()
+
+    def test_bulk_approve_partial_failure(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Good Show"))
+        pq.add_show(_make_pending_show(222, "Bad Show"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_medusa = mock_cls.return_value
+            mock_medusa.add_show.side_effect = [True, Exception("Medusa error")]
+            response = client.post(
+                "/pending/bulk-approve",
+                data={"tvdb_ids": ["111", "222"]},
+            )
+
+        assert response.status_code == 200
+        assert "Approved 1" in response.text
+        assert "Failed: 1" in response.text
+
+    def test_bulk_approve_medusa_connection_failure(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.side_effect = Exception("Cannot connect")
+            response = client.post(
+                "/pending/bulk-approve",
+                data={"tvdb_ids": ["111"]},
+            )
+
+        assert response.status_code == 200
+        assert "Failed to connect" in response.text
+
+
+class TestPendingBulkReject:
+    def test_bulk_reject_selected(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        pq.add_show(_make_pending_show(222, "Show B"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.post(
+            "/pending/bulk-reject",
+            data={"tvdb_ids": ["111", "222"]},
+        )
+        assert response.status_code == 200
+        assert "Rejected" in response.text
+
+    def test_bulk_reject_empty_selection(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.post("/pending/bulk-reject", data={})
+        assert response.status_code == 200
+        assert "No shows selected" in response.text
+
+    def test_bulk_reject_no_queue(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post("/pending/bulk-reject", data={"tvdb_ids": ["111"]})
+        assert response.status_code == 200
+        assert "not available" in response.text.lower()
+
+
+class TestPendingBulkAction:
+    def test_bulk_action_approve(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.add_show.return_value = True
+            response = client.post(
+                "/pending/bulk-action",
+                data={"action": "approve", "tvdb_ids": ["111"]},
+            )
+
+        assert response.status_code == 200
+        assert "Approved 1" in response.text
+
+    def test_bulk_action_reject(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.post(
+            "/pending/bulk-action",
+            data={"action": "reject", "tvdb_ids": ["111"]},
+        )
+        assert response.status_code == 200
+        assert "Rejected" in response.text
+
+    def test_bulk_action_invalid(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/pending/bulk-action",
+            data={"action": "delete"},
+        )
+        assert response.status_code == 200
+        assert "Invalid action" in response.text
+
+
+class TestPendingCount:
+    def test_pending_count_zero(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.get("/pending/count")
+        assert response.status_code == 200
+        assert "display:none" in response.text
+
+    def test_pending_count_nonzero(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        pq.add_show(_make_pending_show(222, "Show B"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.get("/pending/count")
+        assert response.status_code == 200
+        assert "2" in response.text
+        assert "nav-badge" in response.text
+
+    def test_pending_count_no_queue(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/pending/count")
+        assert response.status_code == 200
+        assert "display:none" in response.text
+
+
+# --- SyncManager Unit Tests ---
+
+
+class TestSyncManagerStartSync:
+    def test_start_sync_success(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
+
+        with patch("app.webui.sync_manager.run_sync", return_value=SyncResult(success=True)):
+            result = sm.start_sync()
+
+        assert result is True
+
+    def test_start_sync_config_errors_returns_false(self, tmp_path):
+        config = _make_config(
+            trakt=TraktConfig(
+                client_id="",  # invalid: empty
+                client_secret="",
+                username="",
+                sources=[],
+                limit=50,
+            ),
+        )
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
+
+        result = sm.start_sync()
+
+        assert result is False
+        state = sm.get_state()
+        assert "Config incomplete" in state["error"]
+
+    def test_start_sync_already_running_returns_false(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
+
+        # Simulate already running
+        sm._running = True
+        result = sm.start_sync()
+        assert result is False
+
+
+class TestSyncManagerRunBlocking:
+    def test_run_sync_blocking_success(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
+
+        expected = SyncResult(added=5, success=True)
+        with patch("app.webui.sync_manager.run_sync", return_value=expected):
+            result = sm.run_sync_blocking()
+
+        assert result is not None
+        assert result.added == 5
+        assert sm.is_running() is False
+
+    def test_run_sync_blocking_already_running_returns_none(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
+
+        sm._running = True
+        result = sm.run_sync_blocking()
+        assert result is None
+
+
+class TestSyncManagerRunSyncError:
+    def test_run_sync_exception_sets_error_and_clears_running(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
+
+        with (
+            patch(
+                "app.webui.sync_manager.run_sync",
+                side_effect=RuntimeError("sync exploded"),
+            ),
+            pytest.raises(RuntimeError, match="sync exploded"),
+        ):
+            sm._running = True
+            sm._run_sync()
+
+        assert sm.is_running() is False
+        state = sm.get_state()
+        assert "sync exploded" in state["error"]
+
+    def test_notification_failure_is_swallowed(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
+
+        with (
+            patch(
+                "app.webui.sync_manager.run_sync",
+                return_value=SyncResult(added=1, success=True),
+            ),
+            patch(
+                "app.notify.send_notification",
+                side_effect=Exception("notification fail"),
+            ),
+        ):
+            sm._running = True
+            result = sm._run_sync()
+
+        assert result is not None
+        assert result.added == 1
+        assert sm.is_running() is False
+
+
+class TestSyncManagerGetState:
+    def test_get_state_idle(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
+
+        state = sm.get_state()
+        assert state == {"running": False}
+
+    def test_get_state_with_result(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
+
+        with patch(
+            "app.webui.sync_manager.run_sync",
+            return_value=SyncResult(added=3, skipped=1, failed=2, success=True),
+        ):
+            sm.run_sync_blocking()
+
+        state = sm.get_state()
+        assert state["running"] is False
+        assert state["result"]["added"] == 3
+        assert state["result"]["skipped"] == 1
+        assert state["result"]["failed"] == 2
+        assert state["result"]["success"] is True
+
+    def test_get_state_with_error(self, tmp_path):
+        config = _make_config(
+            trakt=TraktConfig(
+                client_id="",
+                client_secret="",
+                username="",
+                sources=[],
+                limit=50,
+            ),
+        )
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
+
+        sm.start_sync()
+        state = sm.get_state()
+        assert "error" in state
+        assert "Config incomplete" in state["error"]
