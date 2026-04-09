@@ -50,6 +50,7 @@
 
     (function() {
         var configPathPattern = /^\/config\/[^/]+$/;
+        var traktSourcesPathPattern = /^\/config\/trakt\/sources(?:\/|$)/;
         var isConfigPage = configPathPattern.test(window.location.pathname);
         if (!isConfigPage) {
             return;
@@ -79,11 +80,14 @@
         document.body.addEventListener("htmx:afterRequest", function(event) {
             var detail = event.detail || {};
             var requestPath = detail.pathInfo && detail.pathInfo.requestPath;
-            if (requestPath !== window.location.pathname) {
+            if (!requestPath) {
                 return;
             }
-            if (detail.successful) {
+            if (requestPath === window.location.pathname && detail.successful) {
                 setDirty(false);
+            }
+            if (traktSourcesPathPattern.test(requestPath) && detail.successful) {
+                setDirty(true);
             }
         });
 
