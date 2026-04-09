@@ -115,8 +115,22 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
         selected_source_label = selected_source.label if selected_source else "unknown"
         option_keys = sorted(selected_options.keys()) if selected_options else []
 
+        requires_manual_approval = selected_source is not None and not selected_source.auto_approve
+
+        # Respect manual approval even when no pending queue is available
+        if requires_manual_approval and pending_queue is None:
+            log.warning(
+                "Skipping '%s' (tvdb:%d): source '%s' requires manual approval but no pending "
+                "queue is configured",
+                show.title,
+                show.tvdb_id,
+                selected_source_label,
+            )
+            result.skipped += 1
+            continue
+
         # Check if this show should go to pending queue
-        if pending_queue is not None and selected_source is not None and not selected_source.auto_approve:
+        if requires_manual_approval:
             # Check if already pending
             if pending_queue.is_pending(show.tvdb_id):
                 log.debug("Already in pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
