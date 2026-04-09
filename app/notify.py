@@ -46,11 +46,18 @@ def _build_apprise(urls: list[str]) -> apprise.Apprise:
 def _success_message(result: SyncResult, *, dry_run: bool = False) -> tuple[str, str]:
     title = "SnakeCharmer: Sync Complete"
     added_text = "Would add" if dry_run else "Added"
-    body = (
-        f"{added_text} {result.added} show(s) in {result.duration_seconds:.1f}s "
+    queued_text = "would queue" if dry_run else "queued"
+    body_parts = [
+        f"{added_text} {result.added} show(s)",
+    ]
+    if result.queued > 0:
+        body_parts.append(f"{queued_text} {result.queued} for approval")
+    body_parts.append(f"in {result.duration_seconds:.1f}s")
+    body_parts.append(
         f"(unique: {result.unique_shows}, already in library: {result.already_in_medusa}, "
         f"skipped: {result.skipped}, failed: {result.failed})"
     )
+    body = " ".join(body_parts)
     return title, body
 
 

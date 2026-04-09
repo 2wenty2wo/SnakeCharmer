@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Pending Approval - SnakeCharmer{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Pending Approval</h1>
+    <p class="page-description">Shows waiting for manual approval before being added to Medusa.</p>
+    {% if pending_count > 0 %}
+    <div class="page-actions">
+        <button type="button" class="btn-primary"
+                hx-post="/pending/bulk-approve"
+                hx-target="#result-banner"
+                hx-swap="innerHTML"
+                hx-vals='{"select_all": true}'
+                hx-confirm="Approve all {{ pending_count }} pending shows?">
+            Approve All
+        </button>
+    </div>
+    {% endif %}
+</div>
+
+<div id="result-banner"></div>
+
+{% if pending_count == 0 %}
+<div class="empty-state">
+    <i data-lucide="inbox" class="empty-icon"></i>
+    <p>No shows pending approval.</p>
+    <p class="empty-hint">Shows from sources with "Auto-approve" disabled will appear here.</p>
+</div>
+{% else %}
+<div class="pending-stats">
+    <span class="stat-badge">
+        <i data-lucide="clock" class="stat-icon"></i>
+        {{ pending_count }} show{{ "s" if pending_count != 1 }} pending
+    </span>
+</div>
+
+<form id="pending-form" class="pending-list-form"
+      hx-post="/pending/bulk-action"
+      hx-target="#result-banner"
+      hx-swap="innerHTML">
+    <div class="bulk-actions-bar">
+        <label class="select-all-label">
+            <input type="checkbox" id="select-all" onchange="toggleSelectAll(this)">
+            <span>Select All</span>
+        </label>
+        <div class="bulk-buttons">
+            <button type="submit" name="action" value="approve" class="btn-primary btn-small">
+                <i data-lucide="check" class="btn-icon"></i>
+                Approve Selected
+            </button>
+            <button type="submit" name="action" value="reject" class="btn-secondary btn-small">
+                <i data-lucide="x" class="btn-icon"></i>
+                Reject Selected
+            </button>
+        </div>
+    </div>
+
+    <div class="pending-list">
+        {% for show in pending_shows %}
+        <div class="pending-row" id="pending-row-{{ show.tvdb_id }}">
+            <div class="pending-select">
+                <input type="checkbox" name="tvdb_ids" value="{{ show.tvdb_id }}" class="row-checkbox">
+            </div>
+            <div class="pending-info">
+                <div class="pending-title">{{ show.title }}</div>
+                <div class="pending-meta">
+                    {% if show.year %}{{ show.year }} • {% endif %}
+                    TVDB: {{ show.tvdb_id }}
+                </div>
+            </div>
+            <div class="pending-source">
+                <span class="source-chip">{{ show.source_label }}</span>
+            </div>
+            <div class="pending-options">
+                {% if show.quality %}
+                <span class="option-badge">{{ show.quality }}</span>
+                {% endif %}
+                {% if show.required_words %}
+                <span class="option-badge">{{ show.required_words | join(", ") }}</span>
+                {% endif %}
+            </div>
+            <div class="pending-discovered">
+                {{ show.discovered_at | truncate(16, true, "") }}
+            </div>
+            <div class="pending-actions">
+                <button type="button" class="btn-icon-approve"
+                        hx-post="/pending/approve/{{ show.tvdb_id }}"
+                        hx-target="#pending-row-{{ show.tvdb_id }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="Approve '{{ show.title }}'?"
+                        title="Approve">
+                    <i data-lucide="check"></i>
+                </button>
+                <button type="button" class="btn-icon-reject"
+                        hx-post="/pending/reject/{{ show.tvdb_id }}"
+                        hx-target="#pending-row-{{ show.tvdb_id }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="Reject '{{ show.title }}'?"
+                        title="Reject">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</form>
+
+<script>
+function toggleSelectAll(checkbox) {
+    const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+    rowCheckboxes.forEach(cb => cb.checked = checkbox.checked);
+}
+
+document.querySelectorAll('.row-checkbox').forEach(cb => {
+    cb.addEventListener('change', function() {
+        const allChecked = document.querySelectorAll('.row-checkbox:checked').length === 
+                          document.querySelectorAll('.row-checkbox').length;
+        document.getElementById('select-all').checked = allChecked;
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

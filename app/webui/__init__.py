@@ -31,7 +31,7 @@ class ConfigHolder:
             self.config = config
 
 
-def create_app(config_holder: ConfigHolder, sync_status=None, sync_manager=None) -> FastAPI:
+def create_app(config_holder: ConfigHolder, sync_status=None, sync_manager=None, pending_queue=None) -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(title="SnakeCharmer", docs_url=None, redoc_url=None)
 
@@ -44,6 +44,7 @@ def create_app(config_holder: ConfigHolder, sync_status=None, sync_manager=None)
     app.state.templates = templates
     app.state.sync_status = sync_status
     app.state.sync_manager = sync_manager
+    app.state.pending_queue = pending_queue
 
     from app.webui.oauth import router as oauth_router
     from app.webui.routes import router

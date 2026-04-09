@@ -92,6 +92,7 @@ def _start_webui(config, args, sync_status, log):
     """
     import uvicorn
 
+    from app.pending_queue import PendingQueue
     from app.webui import ConfigHolder, create_app
     from app.webui.sync_manager import SyncManager
 
@@ -100,9 +101,14 @@ def _start_webui(config, args, sync_status, log):
 
         sync_status = SyncStatus()
 
+    pending_queue = PendingQueue(config_dir=config.config_dir)
     config_holder = ConfigHolder(config=config, config_path=args.config)
-    sync_manager = SyncManager(config_holder=config_holder, sync_status=sync_status)
-    app = create_app(config_holder, sync_status=sync_status, sync_manager=sync_manager)
+    sync_manager = SyncManager(
+        config_holder=config_holder, sync_status=sync_status, pending_queue=pending_queue
+    )
+    app = create_app(
+        config_holder, sync_status=sync_status, sync_manager=sync_manager, pending_queue=pending_queue
+    )
 
     webui_port = args.webui_port or config.webui.port
     log.info("Starting web UI on port %d", webui_port)

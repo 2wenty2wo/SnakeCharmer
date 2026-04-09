@@ -375,6 +375,200 @@ async def library(request: Request):
     )
 
 
+# --- Pending Queue ---
+
+
+def _get_pending_queue(request: Request):
+    """Get the pending queue from app state."""
+    return getattr(request.app.state, "pending_queue", None)
+
+
+def _get_medusa_client(request: Request):
+    """Create a Medusa client from current config."""
+    config = _holder(request).get()
+    return MedusaClient(config.medusa, max_retries=1, retry_backoff=1.0)
+
+
+@router.get("/pending", response_class=HTMLResponse)
+async def pending_page(request: Request):
+    """Show the pending approval queue."""
+    pending_queue = _get_pending_queue(request)
+    pending_shows = pending_queue.get_pending() if pending_queue else []
+    pending_count = len(pending_shows)
+
+    return _templates(request).TemplateResponse(
+        request,
+        "pending.html",
+        context={
+            "pending_shows": pending_shows,
+            "pending_count": pending_count,
+            "active_page": "pending",
+        },
+    )
+
+
+@router.post("/pending/approve/{tvdb_id}", response_class=HTMLResponse)
+async def approve_single(request: Request, tvdb_id: int):
+    """Approve a single pending show and add it to Medusa."""
+    pending_queue = _get_pending_queue(request)
+    if pending_queue is None:
+        return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
+
+    show = pending_queue.get_show(tvdb_id)
+    if show is None:
+        return HTMLResponse('<div class="banner error">Show not found in pending queue.</div>')
+
+    # Add to Medusa
+    try:
+        medusa_client = _get_medusa_client(request)
+        add_options = {}
+        if show.quality:
+            add_options["quality"] = show.quality
+        if show.required_words:
+            add_options["required_words"] = show.required_words
+
+        medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
+
+        # Remove from pending queue
+        pending_queue.approve_show(tvdb_id)
+
+        return HTMLResponse(
+            f'<div class="pending-row pending-row-approved" id="pending-row-{tvdb_id}">'
+            f'<div class="pending-info"><div class="pending-title">{escape(show.title)}</div>'
+            f'<div class="pending-meta">Approved and added to Medusa</div></div></div>'
+        )
+    except Exception as e:
+        return HTMLResponse(
+            f'<div class="banner error">Failed to add "{escape(show.title)}": {escape(str(e))}</div>'
+        )
+
+
+@router.post("/pending/reject/{tvdb_id}", response_class=HTMLResponse)
+async def reject_single(request: Request, tvdb_id: int):
+    """Reject a single pending show."""
+    pending_queue = _get_pending_queue(request)
+    if pending_queue is None:
+        return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
+
+    show = pending_queue.reject_show(tvdb_id)
+    if show is None:
+        return HTMLResponse('<div class="banner error">Show not found in pending queue.</div>')
+
+    return HTMLResponse(
+        f'<div class="pending-row pending-row-rejected" id="pending-row-{tvdb_id}">'
+        f'<div class="pending-info"><div class="pending-title">{escape(show.title)}</div>'
+        f'<div class="pending-meta">Rejected</div></div></div>'
+    )
+
+
+@router.post("/pending/bulk-approve", response_class=HTMLResponse)
+async def bulk_approve(request: Request):
+    """Approve multiple pending shows."""
+    pending_queue = _get_pending_queue(request)
+    if pending_queue is None:
+        return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
+
+    form = await request.form()
+    select_all = form.get("select_all") == "true"
+
+    if select_all:
+        # Approve all pending shows
+        shows = pending_queue.get_pending()
+        tvdb_ids = [s.tvdb_id for s in shows]
+    else:
+        # Approve selected shows
+        tvdb_ids = [int(v) for v in form.getlist("tvdb_ids") if v]
+
+    if not tvdb_ids:
+        return HTMLResponse('<div class="banner warning">No shows selected.</div>')
+
+    approved = []
+    failed = []
+
+    try:
+        medusa_client = _get_medusa_client(request)
+        for tvdb_id in tvdb_ids:
+            show = pending_queue.get_show(tvdb_id)
+            if show is None:
+                continue
+
+            add_options = {}
+            if show.quality:
+                add_options["quality"] = show.quality
+            if show.required_words:
+                add_options["required_words"] = show.required_words
+
+            try:
+                medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
+                pending_queue.approve_show(tvdb_id)
+                approved.append(show.title)
+            except Exception as e:
+                failed.append(f"{show.title}: {e}")
+    except Exception as e:
+        return HTMLResponse(f'<div class="banner error">Failed to connect to Medusa: {escape(str(e))}</div>')
+
+    if failed:
+        return HTMLResponse(
+            f'<div class="banner warning">Approved {len(approved)} shows. Failed: {len(failed)}</div>'
+        )
+
+    # Trigger HTMX to refresh the page
+    return HTMLResponse(
+        '<div class="banner success">Approved {} shows. <a href="/pending">Refresh</a></div>'
+        '<script>setTimeout(() => window.location.href = "/pending", 1000);</script>'.format(len(approved))
+    )
+
+
+@router.post("/pending/bulk-reject", response_class=HTMLResponse)
+async def bulk_reject(request: Request):
+    """Reject multiple pending shows."""
+    pending_queue = _get_pending_queue(request)
+    if pending_queue is None:
+        return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
+
+    form = await request.form()
+    tvdb_ids = [int(v) for v in form.getlist("tvdb_ids") if v]
+
+    if not tvdb_ids:
+        return HTMLResponse('<div class="banner warning">No shows selected.</div>')
+
+    rejected = pending_queue.bulk_reject(tvdb_ids)
+
+    # Trigger HTMX to refresh the page
+    return HTMLResponse(
+        '<div class="banner success">Rejected {} shows. <a href="/pending">Refresh</a></div>'
+        '<script>setTimeout(() => window.location.href = "/pending", 1000);</script>'.format(len(rejected))
+    )
+
+
+@router.post("/pending/bulk-action", response_class=HTMLResponse)
+async def bulk_action(request: Request):
+    """Handle bulk action form submission."""
+    form = await request.form()
+    action = form.get("action")
+
+    if action == "approve":
+        return await bulk_approve(request)
+    elif action == "reject":
+        return await bulk_reject(request)
+    else:
+        return HTMLResponse('<div class="banner error">Invalid action.</div>')
+
+
+@router.get("/pending/count", response_class=HTMLResponse)
+async def pending_count(request: Request):
+    """Return the pending count badge for the navigation."""
+    pending_queue = _get_pending_queue(request)
+    count = pending_queue.get_count() if pending_queue else 0
+
+    if count == 0:
+        return HTMLResponse('<span id="pending-badge" class="nav-badge" style="display:none"></span>')
+
+    return HTMLResponse(
+        f'<span id="pending-badge" class="nav-badge" hx-get="/pending/count" hx-trigger="every 30s" hx-swap="outerHTML">{count}</span>'
+    )
+
+
 # --- Helpers ---
 
 
@@ -396,6 +590,9 @@ def _parse_sources_from_form(form) -> list[dict]:
         auth_val = form.get(f"source_{index}_auth")
         if auth_val == "on":
             source_dict["auth"] = True
+        auto_approve_val = form.get(f"source_{index}_auto_approve")
+        if auto_approve_val != "on":
+            source_dict["auto_approve"] = False
 
         quality = form.get(f"source_{index}_quality", "").strip()
         required_words = form.get(f"source_{index}_required_words", "").strip()

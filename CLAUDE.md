@@ -62,7 +62,7 @@ Config is in `pyproject.toml`. Rules: `E`, `F`, `W`, `I`, `UP`, `B`, `SIM`. Line
 
 ```
 main.py                    CLI entry point, argparse, logging setup (text/JSON); orchestrates via helpers: _run_once, _start_webui, _run_interval_loop, _run_webui_wait_loop
-app/models.py              Config dataclass definitions: AppConfig, TraktConfig, MedusaConfig, SyncConfig, HealthConfig, WebUIConfig, NotifyConfig, TraktSource, MedusaAddOptions, ConfigError
+app/models.py              Config dataclass definitions: AppConfig, TraktConfig, MedusaConfig, SyncConfig, HealthConfig, WebUIConfig, NotifyConfig, TraktSource, MedusaAddOptions, PendingShow, ConfigError
 app/config.py              Config loading: YAML parsing → env var overrides → validation; re-exports all models from app/models.py
 app/http_client.py         RetryClient base class: exponential backoff retry on 5xx/connection errors, hook methods (_handle_rate_limit, _on_connection_exhausted)
 app/trakt.py               TraktClient(RetryClient): public list fetching, OAuth device flow, token persistence, 429 rate-limit handling
@@ -70,6 +70,7 @@ app/medusa.py              MedusaClient(RetryClient): library listing (get_exist
 app/sync.py                run_sync(): orchestrates fetch → diff → add cycle, returns SyncResult metrics
 app/health.py              HTTP health endpoint: SyncStatus tracking, /health JSON responses (200 ok / 503 degraded)
 app/notify.py              Apprise-based notifications: sends alerts on sync success/failure to 100+ services
+app/pending_queue.py       PendingQueue: thread-safe JSON file storage for manual approval queue
 app/webui/__init__.py      FastAPI app factory (create_app), ConfigHolder thread-safe wrapper, includes all route modules
 app/webui/routes.py        HTMX-driven routes: dashboard, config sections, sync control, source preview, library, /health JSON
 app/webui/oauth.py         Trakt OAuth device code flow: oauth_trakt_start, oauth_trakt_poll, _get_trakt_token_status
@@ -81,7 +82,7 @@ app/webui/static/style.css Green Deck design system: custom CSS with design toke
 DESIGN.md                  Green Deck design system spec: colors, typography, components, spacing, elevation rules
 ```
 
-Data flow: `main.py` loads config, optionally starts the health server and/or web UI, then calls `run_sync()` which instantiates both API clients, fetches shows from Trakt as `TraktShow` dataclasses, gets existing TVDB IDs from Medusa, adds any missing shows, and returns a `SyncResult` with detailed metrics. After each sync cycle, `send_notification()` is called to send alerts via Apprise if configured. The health server exposes these metrics via HTTP.
+Data flow: `main.py` loads config, optionally starts the health server and/or web UI, then calls `run_sync()` which instantiates both API clients, fetches shows from Trakt as `TraktShow` dataclasses, gets existing TVDB IDs from Medusa, adds any missing shows (or queues them for manual approval if `auto_approve: false`), and returns a `SyncResult` with detailed metrics. After each sync cycle, `send_notification()` is called to send alerts via Apprise if configured. The health server exposes these metrics via HTTP.
 
 ### Sync flow (`app/sync.py`)
 
@@ -92,8 +93,9 @@ Data flow: `main.py` loads config, optionally starts the health server and/or we
 5. Fetch existing TVDB IDs from Medusa via `MedusaClient.get_existing_tvdb_ids()`
 6. Compute `missing = trakt_shows - existing_ids`
 7. For each missing show, select Medusa add options from the first source that contributed it (policy: `first_source_in_config_order`)
-8. Add to Medusa (or log in dry-run mode)
-9. Return `SyncResult` with metrics (added, skipped, failed, duration, per-source counts)
+8. If source has `auto_approve: true` (default): add to Medusa immediately
+9. If source has `auto_approve: false`: add to `PendingQueue` for manual approval (WebUI)
+10. Return `SyncResult` with metrics (added, queued, skipped, failed, duration, per-source counts)
 
 ### Retry logic (`app/http_client.py`)
 
@@ -141,8 +143,9 @@ Optional browser-based config management built with FastAPI + Jinja2 + HTMX, sty
 - **Dashboard** (`/`): shows current config summary and sync status in a card grid, auto-refreshes status every 10s via HTMX polling
 - **Sync Now** (`POST /sync/run`): triggers a manual sync from the dashboard or history page via `SyncManager`
 - **Sync History** (`/sync/history`): table of last 20 sync results with status, counts, and duration
+- **Pending** (`/pending`): manual approval queue for shows from sources with `auto_approve: false`; approve/reject individual shows or in bulk
 - **Config sections** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`, `/config/notify`): edit and save each config section via HTMX form submissions
-- **Source management**: add/remove Trakt sources dynamically with per-source Medusa quality and required_words overrides
+- **Source management**: add/remove Trakt sources dynamically with per-source Medusa quality, required_words, and auto_approve settings
 - **Source Preview** (`POST /config/trakt/sources/preview`): fetches and displays shows from a Trakt source inline
 - **Test Connection** (`POST /test/trakt`, `POST /test/medusa`): validates API credentials without saving
 - **Test Notification** (`POST /test/notify`): sends a test notification to configured Apprise URLs
@@ -154,7 +157,7 @@ Optional browser-based config management built with FastAPI + Jinja2 + HTMX, sty
 
 Key classes:
 - `ConfigHolder` (`app/webui/__init__.py`): thread-safe mutable holder for the active `AppConfig`, shared between web UI and sync loop
-- `SyncManager` (`app/webui/sync_manager.py`): thread-safe manager for triggering manual syncs from the web UI, runs sync in a background thread
+- `SyncManager` (`app/webui/sync_manager.py`): thread-safe manager for triggering manual syncs from the web UI, runs sync in a background thread, passes `PendingQueue` to `run_sync()`
 - `config_to_dict()` / `save_config()` / `load_config_dict()` (`app/webui/config_io.py`): round-trip serialization between `AppConfig` dataclasses and YAML files
 
 ### Web UI Design (`DESIGN.md` — Green Deck)
@@ -176,9 +179,11 @@ Core: `requests`, `pyyaml`, `apprise`. Web UI: `fastapi`, `uvicorn[standard]`, `
 ## Data Models
 
 - `TraktShow` (`app/trakt.py`): `title`, `tvdb_id`, `imdb_id`, `year` — the unit of data flowing from Trakt to the sync engine
-- `TraktSource` (`app/models.py`): describes one source to fetch — `type`, `owner`, `list_slug`, `auth`, `medusa` (add options)
+- `TraktSource` (`app/models.py`): describes one source to fetch — `type`, `owner`, `list_slug`, `auth`, `auto_approve`, `medusa` (add options)
 - `MedusaAddOptions` (`app/models.py`): per-source Medusa overrides — `quality` (preset name, individual value, or list), `required_words` (list of strings)
-- `SyncResult` (`app/sync.py`): sync cycle metrics — `total_fetched`, `unique_shows`, `already_in_medusa`, `added`, `skipped`, `failed`, `duration_seconds`, `per_source`, `success`
+- `PendingShow` (`app/models.py`): a show awaiting manual approval — `tvdb_id`, `title`, `year`, `imdb_id`, `source_type`, `source_label`, `discovered_at`, `status`, `quality`, `required_words`
+- `SyncResult` (`app/sync.py`): sync cycle metrics — `total_fetched`, `unique_shows`, `already_in_medusa`, `added`, `queued`, `skipped`, `failed`, `duration_seconds`, `per_source`, `success`
+- `PendingQueue` (`app/pending_queue.py`): thread-safe JSON-backed queue for manual approval — `add_show()`, `approve_show()`, `reject_show()`, `bulk_approve()`, `bulk_reject()`, `get_pending()`, `is_pending()`, `get_count()`, `get_history()`
 - `SyncStatus` (`app/health.py`): thread-safe container for last sync result and application uptime
 - `ConfigHolder` (`app/webui/__init__.py`): thread-safe mutable holder for the active `AppConfig`
 - `NotifyConfig` (`app/models.py`): notification settings — `enabled`, `urls` (list of Apprise URLs), `on_success`, `on_failure`, `only_if_added`
@@ -249,3 +254,4 @@ Two log formats are available, configured via `sync.log_format` or `--log-format
 - Legacy `list`/`lists` config keys are still supported but undocumented in README; env vars `SNAKECHARMER_TRAKT_LIST` and `SNAKECHARMER_TRAKT_LISTS` trigger the legacy path
 - Web UI does not support OAuth token management
 - Web UI does not support editing WebUI settings (intentional — cannot change UI port/enabled from within the UI)
+- Pending queue history is limited to 100 entries; old entries are lost when limit is reached
