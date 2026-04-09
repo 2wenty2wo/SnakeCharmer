@@ -26,7 +26,7 @@ class SyncResult:
 
 def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
     """Run a single sync cycle: fetch Trakt lists, compare with Medusa, add missing shows."""
-    start_time = time.monotonic()
+    start_time_ns = time.perf_counter_ns()
     result = SyncResult()
 
     trakt_client = TraktClient(
@@ -55,7 +55,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
         except Exception as e:
             log.error("Failed to fetch Trakt source '%s': %s", source_name, e)
             result.success = False
-            result.duration_seconds = time.monotonic() - start_time
+            result.duration_seconds = _elapsed_seconds(start_time_ns)
             return result
 
         list_counts[source_name] = len(list_shows)
@@ -75,7 +75,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
     if not trakt_shows:
         joined_sources = ", ".join(source.label for source in config.trakt.sources)
         log.info("No shows found across configured Trakt sources: %s", joined_sources)
-        result.duration_seconds = time.monotonic() - start_time
+        result.duration_seconds = _elapsed_seconds(start_time_ns)
         return result
 
     # Fetch existing Medusa library
@@ -84,7 +84,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
     except Exception as e:
         log.error("Failed to fetch Medusa library: %s", e)
         result.success = False
-        result.duration_seconds = time.monotonic() - start_time
+        result.duration_seconds = _elapsed_seconds(start_time_ns)
         return result
 
     # Find missing shows
@@ -97,7 +97,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
             len(trakt_shows),
             ", ".join(f"{name}={count}" for name, count in list_counts.items()),
         )
-        result.duration_seconds = time.monotonic() - start_time
+        result.duration_seconds = _elapsed_seconds(start_time_ns)
         _log_summary(result, config.sync.dry_run)
         return result
 
@@ -206,9 +206,14 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
             result.failed += 1
 
     result.success = result.failed == 0
-    result.duration_seconds = time.monotonic() - start_time
+    result.duration_seconds = _elapsed_seconds(start_time_ns)
     _log_summary(result, config.sync.dry_run)
     return result
+
+
+def _elapsed_seconds(start_time_ns: int) -> float:
+    elapsed = (time.perf_counter_ns() - start_time_ns) / 1_000_000_000
+    return elapsed if elapsed > 0 else 1e-9
 
 
 def _log_summary(result: SyncResult, dry_run: bool) -> None:
