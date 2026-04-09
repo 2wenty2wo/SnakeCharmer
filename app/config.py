@@ -224,6 +224,7 @@ def _normalize_trakt_sources(trakt_raw: dict) -> list[TraktSource]:
         list_slug = str(item.get("list_slug", "")).strip()
         auth_raw = item.get("auth")
         auth = None if auth_raw is None else _to_bool(auth_raw)
+        auto_approve = _to_bool(item.get("auto_approve", True))
         medusa_raw = item.get("medusa", {})
         medusa = _parse_medusa_add_options(medusa_raw)
         sources.append(
@@ -232,6 +233,7 @@ def _normalize_trakt_sources(trakt_raw: dict) -> list[TraktSource]:
                 owner=owner,
                 list_slug=list_slug,
                 auth=auth,
+                auto_approve=auto_approve,
                 medusa=medusa,
             )
         )

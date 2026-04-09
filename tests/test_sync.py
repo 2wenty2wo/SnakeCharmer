@@ -1,5 +1,5 @@
 import logging
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -263,6 +263,39 @@ class TestRunSync:
         run_sync(config)
 
         mock_medusa.add_show.assert_not_called()
+
+    def test_manual_approval_source_without_pending_queue_is_skipped(
+        self, config, mock_trakt, mock_medusa
+    ):
+        config.trakt.sources = [TraktSource(type="trending", auto_approve=False)]
+        mock_trakt.get_shows.return_value = [TraktShow(title="Needs Review", tvdb_id=77)]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+
+        result = run_sync(config)
+
+        mock_medusa.add_show.assert_not_called()
+        assert result.added == 0
+        assert result.queued == 0
+        assert result.skipped == 1
+
+    def test_manual_approval_source_uses_pending_queue_when_available(
+        self, config, mock_trakt, mock_medusa
+    ):
+        config.trakt.sources = [TraktSource(type="trending", auto_approve=False)]
+        mock_trakt.get_shows.return_value = [TraktShow(title="Needs Review", tvdb_id=77)]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        pending_queue = Mock()
+        pending_queue.is_pending.return_value = False
+        pending_queue.add_show.return_value = True
+
+        result = run_sync(config, pending_queue=pending_queue)
+
+        mock_medusa.add_show.assert_not_called()
+        pending_queue.is_pending.assert_called_once_with(77)
+        pending_queue.add_show.assert_called_once()
+        assert result.added == 0
+        assert result.queued == 1
+        assert result.skipped == 0
 
 
 class TestMedusaAddOptionsFromSource:

@@ -24,6 +24,10 @@
                 <a href="/config/health" {% if active_page == "health" %}class="active"{% endif %}>Health</a>
                 <a href="/config/notify" {% if active_page == "notify" %}class="active"{% endif %}>Notify</a>
                 <a href="/sync/history" {% if active_page == "history" %}class="active"{% endif %}>History</a>
+                <a href="/pending" {% if active_page == "pending" %}class="active"{% endif %}>
+                    Pending
+                    <span id="pending-badge" class="nav-badge" hx-get="/pending/count" hx-trigger="load" hx-swap="outerHTML" style="display:none"></span>
+                </a>
                 <a href="/library" {% if active_page == "library" %}class="active"{% endif %}>Library</a>
             </nav>
         </aside>

@@ -7,7 +7,7 @@
                     hx-post="/config/trakt/sources/preview"
                     hx-target="#preview-{{ i }}"
                     hx-swap="innerHTML"
-                    hx-include="[name='client_id'],[name='client_secret'],[name='username'],[name='limit'],[name='source_{{ i }}_type'],[name='source_{{ i }}_owner'],[name='source_{{ i }}_list_slug'],[name='source_{{ i }}_auth']"
+                    hx-include="[name='client_id'],[name='client_secret'],[name='username'],[name='limit'],[name='source_{{ i }}_type'],[name='source_{{ i }}_owner'],[name='source_{{ i }}_list_slug'],[name='source_{{ i }}_auth'],[name='source_{{ i }}_auto_approve']"
                     hx-vals='{"source_index": "{{ i }}"}'>
                 Preview
             </button>
@@ -46,6 +46,11 @@
         <label class="field-label">
             <input type="checkbox" name="source_{{ i }}_auth" {{ "checked" if source.auth }}>
             Requires OAuth
+        </label>
+        <label class="field-label">
+            <input type="checkbox" name="source_{{ i }}_auto_approve" {{ "checked" if source.auto_approve }}>
+            Auto-approve shows
+            <small>If unchecked, shows go to the pending queue for manual approval</small>
         </label>
         <label class="field-label">
             Quality

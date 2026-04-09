@@ -27,6 +27,8 @@ def config_to_dict(config: AppConfig) -> dict:
             source_dict["list_slug"] = source.list_slug
         if source.auth is not None:
             source_dict["auth"] = source.auth
+        if not source.auto_approve:
+            source_dict["auto_approve"] = source.auto_approve
 
         medusa_opts: dict = {}
         if source.medusa.quality is not None:

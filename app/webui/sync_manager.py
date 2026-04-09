@@ -15,6 +15,7 @@ class SyncManager:
 
     config_holder: object  # ConfigHolder — avoid circular import
     sync_status: SyncStatus
+    pending_queue: object | None = None  # PendingQueue
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     _running: bool = False
     _last_result: SyncResult | None = None
@@ -80,7 +81,7 @@ class SyncManager:
         try:
             config = self.config_holder.get()
             log.info("Sync triggered (web UI/scheduler coordinator)")
-            result = run_sync(config)
+            result = run_sync(config, pending_queue=self.pending_queue)
             with self._lock:
                 self._last_result = result
             self.sync_status.update(result)

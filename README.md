@@ -20,6 +20,7 @@
 
 - Sync one or more Trakt sources (watchlist, trending, popular, watched, custom user lists)
 - Automatically add missing shows to Medusa
+- **Manual approval queue** — per-source `auto_approve` setting for shows requiring approval before adding
 - Smart duplicate detection by TVDB ID (no double adds)
 - Per-source Medusa quality presets and required words
 - OAuth device flow for private lists and watchlists
@@ -43,7 +44,7 @@ SnakeCharmer acts as a bridge between [Trakt](https://trakt.tv) and [Medusa](htt
 2. Deduplicate across sources by TVDB ID
 3. Fetch your existing Medusa library
 4. Compare both
-5. Add any missing shows to Medusa automatically
+5. Add any missing shows to Medusa automatically (or queue for manual approval)
 
 ---
 
@@ -179,6 +180,28 @@ trakt:
         required_words: ["x265", "2160p"]
 ```
 
+### Example: manual approval queue
+
+Disable `auto_approve` on any source to queue shows for manual approval instead of adding them immediately. Use the Web UI to review and approve/reject queued shows.
+
+```yaml
+trakt:
+  client_id: YOUR_TRAKT_CLIENT_ID
+  sources:
+    - type: watchlist
+      auto_approve: false              # manual approval required
+      medusa:
+        quality: hd1080p
+    - type: trending
+      auto_approve: true               # auto-add (default behavior)
+    - type: user_list
+      owner: friend
+      list_slug: recommendations
+      auto_approve: false              # manual approval for friend's picks
+      medusa:
+        quality: hd720p
+```
+
 ---
 
 ## Usage
@@ -265,6 +288,7 @@ Example response after a successful sync:
     "timestamp": "2025-01-15T12:00:00Z",
     "duration_seconds": 4.2,
     "added": 3,
+    "queued": 0,
     "skipped": 0,
     "failed": 0,
     "unique_shows": 25,
@@ -311,8 +335,9 @@ When enabled, SnakeCharmer runs a browser-based config management interface buil
 - **Dashboard** (`/`): shows current config summary and sync status, auto-refreshes every 10s
 - **Sync Now** (`POST /sync/run`): trigger a manual sync from the dashboard or history page
 - **Sync History** (`/sync/history`): table of last 20 sync results with status, counts, and duration
+- **Pending** (`/pending`): shows waiting for manual approval; individual and bulk approve/reject actions
 - **Config editors** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`, `/config/notify`): edit and save each config section
-- **Source management**: add/remove Trakt sources with per-source Medusa quality and required_words overrides
+- **Source management**: add/remove Trakt sources with per-source Medusa quality, required_words, and auto_approve overrides
 - **Source Preview** (`POST /config/trakt/sources/preview`): fetch and display shows from a Trakt source inline
 - **Test Connection** (`POST /test/trakt`, `POST /test/medusa`): validate API credentials without saving
 - **Test Notification** (`POST /test/notify`): send a test notification to configured Apprise URLs
@@ -370,6 +395,7 @@ snakecharmer/
 │   ├── health.py
 │   ├── medusa.py
 │   ├── notify.py
+│   ├── pending_queue.py      # Manual approval queue storage
 │   ├── sync.py
 │   ├── trakt.py
 │   └── webui/
@@ -384,6 +410,7 @@ snakecharmer/
 │           ├── dashboard.html
 │           ├── dashboard_status.html
 │           ├── library.html
+│           ├── pending.html     # Manual approval queue UI
 │           ├── config/
 │           │   ├── health.html
 │           │   ├── medusa.html
@@ -402,6 +429,7 @@ snakecharmer/
 │   ├── test_main.py
 │   ├── test_medusa.py
 │   ├── test_notify.py
+│   ├── test_pending_queue.py  # Pending queue tests
 │   ├── test_sync.py
 │   ├── test_trakt.py
 │   └── test_webui.py

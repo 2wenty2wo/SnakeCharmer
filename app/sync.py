@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from app.config import AppConfig
 from app.medusa import MedusaClient
+from app.models import PendingShow
 from app.trakt import TraktClient
 
 log = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ class SyncResult:
     unique_shows: int = 0
     already_in_medusa: int = 0
     added: int = 0
+    queued: int = 0
     skipped: int = 0
     failed: int = 0
     duration_seconds: float = 0.0
@@ -22,7 +24,7 @@ class SyncResult:
     success: bool = True
 
 
-def run_sync(config: AppConfig) -> SyncResult:
+def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
     """Run a single sync cycle: fetch Trakt lists, compare with Medusa, add missing shows."""
     start_time = time.monotonic()
     result = SyncResult()
@@ -105,7 +107,7 @@ def run_sync(config: AppConfig) -> SyncResult:
         ", ".join(f"{name}={count}" for name, count in list_counts.items()),
     )
 
-    # Add missing shows
+    # Add missing shows (or queue for approval)
     for show in missing:
         show_sources = source_objs.get(show.tvdb_id, [])
         selected_source = show_sources[0] if show_sources else None
@@ -113,6 +115,63 @@ def run_sync(config: AppConfig) -> SyncResult:
         selected_source_label = selected_source.label if selected_source else "unknown"
         option_keys = sorted(selected_options.keys()) if selected_options else []
 
+        requires_manual_approval = selected_source is not None and not selected_source.auto_approve
+
+        # Respect manual approval even when no pending queue is available
+        if requires_manual_approval and pending_queue is None:
+            log.warning(
+                "Skipping '%s' (tvdb:%d): source '%s' requires manual approval but no pending "
+                "queue is configured",
+                show.title,
+                show.tvdb_id,
+                selected_source_label,
+            )
+            result.skipped += 1
+            continue
+
+        # Check if this show should go to pending queue
+        if requires_manual_approval:
+            # Check if already pending
+            if pending_queue.is_pending(show.tvdb_id):
+                log.debug("Already in pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
+                result.skipped += 1
+                continue
+
+            # Add to pending queue
+            pending_show = PendingShow(
+                tvdb_id=show.tvdb_id,
+                title=show.title,
+                year=show.year,
+                imdb_id=show.imdb_id,
+                source_type=selected_source.type,
+                source_label=selected_source_label,
+                quality=selected_source.medusa.quality,
+                required_words=selected_source.medusa.required_words,
+            )
+
+            if config.sync.dry_run:
+                log.info(
+                    "[DRY RUN] Would queue: %s (tvdb:%d, source:%s)",
+                    show.title,
+                    show.tvdb_id,
+                    selected_source_label,
+                )
+                result.queued += 1
+                continue
+
+            if pending_queue.add_show(pending_show):
+                log.info(
+                    "Queued for approval: %s (tvdb:%d, source:%s)",
+                    show.title,
+                    show.tvdb_id,
+                    selected_source_label,
+                )
+                result.queued += 1
+            else:
+                result.skipped += 1
+            continue
+
+        # Auto-approve path: add directly to Medusa
         if config.sync.dry_run:
             log.info(
                 "[DRY RUN] Would add: %s "
@@ -156,11 +215,11 @@ def _log_summary(result: SyncResult, dry_run: bool) -> None:
     """Log a structured sync summary."""
     prefix = "[DRY RUN] " if dry_run else ""
     source_summary = ", ".join(f"{name}={count}" for name, count in result.per_source.items())
-    missing = result.added + result.skipped + result.failed
+    missing = result.added + result.queued + result.skipped + result.failed
     log.info(
         "%sSync complete in %.1fs: sources: %s | "
         "unique: %d | in library: %d | missing: %d | "
-        "added: %d | skipped: %d | failed: %d",
+        "added: %d | queued: %d | skipped: %d | failed: %d",
         prefix,
         result.duration_seconds,
         source_summary,
@@ -168,6 +227,7 @@ def _log_summary(result: SyncResult, dry_run: bool) -> None:
         result.already_in_medusa,
         missing,
         result.added,
+        result.queued,
         result.skipped,
         result.failed,
     )

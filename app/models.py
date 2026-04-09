@@ -20,11 +20,28 @@ class MedusaAddOptions:
 
 
 @dataclass
+class PendingShow:
+    """A show waiting for manual approval before being added to Medusa."""
+
+    tvdb_id: int
+    title: str
+    year: int | None = None
+    imdb_id: str | None = None
+    source_type: str = ""
+    source_label: str = ""
+    discovered_at: str = ""
+    status: str = "pending"  # "pending", "approved", "rejected"
+    quality: str | list[str] | None = None
+    required_words: list[str] = field(default_factory=list)
+
+
+@dataclass
 class TraktSource:
     type: str
     owner: str = ""
     list_slug: str = ""
     auth: bool | None = None
+    auto_approve: bool = True
     medusa: MedusaAddOptions = field(default_factory=MedusaAddOptions)
 
     @property
