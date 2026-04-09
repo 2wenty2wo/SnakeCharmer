@@ -33,6 +33,7 @@
 - Optional web UI for config management (FastAPI + HTMX)
 - Environment variable overrides for all settings
 - Docker-ready with built-in healthcheck
+- GitHub auto-release on version tags (`v*`) with attached build artifacts
 
 ---
 
@@ -200,6 +201,21 @@ trakt:
       auto_approve: false              # manual approval for friend's picks
       medusa:
         quality: hd720p
+```
+
+---
+
+## Release Automation
+
+Pushing a version tag (for example `v1.2.0`) triggers `.github/workflows/release.yml`, which:
+
+1. Builds Python distribution artifacts (`sdist` and wheel)
+2. Publishes a GitHub Release for that tag
+3. Uploads the built artifacts to both the workflow run and the Release assets
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 ---
