@@ -31,12 +31,8 @@ class TestPendingQueueBasics:
     def test_get_pending_returns_sorted_list(self, tmp_path):
         """get_pending returns shows sorted by discovery time."""
         pq = PendingQueue(str(tmp_path))
-        show1 = PendingShow(
-            tvdb_id=1, title="Show 1", discovered_at="2024-01-01T10:00:00+00:00"
-        )
-        show2 = PendingShow(
-            tvdb_id=2, title="Show 2", discovered_at="2024-01-01T09:00:00+00:00"
-        )
+        show1 = PendingShow(tvdb_id=1, title="Show 1", discovered_at="2024-01-01T10:00:00+00:00")
+        show2 = PendingShow(tvdb_id=2, title="Show 2", discovered_at="2024-01-01T09:00:00+00:00")
 
         pq.add_show(show1)
         pq.add_show(show2)

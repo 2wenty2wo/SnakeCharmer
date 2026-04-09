@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1789,10 +1791,22 @@ class TestSyncManagerStartSync:
         holder = ConfigHolder(config=config, config_path=config_path)
         sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
 
-        with patch("app.webui.sync_manager.run_sync", return_value=SyncResult(success=True)):
+        sync_started = threading.Event()
+
+        def _mock_run_sync(*_args, **_kwargs):
+            sync_started.set()
+            return SyncResult(success=True)
+
+        with patch("app.webui.sync_manager.run_sync", side_effect=_mock_run_sync):
             result = sm.start_sync()
+            assert sync_started.wait(timeout=1)
+
+            deadline = time.time() + 1
+            while sm.is_running() and time.time() < deadline:
+                time.sleep(0.01)
 
         assert result is True
+        assert sm.is_running() is False
 
     def test_start_sync_config_errors_returns_false(self, tmp_path):
         config = _make_config(
