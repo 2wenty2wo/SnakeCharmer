@@ -59,6 +59,8 @@
         var dirty = false;
         var dirtyIndicator = document.getElementById("dirty-indicator");
         var baselineState = "";
+        var userInteracted = false;
+        var postLoadBaselineResetDone = false;
 
         function getActiveConfigForm() {
             return document.querySelector('form[hx-post="' + window.location.pathname + '"]');
@@ -109,10 +111,22 @@
             baselineState = getCurrentState();
         }
 
+        function resetBaselineAfterStabilization() {
+            if (postLoadBaselineResetDone || userInteracted) {
+                return;
+            }
+            setBaselineToCurrentState();
+            setDirty(false);
+            postLoadBaselineResetDone = true;
+        }
+
         function markDirty(event) {
             var form = event.target.closest("form");
             if (!form || !configPathPattern.test(form.getAttribute("hx-post") || "")) {
                 return;
+            }
+            if (event.isTrusted) {
+                userInteracted = true;
             }
             var currentState = getCurrentState();
             var hasStateDiff = currentState !== baselineState;
@@ -124,6 +138,12 @@
 
         setBaselineToCurrentState();
         setDirty(false);
+        window.addEventListener("load", function() {
+            resetBaselineAfterStabilization();
+            setTimeout(function() {
+                resetBaselineAfterStabilization();
+            }, 200);
+        });
 
         document.body.addEventListener("input", markDirty);
         document.body.addEventListener("change", markDirty);
