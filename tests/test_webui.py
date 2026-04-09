@@ -81,6 +81,11 @@ class TestTraktConfig:
         assert response.status_code == 200
         assert "Trakt" in response.text
         assert "test_id" in response.text
+        assert (
+            "var traktSourcesPathPattern = /^\\/config\\/trakt\\/sources(?:\\/|$)/;"
+            in response.text
+        )
+        assert "if (requestPath === window.location.pathname && detail.successful)" in response.text
 
     def test_save_trakt(self, tmp_path):
         client, holder, config_path = _create_client(tmp_path)
@@ -160,7 +165,7 @@ class TestTraktConfig:
                 "source_0_type": "trending",
             },
         )
-        assert response.status_code == 200
+        assert response.status_code == 422
         assert "error" in response.text.lower()
 
     def test_invalid_trakt_save_does_not_overwrite_yaml(self, tmp_path):
@@ -179,7 +184,7 @@ class TestTraktConfig:
             },
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 422
         assert "error" in response.text.lower()
         with open(config_path) as f:
             after_raw = yaml.safe_load(f)
@@ -559,7 +564,7 @@ class TestWebuiFormEdgeCases:
                 # no source_X_type fields
             },
         )
-        assert response.status_code == 200
+        assert response.status_code == 422
         assert "error" in response.text.lower()
 
     def test_save_trakt_source_with_empty_quality_ignored(self, tmp_path):
@@ -991,7 +996,7 @@ class TestOnboardingPartialSave:
                 "source_0_type": "trending",
             },
         )
-        assert response.status_code == 200
+        assert response.status_code == 422
         assert "error" in response.text.lower()
         assert "trakt.client_id" in response.text
 

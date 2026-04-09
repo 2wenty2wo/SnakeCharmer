@@ -437,7 +437,7 @@ def _save_and_respond(request: Request, config_dict: dict, holder, section: str)
         for err in e.errors:
             error_html += f"<li>{err}</li>"
         error_html += "</ul></div>"
-        return HTMLResponse(error_html)
+        return HTMLResponse(error_html, status_code=422)
     except Exception as e:
         log.exception("Failed to save config")
         return HTMLResponse(f'<div class="banner error" role="alert">Failed to save: {e}</div>')

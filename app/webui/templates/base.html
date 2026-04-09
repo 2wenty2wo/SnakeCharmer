@@ -28,6 +28,7 @@
         </aside>
         <main class="main-content">
             <div id="result-banner"></div>
+            <div id="dirty-indicator" class="info-label status-badge status-unknown" hidden>Unsaved changes</div>
             {% block content %}{% endblock %}
             <footer class="app-footer">
                 <small>Config changes are written to the YAML file. Comments in the file will be removed on save.<br>SnakeCharmer is free and open source. <a href="https://github.com/sponsors/2wenty2wo" target="_blank">Support development</a>.</small>
@@ -46,6 +47,58 @@
             }
         }
     });
+
+    (function() {
+        var configPathPattern = /^\/config\/[^/]+$/;
+        var traktSourcesPathPattern = /^\/config\/trakt\/sources(?:\/|$)/;
+        var isConfigPage = configPathPattern.test(window.location.pathname);
+        if (!isConfigPage) {
+            return;
+        }
+
+        var dirty = false;
+        var dirtyIndicator = document.getElementById("dirty-indicator");
+
+        function setDirty(value) {
+            dirty = value;
+            if (dirtyIndicator) {
+                dirtyIndicator.hidden = !dirty;
+            }
+        }
+
+        function markDirty(event) {
+            var form = event.target.closest("form");
+            if (!form || !configPathPattern.test(form.getAttribute("hx-post") || "")) {
+                return;
+            }
+            setDirty(true);
+        }
+
+        document.body.addEventListener("input", markDirty);
+        document.body.addEventListener("change", markDirty);
+
+        document.body.addEventListener("htmx:afterRequest", function(event) {
+            var detail = event.detail || {};
+            var requestPath = detail.pathInfo && detail.pathInfo.requestPath;
+            if (!requestPath) {
+                return;
+            }
+            if (requestPath === window.location.pathname && detail.successful) {
+                setDirty(false);
+            }
+            if (traktSourcesPathPattern.test(requestPath) && detail.successful) {
+                setDirty(true);
+            }
+        });
+
+        window.addEventListener("beforeunload", function(event) {
+            if (!dirty) {
+                return;
+            }
+            event.preventDefault();
+            event.returnValue = "";
+        });
+    })();
     </script>
 </body>
 </html>
