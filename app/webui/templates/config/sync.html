@@ -7,20 +7,21 @@
 </div>
 
 <form hx-post="/config/sync" hx-target="#result-banner" hx-swap="innerHTML" id="sync-form">
+    <div class="form-grid">
     <fieldset>
         <legend>Sync Behavior</legend>
-        
+
         <label class="field-label">
             <input type="checkbox" name="dry_run" {{ "checked" if config.sync.dry_run }}>
             <span>Dry Run Mode</span>
             <small>Preview changes without actually adding shows to Medusa. Useful for testing your configuration.</small>
         </label>
-        
+
         <label class="field-label">
             Sync Interval (seconds)
-            <input type="number" 
-                   name="interval" 
-                   value="{{ config.sync.interval }}" 
+            <input type="number"
+                   name="interval"
+                   value="{{ config.sync.interval }}"
                    min="0"
                    aria-describedby="interval-help">
             <small id="interval-help">
@@ -29,37 +30,37 @@
             </small>
         </label>
     </fieldset>
-    
+
     <fieldset>
         <legend>Retry Settings</legend>
-        
+
         <label class="field-label">
             Max Retries
-            <input type="number" 
-                   name="max_retries" 
-                   value="{{ config.sync.max_retries }}" 
-                   min="0" 
+            <input type="number"
+                   name="max_retries"
+                   value="{{ config.sync.max_retries }}"
+                   min="0"
                    max="10"
                    aria-describedby="retries-help">
             <small id="retries-help">Number of retry attempts for failed API calls due to transient errors</small>
         </label>
-        
+
         <label class="field-label">
             Retry Backoff (seconds)
-            <input type="number" 
-                   name="retry_backoff" 
-                   value="{{ config.sync.retry_backoff }}" 
-                   min="0.1" 
-                   max="30" 
+            <input type="number"
+                   name="retry_backoff"
+                   value="{{ config.sync.retry_backoff }}"
+                   min="0.1"
+                   max="30"
                    step="0.1"
                    aria-describedby="backoff-help">
             <small id="backoff-help">Base delay between retries. Increases exponentially: backoff × 2^attempt</small>
         </label>
     </fieldset>
-    
-    <fieldset>
+
+    <fieldset class="field-full">
         <legend>Logging</legend>
-        
+
         <label class="field-label">
             Log Format
             <select name="log_format" aria-describedby="log-help">
@@ -71,6 +72,7 @@
             </small>
         </label>
     </fieldset>
+    </div>
     
     <div class="page-actions">
         <button type="submit">

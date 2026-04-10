@@ -7,21 +7,22 @@
 </div>
 
 <form hx-post="/config/health" hx-target="#result-banner" hx-swap="innerHTML" id="health-form">
+    <div class="form-grid">
     <fieldset>
         <legend>Health Endpoint</legend>
-        
+
         <label class="field-label">
             <input type="checkbox" name="enabled" {{ "checked" if config.health.enabled }}>
             <span>Enable Health Endpoint</span>
             <small>Exposes a <code>/health</code> endpoint that returns the current sync status</small>
         </label>
-        
+
         <label class="field-label">
             Port
-            <input type="number" 
-                   name="port" 
-                   value="{{ config.health.port }}" 
-                   min="1" 
+            <input type="number"
+                   name="port"
+                   value="{{ config.health.port }}"
+                   min="1"
                    max="65535"
                    aria-describedby="port-help">
             <small id="port-help">
@@ -30,7 +31,7 @@
             </small>
         </label>
     </fieldset>
-    
+
     <fieldset>
         <legend>About Health Checks</legend>
         <div style="background: var(--gd-surface-2); padding: 16px; border-radius: var(--gd-radius-md); font-size: 14px; color: var(--gd-text-secondary);">
@@ -42,6 +43,7 @@
             <p style="margin: 12px 0 0 0;">Compatible with Docker HEALTHCHECK, Kubernetes liveness/readiness probes, and monitoring tools like Uptime Kuma.</p>
         </div>
     </fieldset>
+    </div>
     
     <div class="page-actions">
         <button type="submit">

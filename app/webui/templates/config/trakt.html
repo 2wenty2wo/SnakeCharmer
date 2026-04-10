@@ -7,51 +7,52 @@
 </div>
 
 <form hx-post="/config/trakt" hx-target="#result-banner" hx-swap="innerHTML" id="trakt-form">
+    <div class="form-grid">
     <fieldset>
         <legend>API Credentials</legend>
         <label class="field-label">
             Client ID
-            <input type="text" 
-                   name="client_id" 
-                   value="{{ config.trakt.client_id }}" 
-                   placeholder="Your Trakt application client ID" 
+            <input type="text"
+                   name="client_id"
+                   value="{{ config.trakt.client_id }}"
+                   placeholder="Your Trakt application client ID"
                    required
                    autocomplete="off"
                    aria-describedby="client-id-help">
             <small id="client-id-help">Required for all Trakt API calls. <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener noreferrer">Create an app</a> to get your credentials.</small>
         </label>
-        
+
         <label class="field-label">
             Client Secret
-            <input type="password" 
-                   name="client_secret" 
-                   value="{{ config.trakt.client_secret }}" 
+            <input type="password"
+                   name="client_secret"
+                   value="{{ config.trakt.client_secret }}"
                    placeholder="Your Trakt application client secret"
                    autocomplete="off">
             <small>Required for OAuth authentication</small>
         </label>
-        
+
         <label class="field-label">
             Username
-            <input type="text" 
-                   name="username" 
-                   value="{{ config.trakt.username }}" 
+            <input type="text"
+                   name="username"
+                   value="{{ config.trakt.username }}"
                    placeholder="Your Trakt.tv username"
                    autocomplete="username">
             <small>Used for fetching your personal watchlist</small>
         </label>
-        
+
         <label class="field-label">
             Limit
-            <input type="number" 
-                   name="limit" 
-                   value="{{ config.trakt.limit }}" 
-                   min="1" 
+            <input type="number"
+                   name="limit"
+                   value="{{ config.trakt.limit }}"
+                   min="1"
                    max="1000"
                    aria-describedby="limit-help">
             <small id="limit-help">Maximum number of shows to fetch from public lists (trending, popular, watched)</small>
         </label>
-        
+
         <div class="inline-action-row space-top-md">
             <button type="button" class="btn-secondary"
                     hx-post="/test/trakt"
@@ -69,7 +70,7 @@
         <p style="color: var(--gd-text-secondary); font-size: 14px; margin-bottom: 16px;">
             Required for accessing private watchlists and user-specific content.
         </p>
-        
+
         <div class="space-block-compact">
             {% if trakt_token_status == "valid" %}
             <span class="config-badge" role="status" aria-label="Authentication status: Authenticated">
@@ -88,7 +89,7 @@
             </span>
             {% endif %}
         </div>
-        
+
         <button type="button" class="btn-secondary"
                 hx-post="/oauth/trakt/start"
                 hx-target="#oauth-flow"
@@ -99,6 +100,7 @@
         </button>
         <div id="oauth-flow"></div>
     </fieldset>
+    </div>
 
     <fieldset>
         <legend>Sources</legend>
