@@ -434,8 +434,9 @@ async def approve_single(request: Request, tvdb_id: int):
         # Remove from pending queue
         pending_queue.approve_show(tvdb_id)
 
+        safe_id = escape(str(tvdb_id))
         return HTMLResponse(
-            f'<div class="pending-row pending-row-approved" id="pending-row-{tvdb_id}">'
+            f'<div class="pending-row pending-row-approved" id="pending-row-{safe_id}">'
             f'<div class="pending-info"><div class="pending-title">{escape(show.title)}</div>'
             f'<div class="pending-meta">Approved and added to Medusa</div></div></div>'
         )
@@ -458,8 +459,9 @@ async def reject_single(request: Request, tvdb_id: int):
     if show is None:
         return HTMLResponse('<div class="banner error">Show not found in pending queue.</div>')
 
+    safe_id = escape(str(tvdb_id))
     return HTMLResponse(
-        f'<div class="pending-row pending-row-rejected" id="pending-row-{tvdb_id}">'
+        f'<div class="pending-row pending-row-rejected" id="pending-row-{safe_id}">'
         f'<div class="pending-info"><div class="pending-title">{escape(show.title)}</div>'
         f'<div class="pending-meta">Rejected</div></div></div>'
     )

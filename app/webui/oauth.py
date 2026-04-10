@@ -68,10 +68,11 @@ async def oauth_trakt_start(request: Request):
         )
         resp.raise_for_status()
         device = resp.json()
-    except requests.RequestException as e:
+    except requests.RequestException:
+        log.exception("Failed to start Trakt device auth")
         return HTMLResponse(
-            f'<div class="banner error" role="alert">'
-            f"Failed to start device auth: {escape(str(e))}</div>"
+            '<div class="banner error" role="alert">'
+            "Failed to start device auth. Check your Client ID and try again.</div>"
         )
 
     user_code = escape(device["user_code"])
@@ -130,9 +131,11 @@ async def oauth_trakt_poll(request: Request):
             },
             timeout=15,
         )
-    except requests.RequestException as e:
+    except requests.RequestException:
+        log.exception("Trakt OAuth poll request failed")
         return HTMLResponse(
-            f'<div class="banner error" role="alert">Poll request failed: {escape(str(e))}</div>'
+            '<div class="banner error" role="alert">'
+            "Poll request failed. Check your network connection and try again.</div>"
         )
 
     if resp.status_code == 200:
@@ -143,10 +146,11 @@ async def oauth_trakt_poll(request: Request):
         try:
             with open(token_path, "w") as f:
                 json.dump(token, f, indent=2)
-        except OSError as e:
+        except OSError:
+            log.exception("Failed to save Trakt OAuth token to %s", token_path)
             return HTMLResponse(
-                f'<div class="banner error" role="alert">'
-                f"Authenticated but failed to save token: {escape(str(e))}</div>"
+                '<div class="banner error" role="alert">'
+                "Authenticated but failed to save token. Check file permissions.</div>"
             )
         return HTMLResponse(
             '<div class="banner success" role="alert">'
