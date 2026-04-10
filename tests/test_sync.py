@@ -297,6 +297,56 @@ class TestRunSync:
         assert result.queued == 1
         assert result.skipped == 0
 
+    def test_already_pending_show_is_skipped(self, config, mock_trakt, mock_medusa):
+        """A show already in the pending queue should be skipped, not re-queued."""
+        config.trakt.sources = [TraktSource(type="trending", auto_approve=False)]
+        mock_trakt.get_shows.return_value = [TraktShow(title="Already Queued", tvdb_id=42)]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        pending_queue = Mock()
+        pending_queue.is_pending.return_value = True
+
+        result = run_sync(config, pending_queue=pending_queue)
+
+        pending_queue.is_pending.assert_called_once_with(42)
+        pending_queue.add_show.assert_not_called()
+        mock_medusa.add_show.assert_not_called()
+        assert result.skipped == 1
+        assert result.queued == 0
+
+    def test_dry_run_with_manual_approval_logs_would_queue(self, config, mock_trakt, mock_medusa):
+        """Dry-run mode with auto_approve=False should count as queued but not actually queue."""
+        config.sync.dry_run = True
+        config.trakt.sources = [TraktSource(type="trending", auto_approve=False)]
+        mock_trakt.get_shows.return_value = [TraktShow(title="Dry Queue", tvdb_id=55)]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        pending_queue = Mock()
+        pending_queue.is_pending.return_value = False
+
+        result = run_sync(config, pending_queue=pending_queue)
+
+        pending_queue.add_show.assert_not_called()
+        mock_medusa.add_show.assert_not_called()
+        assert result.queued == 1
+        assert result.added == 0
+
+    def test_pending_queue_add_returns_false_counts_as_skipped(
+        self, config, mock_trakt, mock_medusa
+    ):
+        """If add_show returns False (concurrent duplicate), the show should be skipped."""
+        config.trakt.sources = [TraktSource(type="trending", auto_approve=False)]
+        mock_trakt.get_shows.return_value = [TraktShow(title="Race Condition", tvdb_id=99)]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        pending_queue = Mock()
+        pending_queue.is_pending.return_value = False
+        pending_queue.add_show.return_value = False  # concurrent add beat us
+
+        result = run_sync(config, pending_queue=pending_queue)
+
+        pending_queue.add_show.assert_called_once()
+        mock_medusa.add_show.assert_not_called()
+        assert result.skipped == 1
+        assert result.queued == 0
+
 
 class TestMedusaAddOptionsFromSource:
     def test_returns_none_for_missing_source(self):

@@ -476,3 +476,138 @@ class TestWebuiNoConfig:
             pytest.raises(SystemExit),
         ):
             main.main()
+
+
+class TestRunWebuiSyncCycle:
+    """Tests for the _run_webui_sync_cycle helper."""
+
+    def test_returns_none_when_config_has_errors(self, base_config):
+        mock_holder = MagicMock()
+        mock_holder.get.return_value = base_config
+        sync_manager = MagicMock()
+        log = logging.getLogger("test")
+
+        with patch("main.get_config_errors", return_value=["missing medusa.url"]):
+            result = main._run_webui_sync_cycle(mock_holder, sync_manager, log)
+
+        assert result is None
+        sync_manager.run_sync_blocking.assert_not_called()
+
+    def test_returns_none_result_when_sync_already_running(self, base_config):
+        mock_holder = MagicMock()
+        mock_holder.get.return_value = base_config
+        sync_manager = MagicMock()
+        sync_manager.run_sync_blocking.return_value = None
+        log = logging.getLogger("test")
+
+        with patch("main.get_config_errors", return_value=[]):
+            outcome = main._run_webui_sync_cycle(mock_holder, sync_manager, log)
+
+        assert outcome is not None  # returns tuple, not None
+        result, run_config = outcome
+        assert result is None
+        assert run_config is base_config
+
+    def test_returns_result_and_config_on_success(self, base_config):
+        mock_holder = MagicMock()
+        mock_holder.get.return_value = base_config
+        sync_result = MagicMock()
+        sync_manager = MagicMock()
+        sync_manager.run_sync_blocking.return_value = sync_result
+        log = logging.getLogger("test")
+
+        with patch("main.get_config_errors", return_value=[]):
+            outcome = main._run_webui_sync_cycle(mock_holder, sync_manager, log)
+
+        result, run_config = outcome
+        assert result is sync_result
+        assert run_config is base_config
+
+
+class TestRunIntervalLoop:
+    """Tests for the _run_interval_loop helper, focusing on webui branches."""
+
+    def test_webui_config_incomplete_sleeps_30s(self, base_config):
+        """When config has errors, sleep 30s and continue the loop."""
+        base_config.sync.interval = 60
+        mock_holder = MagicMock()
+        mock_holder.get.return_value = base_config
+        sync_manager = MagicMock()
+        sync_status = MagicMock()
+        log = logging.getLogger("test")
+
+        call_count = 0
+
+        def _config_errors_side_effect(_):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise KeyboardInterrupt
+            return ["missing trakt.client_id"]
+
+        with (
+            patch("main.get_config_errors", side_effect=_config_errors_side_effect),
+            patch("main.time.sleep") as mock_sleep,
+            pytest.raises(KeyboardInterrupt),
+        ):
+            main._run_interval_loop(base_config, mock_holder, sync_manager, sync_status, True, log)
+
+        mock_sleep.assert_called_with(30)
+        sync_manager.run_sync_blocking.assert_not_called()
+
+    def test_webui_sync_already_running_sleeps_interval(self, base_config):
+        """When sync is already running, sleep the configured interval."""
+        base_config.sync.interval = 45
+        mock_holder = MagicMock()
+        mock_holder.get.return_value = base_config
+        sync_manager = MagicMock()
+        sync_manager.run_sync_blocking.side_effect = [None, KeyboardInterrupt]
+        sync_status = MagicMock()
+        log = logging.getLogger("test")
+
+        with (
+            patch("main.get_config_errors", return_value=[]),
+            patch("main.time.sleep") as mock_sleep,
+            pytest.raises(KeyboardInterrupt),
+        ):
+            main._run_interval_loop(base_config, mock_holder, sync_manager, sync_status, True, log)
+
+        mock_sleep.assert_called_with(45)
+
+
+class TestRunWebuiWaitLoop:
+    """Tests for the _run_webui_wait_loop helper."""
+
+    def test_sync_already_running_logs_skip(self, base_config):
+        """When run_sync_blocking returns None, log skip and continue."""
+        base_config.sync.interval = 20
+        mock_holder = MagicMock()
+        mock_holder.get.return_value = base_config
+        sync_manager = MagicMock()
+        sync_manager.run_sync_blocking.side_effect = [None, KeyboardInterrupt]
+        mock_thread = MagicMock()
+        log = logging.getLogger("test")
+
+        with (
+            patch("main.get_config_errors", return_value=[]),
+            patch("main.time.sleep") as mock_sleep,
+            pytest.raises(KeyboardInterrupt),
+        ):
+            main._run_webui_wait_loop(mock_holder, sync_manager, mock_thread, 8089, log)
+
+        mock_sleep.assert_called_with(20)
+
+    def test_webui_thread_exits_breaks_loop(self, base_config):
+        """If webui thread dies, break out of the wait loop."""
+        mock_holder = MagicMock()
+        mock_holder.get.return_value = base_config
+        sync_manager = MagicMock()
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = False
+        log = logging.getLogger("test")
+
+        with patch("main.get_config_errors", return_value=["config error"]):
+            main._run_webui_wait_loop(mock_holder, sync_manager, mock_thread, 8089, log)
+
+        mock_thread.join.assert_called_once_with(timeout=30)
+        sync_manager.run_sync_blocking.assert_not_called()
