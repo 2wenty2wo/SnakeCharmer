@@ -76,6 +76,7 @@ class SyncStatus:
             "already_in_medusa": result.already_in_medusa,
             "success": result.success,
             "per_source": dict(result.per_source),
+            "added_shows": list(result.added_shows) if result.added_shows else [],
         }
 
 
