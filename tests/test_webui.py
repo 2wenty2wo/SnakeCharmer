@@ -1635,6 +1635,63 @@ class TestPendingBulkApprove:
         assert response.status_code == 200
         assert "Failed to connect" in response.text
 
+    def test_bulk_approve_forwards_quality_only(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Quality Show", quality="hd1080p"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_medusa = mock_cls.return_value
+            mock_medusa.add_show.return_value = True
+            response = client.post(
+                "/pending/bulk-approve",
+                data={"tvdb_ids": ["111"]},
+            )
+
+        assert response.status_code == 200
+        assert "Approved 1" in response.text
+        call_args = mock_medusa.add_show.call_args
+        assert call_args[1]["add_options"]["quality"] == "hd1080p"
+        assert "required_words" not in call_args[1]["add_options"]
+
+    def test_bulk_approve_forwards_required_words_only(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(222, "Words Show", required_words=["proper", "repack"]))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_medusa = mock_cls.return_value
+            mock_medusa.add_show.return_value = True
+            response = client.post(
+                "/pending/bulk-approve",
+                data={"tvdb_ids": ["222"]},
+            )
+
+        assert response.status_code == 200
+        assert "Approved 1" in response.text
+        call_args = mock_medusa.add_show.call_args
+        assert call_args[1]["add_options"]["required_words"] == ["proper", "repack"]
+        assert "quality" not in call_args[1]["add_options"]
+
+    def test_bulk_approve_skips_show_removed_between_request(self, tmp_path):
+        """If a show is removed from queue between page render and approval, skip it."""
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Still Here"))
+        # 999 is not in the queue — simulates removal between render and click
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_medusa = mock_cls.return_value
+            mock_medusa.add_show.return_value = True
+            response = client.post(
+                "/pending/bulk-approve",
+                data={"tvdb_ids": ["111", "999"]},
+            )
+
+        assert response.status_code == 200
+        assert "Approved 1" in response.text
+        assert mock_medusa.add_show.call_count == 1
+
 
 class TestPendingBulkReject:
     def test_bulk_reject_selected(self, tmp_path):
