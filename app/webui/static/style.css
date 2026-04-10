@@ -1307,7 +1307,161 @@ button[type="submit"]:disabled {
     to { transform: rotate(360deg); }
 }
 
-/* === History Table === */
+/* === History Cards === */
+.history-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.history-card {
+    background: var(--gd-surface);
+    border-radius: var(--gd-radius-lg);
+    overflow: hidden;
+    transition: all var(--gd-transition-base);
+    border: 1px solid transparent;
+}
+
+.history-card:hover {
+    background: var(--gd-surface-2);
+    border-color: var(--gd-border);
+}
+
+.history-card-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    flex-wrap: wrap;
+}
+
+.history-card-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 200px;
+}
+
+.history-time {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gd-text);
+}
+
+.history-duration {
+    font-size: 12px;
+    color: var(--gd-text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.history-card-metrics {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.metric-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 28px;
+    padding: 0 10px;
+    background: var(--gd-surface-2);
+    border-radius: var(--gd-radius-md);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--gd-text-secondary);
+    transition: all var(--gd-transition-fast);
+}
+
+.metric-badge.added {
+    background: var(--gd-success-subtle);
+    color: var(--gd-success);
+}
+
+.metric-badge.skipped {
+    background: var(--gd-warning-subtle);
+    color: var(--gd-warning);
+}
+
+.metric-badge.failed {
+    background: var(--gd-error-subtle);
+    color: var(--gd-error);
+}
+
+.history-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: var(--gd-radius-md);
+    color: var(--gd-text-secondary);
+    cursor: pointer;
+    transition: all var(--gd-transition-fast);
+}
+
+.history-toggle-btn:hover {
+    background: var(--gd-surface-3);
+    color: var(--gd-text);
+}
+
+.history-toggle-btn i {
+    transition: transform var(--gd-transition-fast);
+}
+
+.history-shows-list {
+    padding: 0 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-top: 1px solid var(--gd-border);
+    margin-top: -8px;
+    padding-top: 12px;
+}
+
+.history-show-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--gd-surface);
+    border-radius: var(--gd-radius-md);
+    font-size: 14px;
+    transition: all var(--gd-transition-fast);
+}
+
+.history-show-item:hover {
+    background: var(--gd-surface-3);
+}
+
+.history-show-title {
+    font-weight: 500;
+    color: var(--gd-text);
+}
+
+.history-show-year {
+    font-size: 12px;
+    color: var(--gd-text-secondary);
+}
+
+.history-show-link {
+    margin-left: auto;
+    color: var(--gd-text-secondary);
+    opacity: 0.6;
+    transition: all var(--gd-transition-fast);
+}
+
+.history-show-link:hover {
+    opacity: 1;
+    color: var(--gd-primary);
+}
+
+/* === Legacy History Table (kept for compatibility) === */
 .history-table-container {
     overflow-x: auto;
     border-radius: var(--gd-radius-lg);
@@ -2112,6 +2266,21 @@ button[type="submit"]:disabled {
     .history-table th,
     .history-table td {
         padding: 12px 8px;
+    }
+    
+    .history-card-header {
+        padding: 12px 16px;
+        gap: 12px;
+    }
+    
+    .history-card-main {
+        min-width: 0;
+        flex-wrap: wrap;
+    }
+    
+    .history-shows-list {
+        padding: 0 16px 12px;
+        padding-top: 10px;
     }
     
     .pending-row {

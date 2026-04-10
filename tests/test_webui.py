@@ -1067,7 +1067,7 @@ class TestTraktOAuth:
             "interval": 5,
         }
         mock_resp.raise_for_status = MagicMock()
-        with patch("app.webui.routes.requests.post", return_value=mock_resp) as mock_post:
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp) as mock_post:
             response = client.post(
                 "/oauth/trakt/start",
                 data={"client_id": "test_id", "client_secret": "secret"},
@@ -1090,7 +1090,7 @@ class TestTraktOAuth:
             "created_at": 1000,
             "expires_in": 100000,
         }
-        with patch("app.webui.routes.requests.post", return_value=mock_resp) as mock_post:
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp) as mock_post:
             response = client.post(
                 "/oauth/trakt/poll",
                 data={
@@ -1125,7 +1125,7 @@ class TestTraktOAuth:
             "expires_in": 100000,
         }
         with (
-            patch("app.webui.routes.requests.post", return_value=mock_resp),
+            patch("app.webui.oauth.requests.post", return_value=mock_resp),
             patch("app.webui.oauth.open", side_effect=OSError("permission denied")),
         ):
             response = client.post(
@@ -1146,7 +1146,7 @@ class TestTraktOAuth:
         client, _, _ = _create_client(tmp_path)
         mock_resp = MagicMock()
         mock_resp.status_code = 400
-        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
             response = client.post(
                 "/oauth/trakt/poll",
                 data={
@@ -1165,7 +1165,7 @@ class TestTraktOAuth:
         client, _, _ = _create_client(tmp_path)
         mock_resp = MagicMock()
         mock_resp.status_code = 410
-        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
             response = client.post(
                 "/oauth/trakt/poll",
                 data={
@@ -1183,7 +1183,7 @@ class TestTraktOAuth:
         client, _, _ = _create_client(tmp_path)
         mock_resp = MagicMock()
         mock_resp.status_code = 418
-        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
             response = client.post(
                 "/oauth/trakt/poll",
                 data={
@@ -1200,7 +1200,7 @@ class TestTraktOAuth:
     def test_oauth_start_request_failure(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
         with patch(
-            "app.webui.routes.requests.post",
+            "app.webui.oauth.requests.post",
             side_effect=requests.RequestException("network error"),
         ):
             response = client.post(
@@ -1228,7 +1228,7 @@ class TestTraktOAuth:
     def test_oauth_poll_request_failure(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
         with patch(
-            "app.webui.routes.requests.post",
+            "app.webui.oauth.requests.post",
             side_effect=requests.RequestException("timeout"),
         ):
             response = client.post(
@@ -1248,7 +1248,7 @@ class TestTraktOAuth:
         client, _, _ = _create_client(tmp_path)
         mock_resp = MagicMock()
         mock_resp.status_code = 404
-        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
             response = client.post(
                 "/oauth/trakt/poll",
                 data={
@@ -1266,7 +1266,7 @@ class TestTraktOAuth:
         client, _, _ = _create_client(tmp_path)
         mock_resp = MagicMock()
         mock_resp.status_code = 409
-        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
             response = client.post(
                 "/oauth/trakt/poll",
                 data={
@@ -1284,7 +1284,7 @@ class TestTraktOAuth:
         client, _, _ = _create_client(tmp_path)
         mock_resp = MagicMock()
         mock_resp.status_code = 429
-        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
             response = client.post(
                 "/oauth/trakt/poll",
                 data={
@@ -1303,7 +1303,7 @@ class TestTraktOAuth:
         client, _, _ = _create_client(tmp_path)
         mock_resp = MagicMock()
         mock_resp.status_code = 500
-        with patch("app.webui.routes.requests.post", return_value=mock_resp):
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
             response = client.post(
                 "/oauth/trakt/poll",
                 data={
@@ -1361,84 +1361,6 @@ class TestTraktTokenStatus:
             )
         assert response.status_code == 200
         assert "Preview failed" in response.text
-
-
-class TestLibrary:
-    def test_library_success(self, tmp_path):
-        client, _, _ = _create_client(tmp_path)
-        mock_shows = [
-            {
-                "title": "Breaking Bad",
-                "tvdb_id": 81189,
-                "year": 2008,
-                "status": "Ended",
-                "network": "AMC",
-                "imdb_id": "tt0903747",
-            },
-            {
-                "title": "The Wire",
-                "tvdb_id": 79126,
-                "year": 2002,
-                "status": "Ended",
-                "network": "HBO",
-                "imdb_id": None,
-            },
-        ]
-        with patch.object(
-            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
-            "get_series_list",
-            return_value=mock_shows,
-        ):
-            response = client.get("/library")
-        assert response.status_code == 200
-        assert "Breaking Bad" in response.text
-        assert "The Wire" in response.text
-        assert "2 shows" in response.text or "<strong>2</strong> shows" in response.text
-
-    def test_library_empty(self, tmp_path):
-        client, _, _ = _create_client(tmp_path)
-        with patch.object(
-            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
-            "get_series_list",
-            return_value=[],
-        ):
-            response = client.get("/library")
-        assert response.status_code == 200
-        assert "No shows" in response.text
-
-    def test_library_connection_error(self, tmp_path):
-        client, _, _ = _create_client(tmp_path)
-        with patch.object(
-            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
-            "get_series_list",
-            side_effect=requests.ConnectionError("Failed"),
-        ):
-            response = client.get("/library")
-        assert response.status_code == 200
-        assert "Cannot reach" in response.text
-
-    def test_library_http_error(self, tmp_path):
-        client, _, _ = _create_client(tmp_path)
-        http_error = requests.HTTPError(response=MagicMock(status_code=401))
-        with patch.object(
-            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
-            "get_series_list",
-            side_effect=http_error,
-        ):
-            response = client.get("/library")
-        assert response.status_code == 200
-        assert "Medusa API error" in response.text
-
-    def test_library_unexpected_error(self, tmp_path):
-        client, _, _ = _create_client(tmp_path)
-        with patch.object(
-            __import__("app.medusa", fromlist=["MedusaClient"]).MedusaClient,
-            "get_series_list",
-            side_effect=RuntimeError("bad parser"),
-        ):
-            response = client.get("/library")
-        assert response.status_code == 200
-        assert "Failed to fetch library" in response.text
 
 
 class TestRouteHelpers:

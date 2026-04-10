@@ -215,7 +215,6 @@ def test_page_titles_are_descriptive(page: Page, live_server_url: str):
         ("/config/notify", "Notification"),
         ("/sync/history", "History"),
         ("/pending", "Pending"),
-        ("/library", "Library"),
     ]
 
     for path, expected in pages:

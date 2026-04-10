@@ -22,6 +22,7 @@ class SyncResult:
     duration_seconds: float = 0.0
     per_source: dict[str, int] = field(default_factory=dict)
     success: bool = True
+    added_shows: list[dict] = field(default_factory=list)
 
 
 def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
@@ -184,6 +185,14 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                 option_keys,
             )
             result.added += 1
+            result.added_shows.append(
+                {
+                    "title": show.title,
+                    "tvdb_id": show.tvdb_id,
+                    "year": show.year,
+                    "imdb_id": show.imdb_id,
+                }
+            )
             continue
 
         try:
@@ -199,6 +208,14 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     option_keys,
                 )
                 result.added += 1
+                result.added_shows.append(
+                    {
+                        "title": show.title,
+                        "tvdb_id": show.tvdb_id,
+                        "year": show.year,
+                        "imdb_id": show.imdb_id,
+                    }
+                )
             else:
                 result.skipped += 1
         except Exception as e:

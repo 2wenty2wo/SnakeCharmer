@@ -132,7 +132,6 @@ def test_all_pages_render_without_console_errors(page: Page, live_server_url: st
         "/config/notify",
         "/sync/history",
         "/pending",
-        "/library",
     ]
 
     console_errors = []

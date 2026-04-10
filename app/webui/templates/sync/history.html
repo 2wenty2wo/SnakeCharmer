@@ -25,54 +25,63 @@
 <div id="result-banner" role="status" aria-live="polite"></div>
 
 {% if history %}
-<div hx-get="/sync/history" 
-     hx-trigger="every 30s" 
-     hx-select=".history-table-container" 
-     hx-target=".history-table-container" 
+<div hx-get="/sync/history"
+     hx-trigger="every 30s"
+     hx-select=".history-list-container"
+     hx-target=".history-list-container"
      hx-swap="outerHTML"
      aria-live="polite">
-    <div class="history-table-container">
-        <table class="history-table" role="table" aria-label="Sync history">
-            <thead>
-                <tr role="row">
-                    <th scope="col" role="columnheader">Time</th>
-                    <th scope="col" role="columnheader">Duration</th>
-                    <th scope="col" role="columnheader">Status</th>
-                    <th scope="col" role="columnheader">Added</th>
-                    <th scope="col" role="columnheader">Skipped</th>
-                    <th scope="col" role="columnheader">Failed</th>
-                    <th scope="col" role="columnheader">Unique</th>
-                    <th scope="col" role="columnheader">In Library</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for entry in history %}
-                <tr role="row">
-                    <td role="cell">
-                        <span title="{{ entry.timestamp }}">{{ entry.timestamp | format_timestamp_short }}</span>
-                    </td>
-                    <td role="cell">{{ "%.1f" | format(entry.duration_seconds) }}s</td>
-                    <td role="cell">
-                        <span class="status-badge {{ 'status-ok' if entry.success else 'status-degraded' }}">
-                            {{ "Success" if entry.success else "Failed" }}
-                        </span>
-                    </td>
-                    <td role="cell">
-                        <span class="metric-value compact {{ 'added' if entry.added > 0 }}">{{ entry.added }}</span>
-                    </td>
-                    <td role="cell">
-                        <span class="metric-value compact {{ 'skipped' if entry.skipped > 0 }}">{{ entry.skipped }}</span>
-                    </td>
-                    <td role="cell">
-                        <span class="metric-value compact {{ 'failed' if entry.failed > 0 }}">{{ entry.failed }}</span>
-                    </td>
-                    <td role="cell">{{ entry.unique_shows }}</td>
-                    <td role="cell">{{ entry.already_in_medusa }}</td>
-                </tr>
+    <div class="history-list-container">
+        {% for entry in history %}
+        <div class="history-card" role="region" aria-label="Sync at {{ entry.timestamp }}">
+            <div class="history-card-header">
+                <div class="history-card-main">
+                    <span class="status-badge {{ 'status-ok' if entry.success else 'status-degraded' }}">
+                        {{ "Success" if entry.success else "Failed" }}
+                    </span>
+                    <span class="history-time" title="{{ entry.timestamp }}">{{ entry.timestamp | format_timestamp_short }}</span>
+                    <span class="history-duration">{{ "%.1f" | format(entry.duration_seconds) }}s</span>
+                </div>
+                <div class="history-card-metrics">
+                    <span class="metric-badge {{ 'added' if entry.added > 0 }}" title="Added">{{ entry.added }}</span>
+                    <span class="metric-badge {{ 'skipped' if entry.skipped > 0 }}" title="Skipped">{{ entry.skipped }}</span>
+                    <span class="metric-badge {{ 'failed' if entry.failed > 0 }}" title="Failed">{{ entry.failed }}</span>
+                </div>
+                {% if entry.added_shows %}
+                <button type="button" class="history-toggle-btn" onclick="toggleHistoryShows(this)" aria-expanded="false" aria-controls="history-shows-{{ loop.index }}">
+                    <i data-lucide="chevron-down" style="width:16px;height:16px"></i>
+                </button>
+                {% endif %}
+            </div>
+            {% if entry.added_shows %}
+            <div class="history-shows-list" id="history-shows-{{ loop.index }}" hidden>
+                {% for show in entry.added_shows %}
+                <div class="history-show-item">
+                    <span class="history-show-title">{{ show.title }}</span>
+                    {% if show.year %}
+                    <span class="history-show-year">({{ show.year }})</span>
+                    {% endif %}
+                    {% if show.imdb_id %}
+                    <a href="https://www.imdb.com/title/{{ show.imdb_id }}" target="_blank" rel="noopener noreferrer" class="history-show-link" title="View on IMDb">
+                        <i data-lucide="external-link" style="width:12px;height:12px"></i>
+                    </a>
+                    {% endif %}
+                </div>
                 {% endfor %}
-            </tbody>
-        </table>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
     </div>
+    <script>
+    function toggleHistoryShows(btn) {
+        const showsList = document.getElementById(btn.getAttribute('aria-controls'));
+        const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', !isExpanded);
+        showsList.hidden = isExpanded;
+        btn.querySelector('i').style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+    }
+    </script>
 </div>
 
 <p class="library-count" style="margin-top: 20px;">

@@ -2,7 +2,6 @@ import logging
 import re
 from html import escape
 
-import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -347,34 +346,6 @@ async def source_preview(request: Request):
             '<div class="preview-header" style="color:var(--gd-error)">'
             "Preview failed. Check your Trakt credentials and source settings.</div></div>"
         )
-
-
-# --- Library ---
-
-
-@router.get("/library", response_class=HTMLResponse)
-async def library(request: Request):
-    """Show the current Medusa library."""
-    config = _holder(request).get()
-    shows = []
-    error = None
-    try:
-        client = MedusaClient(config.medusa, max_retries=1, retry_backoff=1.0)
-        shows = client.get_series_list()
-    except requests.ConnectionError:
-        error = f"Cannot reach Medusa at {config.medusa.url}. Is it running?"
-    except requests.HTTPError as e:
-        log.error("Medusa API HTTP error: %s", e)
-        error = "Medusa API error. Check your API key."
-    except Exception:
-        log.exception("Failed to fetch Medusa library")
-        error = "Failed to fetch library. Please try again later."
-
-    return _templates(request).TemplateResponse(
-        request,
-        "library.html",
-        context={"shows": shows, "error": error, "active_page": "library"},
-    )
 
 
 # --- Pending Queue ---
