@@ -2,7 +2,6 @@ import logging
 import re
 from html import escape
 
-import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
