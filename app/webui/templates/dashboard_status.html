@@ -49,7 +49,7 @@
     </div>
     <div class="info-row">
         <span class="info-label">Timestamp</span>
-        <span class="info-value">{{ health.last_sync.timestamp }}</span>
+        <span class="info-value" title="{{ health.last_sync.timestamp }}">{{ health.last_sync.timestamp | format_timestamp }}</span>
     </div>
     <div class="info-row">
         <span class="info-label">Duration</span>
