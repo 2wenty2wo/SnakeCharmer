@@ -2007,7 +2007,7 @@ class TestMobileNavigation:
         """Verify mobile menu toggle button is present in HTML."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert 'id="mobile-menu-toggle"' in response.text
         assert 'aria-label="Toggle navigation menu"' in response.text
@@ -2017,7 +2017,7 @@ class TestMobileNavigation:
         """Verify sidebar has proper ARIA attributes for accessibility."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert 'id="sidebar"' in response.text
         assert 'role="navigation"' in response.text
@@ -2026,7 +2026,7 @@ class TestMobileNavigation:
         """Verify skip-to-content link is present for accessibility."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert 'class="skip-link"' in response.text
         assert 'href="#main-content"' in response.text
@@ -2035,7 +2035,7 @@ class TestMobileNavigation:
         """Verify main content area has id for skip link."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert 'id="main-content"' in response.text
         assert 'role="main"' in response.text
@@ -2044,7 +2044,7 @@ class TestMobileNavigation:
         """Verify navigation links include Lucide icons."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         # Check for data-lucide attributes in nav
         assert 'data-lucide="layout-dashboard"' in response.text
@@ -2055,7 +2055,7 @@ class TestMobileNavigation:
         """Verify active navigation link has aria-current attribute."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         # Dashboard should be active and have aria-current
         assert 'aria-current="page"' in response.text
@@ -2067,19 +2067,14 @@ class TestDesignSystemCompliance:
     def test_css_variables_defined(self, tmp_path):
         """Verify CSS custom properties are defined."""
         import os
-        
+
         css_path = os.path.join(
-            os.path.dirname(__file__), 
-            "..", 
-            "app", 
-            "webui", 
-            "static", 
-            "style.css"
+            os.path.dirname(__file__), "..", "app", "webui", "static", "style.css"
         )
-        
+
         with open(css_path) as f:
             css = f.read()
-        
+
         # Verify Green Deck color tokens exist
         assert "--gd-primary: #1DB954" in css
         assert "--gd-bg: #121212" in css
@@ -2100,7 +2095,7 @@ class TestDesignSystemCompliance:
         """Verify buttons use pill-shaped styling."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert "btn-primary" in response.text
         assert "btn-secondary" in response.text
@@ -2109,7 +2104,7 @@ class TestDesignSystemCompliance:
         """Verify cards have interactive class for hover effects."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert "card" in response.text
         assert "interactive" in response.text
@@ -2117,13 +2112,13 @@ class TestDesignSystemCompliance:
     def test_empty_states_use_lucide_icons(self, tmp_path):
         """Verify empty states use Lucide icons, not emoji."""
         client, _, _ = _create_client(tmp_path)
-        
+
         # Check pending page empty state
         response = client.get("/pending")
         assert response.status_code == 200
-        
+
         # Should have Lucide icon, not emoji
-        assert "data-lucide=\"inbox\"" in response.text
+        assert 'data-lucide="inbox"' in response.text
         # Should not have emoji
         assert "📂" not in response.text
 
@@ -2131,7 +2126,7 @@ class TestDesignSystemCompliance:
         """Verify toast notification container is present."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert 'id="toast-container"' in response.text
         assert 'class="toast-container"' in response.text
@@ -2144,7 +2139,7 @@ class TestResponsiveMetaTags:
         """Verify viewport meta tag is present."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert 'name="viewport"' in response.text
         assert "width=device-width" in response.text
@@ -2153,7 +2148,7 @@ class TestResponsiveMetaTags:
         """Verify color-scheme meta tag is present for dark mode."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert 'name="color-scheme"' in response.text
         assert 'content="dark"' in response.text
@@ -2162,6 +2157,6 @@ class TestResponsiveMetaTags:
         """Verify description meta tag is present."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert 'name="description"' in response.text
