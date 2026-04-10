@@ -2087,14 +2087,14 @@ class TestDesignSystemCompliance:
         assert "--gd-text: #FFFFFF" in css
 
     def test_dm_sans_font_loaded(self, tmp_path):
-        """Verify DM Sans font is loaded from Google Fonts."""
+        """Verify DM Sans and JetBrains Mono font families are declared."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        
+
         assert response.status_code == 200
-        assert "fonts.googleapis.com" in response.text
-        # Google Fonts URL encodes spaces as +, so check for either format
-        assert "DM+Sans" in response.text or "family=DM" in response.text
+        # Verify the stylesheet request includes both expected font families.
+        assert "family=DM+Sans" in response.text
+        assert "family=JetBrains+Mono" in response.text
 
     def test_buttons_have_pill_shape_class(self, tmp_path):
         """Verify buttons use pill-shaped styling."""
