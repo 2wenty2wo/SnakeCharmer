@@ -24,7 +24,7 @@
 
 - Sync one or more Trakt sources (watchlist, trending, popular, watched, custom user lists)
 - Automatically add missing shows to Medusa
-- **Manual approval queue** — per-source `auto_approve` setting for shows requiring approval before adding
+- Manual approval queue — per-source `auto_approve` setting for shows requiring approval before adding
 - Smart duplicate detection by TVDB ID (no double adds)
 - Per-source Medusa quality presets and required words
 - OAuth device flow for private lists and watchlists
@@ -37,7 +37,6 @@
 - Optional web UI for config management (FastAPI + HTMX)
 - Environment variable overrides for all settings
 - Docker-ready with built-in healthcheck
-- GitHub auto-release on version tags (`v*`) with attached build artifacts
 
 ---
 
