@@ -3,14 +3,16 @@
 {% block content %}
 <div class="page-header">
     <h1>Sync History</h1>
-    <p class="page-description">Recent sync results (last {{ history | length }} of max 20).</p>
+    <p class="page-description">Review recent sync operations and their results.</p>
     <div class="page-actions">
         <button type="button" class="btn-primary"
                 hx-post="/sync/run"
                 hx-target="#result-banner"
                 hx-swap="innerHTML"
                 hx-disabled-elt="this"
-                hx-indicator="#history-sync-indicator">
+                hx-indicator="#history-sync-indicator"
+                title="Start a new sync now">
+            <i data-lucide="refresh-cw" style="width:16px;height:16px"></i>
             Sync Now
         </button>
         <span id="history-sync-indicator" class="sync-indicator sync-indicator-inline htmx-indicator" aria-live="polite">
@@ -20,42 +22,78 @@
     </div>
 </div>
 
+<div id="result-banner" role="status" aria-live="polite"></div>
+
 {% if history %}
-<div hx-get="/sync/history" hx-trigger="every 30s" hx-select=".history-table" hx-target=".history-table" hx-swap="outerHTML">
-<table class="history-table">
-    <thead>
-        <tr>
-            <th>Time</th>
-            <th>Duration</th>
-            <th>Status</th>
-            <th>Added</th>
-            <th>Skipped</th>
-            <th>Failed</th>
-            <th>Unique</th>
-            <th>In Library</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for entry in history %}
-        <tr>
-            <td>{{ entry.timestamp }}</td>
-            <td>{{ entry.duration_seconds }}s</td>
-            <td>
-                <span class="status-badge {{ 'status-ok' if entry.success else 'status-degraded' }}">
-                    {{ "ok" if entry.success else "failed" }}
-                </span>
-            </td>
-            <td><span class="metric-value compact added">{{ entry.added }}</span></td>
-            <td><span class="metric-value compact skipped">{{ entry.skipped }}</span></td>
-            <td><span class="metric-value compact failed">{{ entry.failed }}</span></td>
-            <td>{{ entry.unique_shows }}</td>
-            <td>{{ entry.already_in_medusa }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div hx-get="/sync/history" 
+     hx-trigger="every 30s" 
+     hx-select=".history-table-container" 
+     hx-target=".history-table-container" 
+     hx-swap="outerHTML"
+     aria-live="polite">
+    <div class="history-table-container">
+        <table class="history-table" role="table" aria-label="Sync history">
+            <thead>
+                <tr role="row">
+                    <th scope="col" role="columnheader">Time</th>
+                    <th scope="col" role="columnheader">Duration</th>
+                    <th scope="col" role="columnheader">Status</th>
+                    <th scope="col" role="columnheader">Added</th>
+                    <th scope="col" role="columnheader">Skipped</th>
+                    <th scope="col" role="columnheader">Failed</th>
+                    <th scope="col" role="columnheader">Unique</th>
+                    <th scope="col" role="columnheader">In Library</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in history %}
+                <tr role="row">
+                    <td role="cell">
+                        <span title="{{ entry.timestamp }}">{{ entry.timestamp[:16] }}</span>
+                    </td>
+                    <td role="cell">{{ "%.1f" | format(entry.duration_seconds) }}s</td>
+                    <td role="cell">
+                        <span class="status-badge {{ 'status-ok' if entry.success else 'status-degraded' }}">
+                            {{ "Success" if entry.success else "Failed" }}
+                        </span>
+                    </td>
+                    <td role="cell">
+                        <span class="metric-value compact {{ 'added' if entry.added > 0 }}">{{ entry.added }}</span>
+                    </td>
+                    <td role="cell">
+                        <span class="metric-value compact {{ 'skipped' if entry.skipped > 0 }}">{{ entry.skipped }}</span>
+                    </td>
+                    <td role="cell">
+                        <span class="metric-value compact {{ 'failed' if entry.failed > 0 }}">{{ entry.failed }}</span>
+                    </td>
+                    <td role="cell">{{ entry.unique_shows }}</td>
+                    <td role="cell">{{ entry.already_in_medusa }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
+
+<p class="library-count" style="margin-top: 20px;">
+    Showing <strong>{{ history | length }}</strong> of max 20 recent syncs
+</p>
 {% else %}
-<div class="empty-state">No sync history yet. Run a sync to see results here.</div>
+<div class="empty-state" role="status">
+    <i data-lucide="history" aria-hidden="true"></i>
+    <p class="empty-state-title">No sync history yet</p>
+    <p class="empty-state-hint">Run a sync to see results here. History is limited to the last 20 operations.</p>
+    <div class="empty-state-action">
+        <button type="button" class="btn-primary"
+                hx-post="/sync/run"
+                hx-target="#result-banner"
+                hx-swap="innerHTML"
+                hx-disabled-elt="this"
+                hx-indicator="#history-sync-indicator">
+            <i data-lucide="refresh-cw" style="width:16px;height:16px"></i>
+            Run First Sync
+        </button>
+    </div>
+</div>
 {% endif %}
 {% endblock %}

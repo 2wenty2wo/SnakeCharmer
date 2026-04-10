@@ -4,58 +4,177 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
+    <meta name="description" content="SnakeCharmer - Sync TV shows from Trakt to Medusa">
     <title>{% block title %}SnakeCharmer{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=2">
-    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=3">
+    <script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
 <body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    
+    <button type="button" class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="sidebar">
+        <i data-lucide="menu" aria-hidden="true"></i>
+    </button>
+    
+    <div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+    
     <div class="app-layout">
-        <aside class="sidebar">
-            <div class="sidebar-logo"><img src="/static/logo.webp" alt="SnakeCharmer" class="logo-img"></div>
+        <aside class="sidebar" id="sidebar" role="navigation" aria-label="Main navigation">
+            <div class="sidebar-logo">
+                <img src="/static/logo.webp" alt="SnakeCharmer" class="logo-img" width="160" height="40">
+            </div>
             <nav class="sidebar-nav">
-                <a href="/" {% if active_page == "dashboard" %}class="active"{% endif %}>Dashboard</a>
-                <a href="/config/trakt" {% if active_page == "trakt" %}class="active"{% endif %}>Trakt</a>
-                <a href="/config/medusa" {% if active_page == "medusa" %}class="active"{% endif %}>Medusa</a>
-                <a href="/config/sync" {% if active_page == "sync" %}class="active"{% endif %}>Sync</a>
-                <a href="/config/health" {% if active_page == "health" %}class="active"{% endif %}>Health</a>
-                <a href="/config/notify" {% if active_page == "notify" %}class="active"{% endif %}>Notify</a>
-                <a href="/sync/history" {% if active_page == "history" %}class="active"{% endif %}>History</a>
-                <a href="/pending" {% if active_page == "pending" %}class="active"{% endif %}>
-                    Pending
-                    <span id="pending-badge" class="nav-badge" hx-get="/pending/count" hx-trigger="load" hx-swap="outerHTML" style="display:none"></span>
+                <a href="/" {% if active_page == "dashboard" %}class="active" aria-current="page"{% endif %}>
+                    Dashboard
+                    <i data-lucide="layout-dashboard" style="width:16px;height:16px;opacity:0.7"></i>
                 </a>
-                <a href="/library" {% if active_page == "library" %}class="active"{% endif %}>Library</a>
+                <a href="/config/trakt" {% if active_page == "trakt" %}class="active" aria-current="page"{% endif %}>
+                    Trakt
+                    <i data-lucide="film" style="width:16px;height:16px;opacity:0.7"></i>
+                </a>
+                <a href="/config/medusa" {% if active_page == "medusa" %}class="active" aria-current="page"{% endif %}>
+                    Medusa
+                    <i data-lucide="server" style="width:16px;height:16px;opacity:0.7"></i>
+                </a>
+                <a href="/config/sync" {% if active_page == "sync" %}class="active" aria-current="page"{% endif %}>
+                    Sync
+                    <i data-lucide="refresh-cw" style="width:16px;height:16px;opacity:0.7"></i>
+                </a>
+                <a href="/config/health" {% if active_page == "health" %}class="active" aria-current="page"{% endif %}>
+                    Health
+                    <i data-lucide="heart-pulse" style="width:16px;height:16px;opacity:0.7"></i>
+                </a>
+                <a href="/config/notify" {% if active_page == "notify" %}class="active" aria-current="page"{% endif %}>
+                    Notify
+                    <i data-lucide="bell" style="width:16px;height:16px;opacity:0.7"></i>
+                </a>
+                <a href="/sync/history" {% if active_page == "history" %}class="active" aria-current="page"{% endif %}>
+                    History
+                    <i data-lucide="history" style="width:16px;height:16px;opacity:0.7"></i>
+                </a>
+                <a href="/pending" {% if active_page == "pending" %}class="active" aria-current="page"{% endif %}>
+                    <span style="display:flex;align-items:center;gap:8px">
+                        Pending
+                        <span id="pending-badge" class="nav-badge" hx-get="/pending/count" hx-trigger="load" hx-swap="outerHTML" style="display:none"></span>
+                    </span>
+                    <i data-lucide="inbox" style="width:16px;height:16px;opacity:0.7"></i>
+                </a>
+                <a href="/library" {% if active_page == "library" %}class="active" aria-current="page"{% endif %}>
+                    Library
+                    <i data-lucide="library" style="width:16px;height:16px;opacity:0.7"></i>
+                </a>
             </nav>
         </aside>
-        <main class="main-content">
-            <div id="result-banner"></div>
+        <main class="main-content" id="main-content" role="main">
+            <div id="result-banner" role="status" aria-live="polite" aria-atomic="true"></div>
             <div id="dirty-indicator" hidden>
-                <span class="dirty-dot"></span>
+                <span class="dirty-dot" aria-hidden="true"></span>
                 Unsaved changes
             </div>
             {% block content %}{% endblock %}
             <footer class="app-footer">
-                <small>Config changes are written to the YAML file. Comments in the file will be removed on save.<br>SnakeCharmer is free and open source. <a href="https://github.com/sponsors/2wenty2wo" target="_blank">Support development</a>.</small>
+                <small>
+                    Config changes are written to the YAML file. Comments in the file will be removed on save.<br>
+                    SnakeCharmer is free and open source. <a href="https://github.com/sponsors/2wenty2wo" target="_blank" rel="noopener noreferrer">Support development</a>.
+                </small>
             </footer>
         </main>
     </div>
+    
+    <!-- Toast Container for notifications -->
+    <div class="toast-container" id="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
+    
     <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+    
+    // Re-initialize icons after HTMX swaps
+    document.body.addEventListener("htmx:afterSwap", function(event) {
+        lucide.createIcons();
+    });
+    
+    // Auto-dismiss success banners
     document.body.addEventListener("htmx:afterSwap", function(event) {
         if (event.detail.target.id === "result-banner") {
             var banner = event.detail.target.querySelector(".banner");
             if (banner && banner.classList.contains("success")) {
                 setTimeout(function() {
                     banner.classList.add("fade-out");
-                    setTimeout(function() { banner.remove(); }, 400);
-                }, 4000);
+                    setTimeout(function() { 
+                        if (banner.parentNode) {
+                            banner.remove(); 
+                        }
+                    }, 400);
+                }, 5000);
             }
         }
     });
-
+    
+    // Mobile menu toggle
+    (function() {
+        var menuToggle = document.getElementById('mobile-menu-toggle');
+        var sidebar = document.getElementById('sidebar');
+        var overlay = document.getElementById('sidebar-overlay');
+        
+        function toggleMenu() {
+            var isOpen = sidebar.classList.toggle('open');
+            overlay.classList.toggle('active', isOpen);
+            menuToggle.setAttribute('aria-expanded', isOpen);
+            menuToggle.innerHTML = isOpen ? '<i data-lucide="x" aria-hidden="true"></i>' : '<i data-lucide="menu" aria-hidden="true"></i>';
+            lucide.createIcons();
+            document.body.style.overflow = isOpen ? 'hidden' : '';
+        }
+        
+        function closeMenu() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('active');
+            menuToggle.setAttribute('aria-expanded', 'false');
+            menuToggle.innerHTML = '<i data-lucide="menu" aria-hidden="true"></i>';
+            lucide.createIcons();
+            document.body.style.overflow = '';
+        }
+        
+        if (menuToggle) {
+            menuToggle.addEventListener('click', toggleMenu);
+        }
+        
+        if (overlay) {
+            overlay.addEventListener('click', closeMenu);
+        }
+        
+        // Close menu when clicking on a link (mobile)
+        var navLinks = sidebar.querySelectorAll('a');
+        navLinks.forEach(function(link) {
+            link.addEventListener('click', function() {
+                if (window.innerWidth <= 1024) {
+                    closeMenu();
+                }
+            });
+        });
+        
+        // Close menu on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && sidebar.classList.contains('open')) {
+                closeMenu();
+            }
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 1024) {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+                menuToggle.setAttribute('aria-expanded', 'false');
+                document.body.style.overflow = '';
+            }
+        });
+    })();
+    
+    // Dirty form indicator
     (function() {
         var configPathPattern = /^\/config\/[^/]+$/;
         var traktSourcesPathPattern = /^\/config\/trakt\/sources(?:\/|$)/;
@@ -209,12 +328,48 @@
             event.returnValue = "";
         });
     })();
-    </script>
-    <script>
+    
+    // Toast notification helper
+    window.showToast = function(message, type, duration) {
+        type = type || 'info';
+        duration = duration || 5000;
+        
+        var container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        var toast = document.createElement('div');
+        toast.className = 'toast ' + type;
+        toast.setAttribute('role', 'status');
+        toast.setAttribute('aria-live', 'polite');
+        
+        var iconName = type === 'success' ? 'check-circle' : type === 'error' ? 'x-circle' : type === 'warning' ? 'alert-triangle' : 'info';
+        toast.innerHTML = '<i data-lucide="' + iconName + '" style="width:18px;height:18px;flex-shrink:0"></i><span>' + message + '</span><button type="button" class="toast-close" aria-label="Dismiss notification"><i data-lucide="x" style="width:14px;height:14px"></i></button>';
+        
+        container.appendChild(toast);
         lucide.createIcons();
-        document.body.addEventListener("htmx:afterSwap", function() {
-            lucide.createIcons();
+        
+        var closeBtn = toast.querySelector('.toast-close');
+        closeBtn.addEventListener('click', function() {
+            dismissToast(toast);
         });
+        
+        if (duration > 0) {
+            setTimeout(function() {
+                dismissToast(toast);
+            }, duration);
+        }
+        
+        return toast;
+    };
+    
+    function dismissToast(toast) {
+        toast.classList.add('fade-out');
+        setTimeout(function() {
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        }, 300);
+    }
     </script>
 </body>
 </html>

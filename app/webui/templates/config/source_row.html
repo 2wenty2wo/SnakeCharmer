@@ -3,59 +3,80 @@
     <div class="source-header">
         <span class="source-number">Source {{ i + 1 }}</span>
         <div class="inline-action-row">
-            <button type="button" class="btn-secondary"
+            <button type="button" class="btn-secondary btn-small"
                     hx-post="/config/trakt/sources/preview"
                     hx-target="#preview-{{ i }}"
                     hx-swap="innerHTML"
                     hx-include="[name='client_id'],[name='client_secret'],[name='username'],[name='limit'],[name='source_{{ i }}_type'],[name='source_{{ i }}_owner'],[name='source_{{ i }}_list_slug'],[name='source_{{ i }}_auth'],[name='source_{{ i }}_auto_approve']"
-                    hx-vals='{"source_index": "{{ i }}"}'>
+                    hx-vals='{"source_index": "{{ i }}"}'
+                    title="Preview shows from this source">
+                <i data-lucide="eye" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"></i>
                 Preview
             </button>
             <button type="button" class="btn-remove"
                     hx-delete="/config/trakt/sources/{{ i }}"
                     hx-target="#source-{{ i }}"
                     hx-swap="outerHTML"
-                    hx-confirm="Remove this source?">
+                    hx-confirm="Remove this source?"
+                    title="Remove this source">
+                <i data-lucide="trash-2" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"></i>
                 Remove
             </button>
         </div>
     </div>
+    
     <div class="source-grid">
         <label class="field-label">
-            Type
-            <select name="source_{{ i }}_type" onchange="toggleSourceFields(this, {{ i }})">
+            Source Type
+            <select name="source_{{ i }}_type" onchange="toggleSourceFields(this, {{ i }})" aria-describedby="type-help-{{ i }}">
                 <option value="trending" {{ "selected" if source.type == "trending" }}>Trending</option>
                 <option value="popular" {{ "selected" if source.type == "popular" }}>Popular</option>
                 <option value="watched" {{ "selected" if source.type == "watched" }}>Watched</option>
                 <option value="watchlist" {{ "selected" if source.type == "watchlist" }}>Watchlist</option>
                 <option value="user_list" {{ "selected" if source.type == "user_list" }}>User List</option>
             </select>
+            <small id="type-help-{{ i }}">Where to fetch shows from</small>
         </label>
+        
         <div id="source_{{ i }}_user_list_fields" class="visibility-wrapper{{ '' if source.type == 'user_list' else ' is-hidden' }}">
             <label class="field-label">
-                Owner
-                <input type="text" name="source_{{ i }}_owner" value="{{ source.owner }}" placeholder="List owner username">
+                List Owner
+                <input type="text" 
+                       name="source_{{ i }}_owner" 
+                       value="{{ source.owner }}" 
+                       placeholder="Trakt username"
+                       aria-describedby="owner-help-{{ i }}">
+                <small id="owner-help-{{ i }}">Username of the list owner</small>
             </label>
             <label class="field-label">
                 List Slug
-                <input type="text" name="source_{{ i }}_list_slug" value="{{ source.list_slug }}" placeholder="list-slug">
+                <input type="text" 
+                       name="source_{{ i }}_list_slug" 
+                       value="{{ source.list_slug }}" 
+                       placeholder="my-awesome-list"
+                       aria-describedby="slug-help-{{ i }}">
+                <small id="slug-help-{{ i }}">The list URL slug</small>
             </label>
         </div>
     </div>
-    <div class="source-grid">
+    
+    <div class="source-grid" style="margin-top: 16px;">
         <label class="field-label">
             <input type="checkbox" name="source_{{ i }}_auth" {{ "checked" if source.auth }}>
-            Requires OAuth
+            <span>Requires OAuth</span>
+            <small>Check if this source requires authentication (watchlist, private lists)</small>
         </label>
+        
         <label class="field-label">
             <input type="checkbox" name="source_{{ i }}_auto_approve" {{ "checked" if source.auto_approve }}>
-            Auto-approve shows
-            <small>If unchecked, shows go to the pending queue for manual approval</small>
+            <span>Auto-approve Shows</span>
+            <small>If unchecked, shows go to the <a href="/pending">pending queue</a> for manual approval</small>
         </label>
+        
         <label class="field-label">
-            Quality
-            <select name="source_{{ i }}_quality">
-                <option value="">-- Select quality --</option>
+            Quality Preset
+            <select name="source_{{ i }}_quality" aria-describedby="quality-help-{{ i }}">
+                <option value="">-- Default --</option>
                 <option value="any" {{ "selected" if source.medusa.quality == "any" }}>Any</option>
                 <option value="sd" {{ "selected" if source.medusa.quality == "sd" }}>SD</option>
                 <option value="hd" {{ "selected" if source.medusa.quality == "hd" }}>HD</option>
@@ -64,18 +85,23 @@
                 <option value="uhd4k" {{ "selected" if source.medusa.quality == "uhd4k" }}>UHD 4K</option>
                 <option value="uhd8k" {{ "selected" if source.medusa.quality == "uhd8k" }}>UHD 8K</option>
             </select>
-            <small>Quality preset for shows added from this source</small>
+            <small id="quality-help-{{ i }}">Quality preset for shows added from this source</small>
         </label>
+        
         <label class="field-label">
             Required Words
-            <input type="text" name="source_{{ i }}_required_words"
+            <input type="text" 
+                   name="source_{{ i }}_required_words"
                    value="{{ source.medusa.required_words | join(', ') if source.medusa.required_words else '' }}"
-                   placeholder="e.g. web-dl, proper">
-            <small>Comma-separated keywords</small>
+                   placeholder="e.g. web-dl, proper, repack"
+                   aria-describedby="words-help-{{ i }}">
+            <small id="words-help-{{ i }}">Comma-separated keywords that releases must contain</small>
         </label>
     </div>
+    
     <div id="preview-{{ i }}"></div>
 </div>
+
 <script>
 function toggleSourceFields(select, index) {
     var fields = document.getElementById('source_' + index + '_user_list_fields');
@@ -83,16 +109,6 @@ function toggleSourceFields(select, index) {
         fields.classList.remove('is-hidden');
     } else {
         fields.classList.add('is-hidden');
-    }
-}
-
-function addQuality(index, value) {
-    var input = document.getElementById('quality-' + index);
-    var current = input.value.trim();
-    var values = current ? current.split(',').map(function(v) { return v.trim(); }) : [];
-    if (!values.includes(value)) {
-        values.push(value);
-        input.value = values.join(', ');
     }
 }
 </script>

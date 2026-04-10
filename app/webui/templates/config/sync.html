@@ -1,43 +1,82 @@
 {% extends "base.html" %}
-{% block title %}Sync Config - SnakeCharmer{% endblock %}
+{% block title %}Sync Configuration - SnakeCharmer{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>Sync Configuration</h1>
-    <p class="page-description">Control sync behavior, scheduling, and retry logic.</p>
+    <p class="page-description">Control sync behavior, scheduling, and error handling.</p>
 </div>
 
-<form hx-post="/config/sync" hx-target="#result-banner" hx-swap="innerHTML">
+<form hx-post="/config/sync" hx-target="#result-banner" hx-swap="innerHTML" id="sync-form">
     <fieldset>
-        <legend>Behavior</legend>
+        <legend>Sync Behavior</legend>
+        
         <label class="field-label">
             <input type="checkbox" name="dry_run" {{ "checked" if config.sync.dry_run }}>
-            Dry Run
-            <small>Preview changes without adding shows to Medusa</small>
+            <span>Dry Run Mode</span>
+            <small>Preview changes without actually adding shows to Medusa. Useful for testing your configuration.</small>
         </label>
+        
         <label class="field-label">
-            Interval (seconds)
-            <input type="number" name="interval" value="{{ config.sync.interval }}" min="0">
-            <small>Seconds between sync cycles. 0 = run once and exit.</small>
-        </label>
-        <label class="field-label">
-            Max Retries
-            <input type="number" name="max_retries" value="{{ config.sync.max_retries }}" min="0" max="10">
-            <small>Max retry attempts for transient API failures</small>
-        </label>
-        <label class="field-label">
-            Retry Backoff
-            <input type="number" name="retry_backoff" value="{{ config.sync.retry_backoff }}" min="0.1" max="30" step="0.1">
-            <small>Base backoff multiplier in seconds between retries</small>
-        </label>
-        <label class="field-label">
-            Log Format
-            <select name="log_format">
-                <option value="text" {{ "selected" if config.sync.log_format == "text" }}>Text</option>
-                <option value="json" {{ "selected" if config.sync.log_format == "json" }}>JSON</option>
-            </select>
-            <small>Text is human-readable; JSON works with log aggregators</small>
+            Sync Interval (seconds)
+            <input type="number" 
+                   name="interval" 
+                   value="{{ config.sync.interval }}" 
+                   min="0"
+                   aria-describedby="interval-help">
+            <small id="interval-help">
+                Seconds between automatic sync cycles. Set to <strong>0</strong> to run once and exit (good for cron jobs).<br>
+                Examples: 3600 = 1 hour, 86400 = 1 day
+            </small>
         </label>
     </fieldset>
-    <button type="submit">Save Sync Settings</button>
+    
+    <fieldset>
+        <legend>Retry Settings</legend>
+        
+        <label class="field-label">
+            Max Retries
+            <input type="number" 
+                   name="max_retries" 
+                   value="{{ config.sync.max_retries }}" 
+                   min="0" 
+                   max="10"
+                   aria-describedby="retries-help">
+            <small id="retries-help">Number of retry attempts for failed API calls due to transient errors</small>
+        </label>
+        
+        <label class="field-label">
+            Retry Backoff (seconds)
+            <input type="number" 
+                   name="retry_backoff" 
+                   value="{{ config.sync.retry_backoff }}" 
+                   min="0.1" 
+                   max="30" 
+                   step="0.1"
+                   aria-describedby="backoff-help">
+            <small id="backoff-help">Base delay between retries. Increases exponentially: backoff × 2^attempt</small>
+        </label>
+    </fieldset>
+    
+    <fieldset>
+        <legend>Logging</legend>
+        
+        <label class="field-label">
+            Log Format
+            <select name="log_format" aria-describedby="log-help">
+                <option value="text" {{ "selected" if config.sync.log_format == "text" }}>Text (Human-readable)</option>
+                <option value="json" {{ "selected" if config.sync.log_format == "json" }}>JSON (Structured)</option>
+            </select>
+            <small id="log-help">
+                <strong>Text</strong> is easier to read. <strong>JSON</strong> is better for log aggregation and monitoring tools.
+            </small>
+        </label>
+    </fieldset>
+    
+    <div class="page-actions">
+        <button type="submit">
+            <i data-lucide="save" style="width:16px;height:16px"></i>
+            Save Sync Settings
+        </button>
+    </div>
 </form>
 {% endblock %}

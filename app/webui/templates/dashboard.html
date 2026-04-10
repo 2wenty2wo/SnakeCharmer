@@ -12,6 +12,7 @@
                 hx-disabled-elt="this"
                 hx-indicator="#dashboard-sync-indicator"
                 {% if config_errors %}disabled title="Complete setup first"{% endif %}>
+            <i data-lucide="refresh-cw" style="width:16px;height:16px"></i>
             Sync Now
         </button>
         <span id="dashboard-sync-indicator" class="sync-indicator sync-indicator-inline htmx-indicator" aria-live="polite">
@@ -38,38 +39,73 @@
 
 <!-- Config Cards -->
 <div class="card-grid config-cards">
-    <div class="card">
-        <div class="card-header"><i data-lucide="film" class="card-icon"></i> Trakt</div>
+    <div class="card interactive">
+        <div class="card-header">
+            <i data-lucide="film" class="card-icon" aria-hidden="true"></i>
+            Trakt
+        </div>
         <div class="info-row">
             <span class="info-label">Username</span>
             <span class="info-value">{{ config.trakt.username or "Not set" }}</span>
         </div>
         <div class="info-row">
             <span class="info-label">Sources</span>
-            <span class="info-value">{{ config.trakt.sources | length }} ({{ config.trakt.sources | map(attribute='type') | join(', ') }})</span>
+            <span class="info-value">{{ config.trakt.sources | length }} configured</span>
         </div>
-        <div class="info-row">
-            <span class="info-label">Limit</span>
-            <span class="info-value">{{ config.trakt.limit }}</span>
+        {% if config.trakt.sources %}
+        <div class="card-section">
+            <div class="section-label">Source Types</div>
+            <ul class="source-list" aria-label="Trakt sources">
+                {% for source in config.trakt.sources %}
+                <li>{{ source.type }}{% if source.type == 'user_list' %} ({{ source.owner }}){% endif %}</li>
+                {% endfor %}
+            </ul>
         </div>
-        <div class="card-footer"><a href="/config/trakt" class="btn-outline">Edit</a></div>
+        {% endif %}
+        <div class="card-footer">
+            <a href="/config/trakt" class="btn-outline">Edit Configuration</a>
+        </div>
     </div>
 
-    <div class="card">
-        <div class="card-header"><i data-lucide="server" class="card-icon"></i> Medusa</div>
+    <div class="card interactive">
+        <div class="card-header">
+            <i data-lucide="server" class="card-icon" aria-hidden="true"></i>
+            Medusa
+        </div>
         <div class="info-row">
             <span class="info-label">URL</span>
-            <span class="info-value">{{ config.medusa.url or "Not set" }}</span>
+            <span class="info-value" style="font-size:12px">{{ config.medusa.url or "Not set" }}</span>
         </div>
         <div class="info-row">
             <span class="info-label">API Key</span>
-            <span class="info-value">{{ "***" ~ config.medusa.api_key[-4:] if config.medusa.api_key else "Not set" }}</span>
+            <span class="info-value">
+                {% if config.medusa.api_key %}
+                <span class="mono-compact-text">***{{ config.medusa.api_key[-4:] }}</span>
+                {% else %}
+                Not set
+                {% endif %}
+            </span>
         </div>
-        <div class="card-footer"><a href="/config/medusa" class="btn-outline">Edit</a></div>
+        <div class="info-row">
+            <span class="info-label">Status</span>
+            <span class="info-value">
+                {% if config.medusa.url and config.medusa.api_key %}
+                <span class="config-badge">Configured</span>
+                {% else %}
+                <span class="config-badge off">Not Configured</span>
+                {% endif %}
+            </span>
+        </div>
+        <div class="card-footer">
+            <a href="/config/medusa" class="btn-outline">Edit Configuration</a>
+        </div>
     </div>
 
-    <div class="card">
-        <div class="card-header"><i data-lucide="refresh-cw" class="card-icon"></i> Sync</div>
+    <div class="card interactive">
+        <div class="card-header">
+            <i data-lucide="refresh-cw" class="card-icon" aria-hidden="true"></i>
+            Sync Settings
+        </div>
         <div class="info-row">
             <span class="info-label">Dry Run</span>
             <span class="info-value">
@@ -78,17 +114,28 @@
         </div>
         <div class="info-row">
             <span class="info-label">Interval</span>
-            <span class="info-value">{{ config.sync.interval }}s{{ " (run once)" if config.sync.interval == 0 else "" }}</span>
+            <span class="info-value">
+                {% if config.sync.interval == 0 %}
+                Run once
+                {% else %}
+                {{ config.sync.interval // 3600 }}h {{ (config.sync.interval % 3600) // 60 }}m
+                {% endif %}
+            </span>
         </div>
         <div class="info-row">
             <span class="info-label">Log Format</span>
-            <span class="info-value">{{ config.sync.log_format }}</span>
+            <span class="info-value" style="text-transform:uppercase;font-size:12px">{{ config.sync.log_format }}</span>
         </div>
-        <div class="card-footer"><a href="/config/sync" class="btn-outline">Edit</a></div>
+        <div class="card-footer">
+            <a href="/config/sync" class="btn-outline">Edit Settings</a>
+        </div>
     </div>
 
-    <div class="card">
-        <div class="card-header"><i data-lucide="bell" class="card-icon"></i> Notifications</div>
+    <div class="card interactive">
+        <div class="card-header">
+            <i data-lucide="bell" class="card-icon" aria-hidden="true"></i>
+            Notifications
+        </div>
         <div class="info-row">
             <span class="info-label">Enabled</span>
             <span class="info-value">
@@ -96,16 +143,18 @@
             </span>
         </div>
         <div class="info-row">
-            <span class="info-label">URLs</span>
+            <span class="info-label">Services</span>
             <span class="info-value">{{ config.notify.urls | length }} configured</span>
         </div>
         <div class="info-row">
             <span class="info-label">On Success</span>
             <span class="info-value">
-                <span class="config-badge{{ '' if config.notify.on_success else ' off' }}">{{ "On" if config.notify.on_success else "Off" }}</span>
+                <span class="config-badge{{ '' if config.notify.on_success else ' off' }}">{{ "Yes" if config.notify.on_success else "No" }}</span>
             </span>
         </div>
-        <div class="card-footer"><a href="/config/notify" class="btn-outline">Edit</a></div>
+        <div class="card-footer">
+            <a href="/config/notify" class="btn-outline">Edit Notifications</a>
+        </div>
     </div>
 </div>
 
@@ -115,5 +164,24 @@
      hx-trigger="every 10s"
      hx-swap="innerHTML">
     {% include "dashboard_status.html" %}
+</div>
+
+<!-- Quick Actions -->
+<div class="card-section" style="margin-top: 40px;">
+    <h2 style="font-size: 18px; margin-bottom: 20px;">Quick Actions</h2>
+    <div class="page-actions" style="margin-top: 0;">
+        <a href="/pending" class="btn-secondary">
+            <i data-lucide="inbox" style="width:16px;height:16px"></i>
+            Review Pending
+        </a>
+        <a href="/library" class="btn-secondary">
+            <i data-lucide="library" style="width:16px;height:16px"></i>
+            View Library
+        </a>
+        <a href="/sync/history" class="btn-secondary">
+            <i data-lucide="history" style="width:16px;height:16px"></i>
+            Sync History
+        </a>
+    </div>
 </div>
 {% endblock %}

@@ -3,19 +3,34 @@
 {% block content %}
 <div class="page-header">
     <h1>Library</h1>
-    <p class="page-description">Shows currently in your Medusa library.</p>
+    <p class="page-description">Browse and search shows in your Medusa library.</p>
 </div>
 
 {% if error %}
-<div class="banner error" role="alert">{{ error }}</div>
+<div class="banner error" role="alert">
+    <i data-lucide="alert-circle" style="width:18px;height:18px;flex-shrink:0"></i>
+    <span>{{ error }}</span>
+</div>
 {% elif shows %}
-<input type="text" class="search-input" placeholder="Filter shows..."
-       oninput="filterLibrary(this.value)">
-<p class="library-count">{{ shows | length }} show{{ "s" if shows | length != 1 else "" }} in library</p>
+<div class="search-container">
+    <input type="text" 
+           class="search-input" 
+           id="library-search"
+           placeholder="Search shows by title..."
+           aria-label="Search shows"
+           oninput="filterLibrary(this.value)">
+    <button type="button" class="search-clear" id="search-clear" onclick="clearSearch()" aria-label="Clear search">
+        <i data-lucide="x" style="width:14px;height:14px"></i>
+    </button>
+</div>
 
-<div class="card-grid" id="library-grid">
+<p class="library-count" id="library-count" aria-live="polite">
+    <strong>{{ shows | length }}</strong> show{{ "s" if shows | length != 1 else "" }} in library
+</p>
+
+<div class="card-grid" id="library-grid" role="list" aria-label="TV Shows">
     {% for show in shows %}
-    <div class="card library-card" data-title="{{ show.title | lower }}">
+    <div class="card library-card" data-title="{{ show.title | lower }}" role="listitem">
         <div class="card-header">{{ show.title }}</div>
         {% if show.year %}
         <div class="info-row">
@@ -33,29 +48,116 @@
         <div class="info-row">
             <span class="info-label">Status</span>
             <span class="info-value">
-                <span class="status-badge {{ 'status-continuing' if show.status == 'Continuing' else 'status-ended' }}">{{ show.status }}</span>
+                <span class="status-badge {{ 'status-continuing' if show.status == 'Continuing' else 'status-ended' }}">
+                    {{ show.status }}
+                </span>
             </span>
         </div>
         {% endif %}
         <div class="info-row">
-            <span class="info-label">TVDB</span>
+            <span class="info-label">TVDB ID</span>
             <span class="info-value mono-compact-text">{{ show.tvdb_id }}</span>
         </div>
+        {% if show.imdb_id %}
+        <div class="info-row">
+            <span class="info-label">IMDb</span>
+            <span class="info-value mono-compact-text" style="font-size:11px">{{ show.imdb_id }}</span>
+        </div>
+        {% endif %}
     </div>
     {% endfor %}
 </div>
 
+<div class="empty-state" id="no-results" style="display: none;" role="status">
+    <i data-lucide="search-x" aria-hidden="true"></i>
+    <p class="empty-state-title">No shows found</p>
+    <p class="empty-state-hint">Try a different search term.</p>
+    <div class="empty-state-action">
+        <button type="button" class="btn-secondary" onclick="clearSearch()">Clear Search</button>
+    </div>
+</div>
+
 <script>
-function filterLibrary(query) {
-    var q = query.toLowerCase();
-    var cards = document.querySelectorAll('#library-grid .library-card');
-    for (var i = 0; i < cards.length; i++) {
-        var title = cards[i].getAttribute('data-title');
-        cards[i].style.display = title.indexOf(q) !== -1 ? '' : 'none';
+(function() {
+    var searchInput = document.getElementById('library-search');
+    var searchClear = document.getElementById('search-clear');
+    var libraryCount = document.getElementById('library-count');
+    var noResults = document.getElementById('no-results');
+    var totalShows = document.querySelectorAll('#library-grid .library-card').length;
+    
+    function updateClearButton() {
+        if (searchInput.value) {
+            searchClear.classList.add('visible');
+        } else {
+            searchClear.classList.remove('visible');
+        }
     }
-}
+    
+    window.filterLibrary = function(query) {
+        var q = query.toLowerCase().trim();
+        var cards = document.querySelectorAll('#library-grid .library-card');
+        var visibleCount = 0;
+        
+        for (var i = 0; i < cards.length; i++) {
+            var title = cards[i].getAttribute('data-title');
+            var isVisible = !q || title.indexOf(q) !== -1;
+            cards[i].style.display = isVisible ? '' : 'none';
+            if (isVisible) visibleCount++;
+        }
+        
+        // Update count
+        libraryCount.innerHTML = '<strong>' + visibleCount + '</strong> show' + (visibleCount !== 1 ? 's' : '') + 
+            (q ? ' matching "' + escapeHtml(q) + '"' : ' in library');
+        
+        // Show/hide no results message
+        if (visibleCount === 0 && q) {
+            noResults.style.display = 'flex';
+        } else {
+            noResults.style.display = 'none';
+        }
+        
+        updateClearButton();
+    };
+    
+    window.clearSearch = function() {
+        searchInput.value = '';
+        searchInput.focus();
+        filterLibrary('');
+    };
+    
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // Initialize
+    updateClearButton();
+    
+    // Keyboard shortcut: / to focus search
+    document.addEventListener('keydown', function(e) {
+        if (e.key === '/' && document.activeElement !== searchInput) {
+            e.preventDefault();
+            searchInput.focus();
+        }
+        // Escape to clear search
+        if (e.key === 'Escape' && document.activeElement === searchInput) {
+            clearSearch();
+        }
+    });
+})();
 </script>
 {% else %}
-<div class="empty-state">No shows in your Medusa library yet.</div>
+<div class="empty-state" role="status">
+    <i data-lucide="tv" aria-hidden="true"></i>
+    <p class="empty-state-title">No shows in your Medusa library yet</p>
+    <p class="empty-state-hint">Run a sync to add shows from your Trakt lists.</p>
+    <div class="empty-state-action">
+        <a href="/" class="btn-primary">
+            <i data-lucide="refresh-cw" style="width:16px;height:16px"></i>
+            Go to Dashboard
+        </a>
+    </div>
+</div>
 {% endif %}
 {% endblock %}

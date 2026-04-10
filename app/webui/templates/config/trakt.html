@@ -1,37 +1,64 @@
 {% extends "base.html" %}
-{% block title %}Trakt Config - SnakeCharmer{% endblock %}
+{% block title %}Trakt Configuration - SnakeCharmer{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>Trakt Configuration</h1>
-    <p class="page-description">Configure your Trakt API credentials and show sources.</p>
+    <p class="page-description">Connect to Trakt.tv to fetch shows from your lists and trending content.</p>
 </div>
 
-<form hx-post="/config/trakt" hx-target="#result-banner" hx-swap="innerHTML">
+<form hx-post="/config/trakt" hx-target="#result-banner" hx-swap="innerHTML" id="trakt-form">
     <fieldset>
-        <legend>Credentials</legend>
+        <legend>API Credentials</legend>
         <label class="field-label">
             Client ID
-            <input type="text" name="client_id" value="{{ config.trakt.client_id }}" placeholder="Your Trakt client ID" required>
+            <input type="text" 
+                   name="client_id" 
+                   value="{{ config.trakt.client_id }}" 
+                   placeholder="Your Trakt application client ID" 
+                   required
+                   autocomplete="off"
+                   aria-describedby="client-id-help">
+            <small id="client-id-help">Required for all Trakt API calls. <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener noreferrer">Create an app</a> to get your credentials.</small>
         </label>
+        
         <label class="field-label">
             Client Secret
-            <input type="password" name="client_secret" value="{{ config.trakt.client_secret }}" placeholder="Your Trakt client secret">
+            <input type="password" 
+                   name="client_secret" 
+                   value="{{ config.trakt.client_secret }}" 
+                   placeholder="Your Trakt application client secret"
+                   autocomplete="off">
+            <small>Required for OAuth authentication</small>
         </label>
+        
         <label class="field-label">
             Username
-            <input type="text" name="username" value="{{ config.trakt.username }}" placeholder="Your Trakt username">
+            <input type="text" 
+                   name="username" 
+                   value="{{ config.trakt.username }}" 
+                   placeholder="Your Trakt.tv username"
+                   autocomplete="username">
+            <small>Used for fetching your personal watchlist</small>
         </label>
+        
         <label class="field-label">
             Limit
-            <input type="number" name="limit" value="{{ config.trakt.limit }}" min="1" max="1000">
-            <small>Max shows to fetch from public lists (trending/popular/watched)</small>
+            <input type="number" 
+                   name="limit" 
+                   value="{{ config.trakt.limit }}" 
+                   min="1" 
+                   max="1000"
+                   aria-describedby="limit-help">
+            <small id="limit-help">Maximum number of shows to fetch from public lists (trending, popular, watched)</small>
         </label>
+        
         <div class="inline-action-row space-top-md">
             <button type="button" class="btn-secondary"
                     hx-post="/test/trakt"
                     hx-target="#result-banner"
                     hx-swap="innerHTML"
                     hx-include="[name='client_id'],[name='client_secret'],[name='username']">
+                <i data-lucide="plug" style="width:14px;height:14px"></i>
                 Test Connection
             </button>
         </div>
@@ -39,21 +66,35 @@
 
     <fieldset>
         <legend>OAuth Authentication</legend>
-        <small>Required for watchlist and private list access.</small>
+        <p style="color: var(--gd-text-secondary); font-size: 14px; margin-bottom: 16px;">
+            Required for accessing private watchlists and user-specific content.
+        </p>
+        
         <div class="space-block-compact">
             {% if trakt_token_status == "valid" %}
-            <span class="config-badge">Authenticated</span>
+            <span class="config-badge" role="status" aria-label="Authentication status: Authenticated">
+                <i data-lucide="check-circle" style="width:12px;height:12px;display:inline;vertical-align:middle;margin-right:4px"></i>
+                Authenticated
+            </span>
             {% elif trakt_token_status == "expired" %}
-            <span class="config-badge off">Token Expired</span>
+            <span class="config-badge off" role="status" aria-label="Authentication status: Token Expired">
+                <i data-lucide="alert-circle" style="width:12px;height:12px;display:inline;vertical-align:middle;margin-right:4px"></i>
+                Token Expired
+            </span>
             {% else %}
-            <span class="config-badge off">Not Authenticated</span>
+            <span class="config-badge off" role="status" aria-label="Authentication status: Not Authenticated">
+                <i data-lucide="x-circle" style="width:12px;height:12px;display:inline;vertical-align:middle;margin-right:4px"></i>
+                Not Authenticated
+            </span>
             {% endif %}
         </div>
+        
         <button type="button" class="btn-secondary"
                 hx-post="/oauth/trakt/start"
                 hx-target="#oauth-flow"
                 hx-swap="innerHTML"
                 hx-include="[name='client_id'],[name='client_secret']">
+            <i data-lucide="key" style="width:14px;height:14px"></i>
             Authenticate with Trakt
         </button>
         <div id="oauth-flow"></div>
@@ -61,6 +102,9 @@
 
     <fieldset>
         <legend>Sources</legend>
+        <p style="color: var(--gd-text-secondary); font-size: 14px; margin-bottom: 16px;">
+            Configure where to fetch shows from. Each source can have different quality settings.
+        </p>
         <div id="sources-list">
             {% for source in config.trakt.sources %}
             {% set index = loop.index0 %}
@@ -71,11 +115,18 @@
                 hx-post="/config/trakt/sources/add"
                 hx-target="#sources-list"
                 hx-swap="beforeend"
-                class="btn-add-source">
-            + Add Source
+                class="btn-add-source"
+                title="Add another Trakt source">
+            <i data-lucide="plus" style="width:16px;height:16px;display:inline;vertical-align:middle;margin-right:6px"></i>
+            Add Source
         </button>
     </fieldset>
 
-    <button type="submit">Save Trakt Settings</button>
+    <div class="page-actions">
+        <button type="submit">
+            <i data-lucide="save" style="width:16px;height:16px"></i>
+            Save Trakt Settings
+        </button>
+    </div>
 </form>
 {% endblock %}
