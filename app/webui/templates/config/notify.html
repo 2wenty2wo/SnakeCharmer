@@ -7,19 +7,20 @@
 </div>
 
 <form hx-post="/config/notify" hx-target="#result-banner" hx-swap="innerHTML" id="notify-form">
+    <div class="form-grid">
     <fieldset>
         <legend>Notification Settings</legend>
-        
+
         <label class="field-label">
             <input type="checkbox" name="enabled" {{ "checked" if config.notify.enabled }}>
             <span>Enable Notifications</span>
             <small>Send notifications after each sync cycle completes</small>
         </label>
-        
+
         <label class="field-label">
             Apprise URLs
-            <textarea name="urls" 
-                      rows="5" 
+            <textarea name="urls"
+                      rows="5"
                       placeholder="pushover://user@token&#10;discord://webhook_id/webhook_token&#10;telegram://bottoken/chatid"
                       aria-describedby="urls-help">{{ config.notify.urls | join('\n') }}</textarea>
             <small id="urls-help">
@@ -28,28 +29,29 @@
             </small>
         </label>
     </fieldset>
-    
+
     <fieldset>
         <legend>Notification Triggers</legend>
-        
+
         <label class="field-label">
             <input type="checkbox" name="on_success" {{ "checked" if config.notify.on_success }}>
             <span>Notify on Success</span>
             <small>Send a notification when a sync completes successfully</small>
         </label>
-        
+
         <label class="field-label">
             <input type="checkbox" name="on_failure" {{ "checked" if config.notify.on_failure }}>
             <span>Notify on Failure</span>
             <small>Send a notification when a sync fails or encounters errors</small>
         </label>
-        
+
         <label class="field-label">
             <input type="checkbox" name="only_if_added" {{ "checked" if config.notify.only_if_added }}>
             <span>Only If Shows Added</span>
             <small>Suppress success notifications when no new shows were added (still sends on failure)</small>
         </label>
     </fieldset>
+    </div>
     
     <div class="page-actions">
         <button type="submit">

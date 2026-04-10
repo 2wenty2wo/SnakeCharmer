@@ -7,34 +7,35 @@
 </div>
 
 <form hx-post="/config/medusa" hx-target="#result-banner" hx-swap="innerHTML" id="medusa-form">
+    <div class="form-grid">
     <fieldset>
         <legend>Connection Settings</legend>
-        
+
         <label class="field-label">
             Medusa URL
-            <input type="url" 
-                   name="url" 
-                   value="{{ config.medusa.url }}" 
-                   placeholder="http://localhost:8081" 
+            <input type="url"
+                   name="url"
+                   value="{{ config.medusa.url }}"
+                   placeholder="http://localhost:8081"
                    required
                    autocomplete="off"
                    aria-describedby="url-help">
             <small id="url-help">Full URL to your Medusa instance (include port if not 80/443)</small>
         </label>
-        
+
         <label class="field-label">
             API Key
-            <input type="password" 
-                   name="api_key" 
-                   value="{{ config.medusa.api_key }}" 
-                   placeholder="Your Medusa API key" 
+            <input type="password"
+                   name="api_key"
+                   value="{{ config.medusa.api_key }}"
+                   placeholder="Your Medusa API key"
                    required
                    autocomplete="off"
                    aria-describedby="api-key-help">
             <small id="api-key-help">Found in Medusa under <em>Config → General → Advanced</em></small>
         </label>
     </fieldset>
-    
+
     <fieldset>
         <legend>Connection Test</legend>
         <p style="color: var(--gd-text-secondary); font-size: 14px; margin-bottom: 16px;">
@@ -49,6 +50,7 @@
             Test Connection
         </button>
     </fieldset>
+    </div>
     
     <div class="page-actions">
         <button type="submit">

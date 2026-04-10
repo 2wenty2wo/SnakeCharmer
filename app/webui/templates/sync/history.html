@@ -31,7 +31,7 @@
      hx-target=".history-list-container"
      hx-swap="outerHTML"
      aria-live="polite">
-    <div class="history-list-container">
+    <div class="history-list-container history-grid">
         {% for entry in history %}
         <div class="history-card" role="region" aria-label="Sync at {{ entry.timestamp }}">
             <div class="history-card-header">

@@ -2077,7 +2077,7 @@ class TestDesignSystemCompliance:
 
         assert response.status_code == 200
         assert "btn-primary" in response.text
-        assert "btn-secondary" in response.text
+        assert "quick-action-card" in response.text
 
     def test_cards_have_hover_classes(self, tmp_path):
         """Verify cards have interactive class for hover effects."""

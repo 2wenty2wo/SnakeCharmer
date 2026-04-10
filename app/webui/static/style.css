@@ -320,13 +320,17 @@ ul, ol {
 /* === Card Grid === */
 .card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 24px;
     margin-bottom: 40px;
     align-items: start;
 }
 
-/* Config cards - natural height */
+/* Config cards - wider minimum for info-heavy dashboard cards */
+.config-cards {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
 .config-cards .card {
     height: auto;
     min-height: unset;
@@ -335,7 +339,7 @@ ul, ol {
 /* Status cards container */
 .status-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 24px;
     margin-bottom: 40px;
     align-items: start;
@@ -344,6 +348,67 @@ ul, ol {
 .status-cards .card {
     height: auto;
     min-height: unset;
+}
+
+/* === Form Grid === */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 24px;
+    align-items: start;
+}
+
+.form-grid > .field-full {
+    grid-column: 1 / -1;
+}
+
+.form-grid > fieldset {
+    margin-bottom: 0;
+}
+
+/* === Quick Actions Grid === */
+.quick-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-top: 40px;
+}
+
+.quick-action-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px;
+    background: var(--gd-surface);
+    border-radius: var(--gd-radius-lg);
+    color: var(--gd-text);
+    text-decoration: none;
+    transition: all var(--gd-transition-base);
+    border: 1px solid transparent;
+}
+
+.quick-action-card:hover {
+    background: var(--gd-surface-2);
+    border-color: var(--gd-border);
+    color: var(--gd-text);
+    transform: translateY(-2px);
+}
+
+.quick-action-card .lucide {
+    color: var(--gd-primary);
+    flex-shrink: 0;
+}
+
+.quick-action-label {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* === History Grid === */
+.history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 16px;
 }
 
 /* === Cards === */
@@ -2161,6 +2226,10 @@ button[type="submit"]:disabled {
 /* === Responsive === */
 @media (max-width: 1200px) {
     .card-grid {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    }
+
+    .config-cards {
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     }
 }
@@ -2194,14 +2263,22 @@ button[type="submit"]:disabled {
     }
     
     .card-grid {
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
         gap: 20px;
     }
-    
-    .status-cards {
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+
+    .config-cards {
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     }
-    
+
+    .status-cards {
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
     .pending-row {
         grid-template-columns: 44px 2fr 1fr 100px;
         gap: 12px;
@@ -2222,76 +2299,135 @@ button[type="submit"]:disabled {
         grid-template-columns: 1fr;
         gap: 16px;
     }
-    
+
+    .config-cards {
+        grid-template-columns: 1fr;
+    }
+
     .status-cards {
         grid-template-columns: 1fr;
     }
-    
+
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .history-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .quick-actions-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-top: 32px;
+    }
+
     .sync-metrics {
         gap: 12px;
     }
-    
+
     .metric-value {
         font-size: 24px;
     }
-    
+
     .source-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .page-actions {
         flex-direction: column;
         align-items: stretch;
     }
-    
+
     .page-actions .btn-primary,
     .page-actions .btn-secondary,
     .page-actions .btn-outline {
         width: 100%;
     }
-    
+
     fieldset {
         padding: 20px;
     }
-    
+
     .history-table-container {
         margin: 0 -16px;
         border-radius: 0;
     }
-    
+
     .history-table {
         font-size: 13px;
     }
-    
+
     .history-table th,
     .history-table td {
         padding: 12px 8px;
     }
-    
+
     .history-card-header {
         padding: 12px 16px;
         gap: 12px;
     }
-    
+
     .history-card-main {
         min-width: 0;
         flex-wrap: wrap;
     }
-    
+
     .history-shows-list {
         padding: 0 16px 12px;
         padding-top: 10px;
     }
-    
+
     .pending-row {
-        grid-template-columns: 44px 1fr auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
         padding: 16px;
+        background: var(--gd-surface);
+        border-radius: var(--gd-radius-lg);
+        border-bottom: none;
+        margin-bottom: 12px;
     }
-    
+
+    .pending-row:last-child {
+        margin-bottom: 0;
+    }
+
+    .pending-row:hover {
+        background: var(--gd-surface-2);
+    }
+
+    .pending-select {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+    }
+
+    .pending-row {
+        position: relative;
+    }
+
     .pending-source {
-        display: none;
+        display: flex;
     }
-    
+
+    .pending-options {
+        display: flex;
+    }
+
+    .pending-discovered {
+        display: block;
+        font-size: 12px;
+        color: var(--gd-text-secondary);
+    }
+
+    .pending-actions {
+        display: flex;
+        gap: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--gd-border);
+    }
+
     .bulk-actions-bar {
         flex-direction: column;
         align-items: flex-start;

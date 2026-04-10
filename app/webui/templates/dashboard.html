@@ -167,21 +167,19 @@
 </div>
 
 <!-- Quick Actions -->
-<div class="card-section" style="margin-top: 40px;">
-    <h2 style="font-size: 18px; margin-bottom: 20px;">Quick Actions</h2>
-    <div class="page-actions" style="margin-top: 0;">
-        <a href="/pending" class="btn-secondary">
-            <i data-lucide="inbox" style="width:16px;height:16px"></i>
-            Review Pending
-        </a>
-        <a href="/library" class="btn-secondary">
-            <i data-lucide="library" style="width:16px;height:16px"></i>
-            View Library
-        </a>
-        <a href="/sync/history" class="btn-secondary">
-            <i data-lucide="history" style="width:16px;height:16px"></i>
-            Sync History
-        </a>
-    </div>
+<h2 style="font-size: 18px; margin-bottom: 0;">Quick Actions</h2>
+<div class="quick-actions-grid">
+    <a href="/pending" class="quick-action-card">
+        <i data-lucide="inbox" style="width:20px;height:20px"></i>
+        <span class="quick-action-label">Review Pending</span>
+    </a>
+    <a href="/library" class="quick-action-card">
+        <i data-lucide="library" style="width:20px;height:20px"></i>
+        <span class="quick-action-label">View Library</span>
+    </a>
+    <a href="/sync/history" class="quick-action-card">
+        <i data-lucide="history" style="width:20px;height:20px"></i>
+        <span class="quick-action-label">Sync History</span>
+    </a>
 </div>
 {% endblock %}
