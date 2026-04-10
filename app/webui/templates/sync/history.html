@@ -49,7 +49,7 @@
                 {% for entry in history %}
                 <tr role="row">
                     <td role="cell">
-                        <span title="{{ entry.timestamp }}">{{ entry.timestamp[:16] }}</span>
+                        <span title="{{ entry.timestamp }}">{{ entry.timestamp | format_timestamp_short }}</span>
                     </td>
                     <td role="cell">{{ "%.1f" | format(entry.duration_seconds) }}s</td>
                     <td role="cell">
