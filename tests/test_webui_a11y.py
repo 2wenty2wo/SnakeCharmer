@@ -9,7 +9,10 @@ These tests verify WCAG 2.1 AA compliance including:
 """
 
 import pytest
-from playwright.sync_api import Page, expect
+
+playwright = pytest.importorskip("playwright.sync_api")
+Page = playwright.Page
+expect = playwright.expect
 
 
 def test_skip_to_content_link_exists(page: Page, live_server_url: str):

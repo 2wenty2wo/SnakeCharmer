@@ -7,7 +7,10 @@ These tests verify DESIGN.md compliance including:
 """
 
 import pytest
-from playwright.sync_api import Page, expect
+
+playwright = pytest.importorskip("playwright.sync_api")
+Page = playwright.Page
+expect = playwright.expect
 
 
 def test_dashboard_renders_with_green_deck_colors(page: Page, live_server_url: str):
