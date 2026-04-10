@@ -1393,7 +1393,7 @@ class TestLibrary:
         assert response.status_code == 200
         assert "Breaking Bad" in response.text
         assert "The Wire" in response.text
-        assert "2 shows" in response.text
+        assert "2 shows" in response.text or "<strong>2</strong> shows" in response.text
 
     def test_library_empty(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
@@ -1995,3 +1995,168 @@ class TestSyncManagerGetState:
         state = sm.get_state()
         assert "error" in state
         assert "Config incomplete" in state["error"]
+
+
+# === Mobile Navigation Tests ===
+
+
+class TestMobileNavigation:
+    """Tests for mobile hamburger menu functionality."""
+
+    def test_mobile_menu_toggle_exists_in_html(self, tmp_path):
+        """Verify mobile menu toggle button is present in HTML."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert 'id="mobile-menu-toggle"' in response.text
+        assert 'aria-label="Toggle navigation menu"' in response.text
+        assert 'aria-expanded="false"' in response.text
+
+    def test_sidebar_has_correct_aria_attributes(self, tmp_path):
+        """Verify sidebar has proper ARIA attributes for accessibility."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert 'id="sidebar"' in response.text
+        assert 'role="navigation"' in response.text
+
+    def test_skip_link_exists(self, tmp_path):
+        """Verify skip-to-content link is present for accessibility."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert 'class="skip-link"' in response.text
+        assert 'href="#main-content"' in response.text
+
+    def test_main_content_has_id(self, tmp_path):
+        """Verify main content area has id for skip link."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert 'id="main-content"' in response.text
+        assert 'role="main"' in response.text
+
+    def test_navigation_links_have_icons(self, tmp_path):
+        """Verify navigation links include Lucide icons."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        # Check for data-lucide attributes in nav
+        assert 'data-lucide="layout-dashboard"' in response.text
+        assert 'data-lucide="film"' in response.text
+        assert 'data-lucide="server"' in response.text
+
+    def test_active_page_has_aria_current(self, tmp_path):
+        """Verify active navigation link has aria-current attribute."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        # Dashboard should be active and have aria-current
+        assert 'aria-current="page"' in response.text
+
+
+class TestDesignSystemCompliance:
+    """Tests for Green Deck design system compliance."""
+
+    def test_css_variables_defined(self, tmp_path):
+        """Verify CSS custom properties are defined."""
+        import os
+
+        css_path = os.path.join(
+            os.path.dirname(__file__), "..", "app", "webui", "static", "style.css"
+        )
+
+        with open(css_path) as f:
+            css = f.read()
+
+        # Verify Green Deck color tokens exist
+        assert "--gd-primary: #1DB954" in css
+        assert "--gd-bg: #121212" in css
+        assert "--gd-surface: #181818" in css
+        assert "--gd-text: #FFFFFF" in css
+
+    def test_dm_sans_font_loaded(self, tmp_path):
+        """Verify DM Sans and JetBrains Mono font families are declared."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        # Verify the stylesheet request includes both expected font families.
+        assert "family=DM+Sans" in response.text
+        assert "family=JetBrains+Mono" in response.text
+
+    def test_buttons_have_pill_shape_class(self, tmp_path):
+        """Verify buttons use pill-shaped styling."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert "btn-primary" in response.text
+        assert "btn-secondary" in response.text
+
+    def test_cards_have_hover_classes(self, tmp_path):
+        """Verify cards have interactive class for hover effects."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert "card" in response.text
+        assert "interactive" in response.text
+
+    def test_empty_states_use_lucide_icons(self, tmp_path):
+        """Verify empty states use Lucide icons, not emoji."""
+        client, _, _ = _create_client(tmp_path)
+
+        # Check pending page empty state
+        response = client.get("/pending")
+        assert response.status_code == 200
+
+        # Should have Lucide icon, not emoji
+        assert 'data-lucide="inbox"' in response.text
+        # Should not have emoji
+        assert "📂" not in response.text
+
+    def test_toast_container_exists(self, tmp_path):
+        """Verify toast notification container is present."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert 'id="toast-container"' in response.text
+        assert 'class="toast-container"' in response.text
+
+
+class TestResponsiveMetaTags:
+    """Tests for responsive design meta tags."""
+
+    def test_viewport_meta_tag(self, tmp_path):
+        """Verify viewport meta tag is present."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert 'name="viewport"' in response.text
+        assert "width=device-width" in response.text
+
+    def test_color_scheme_meta_tag(self, tmp_path):
+        """Verify color-scheme meta tag is present for dark mode."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert 'name="color-scheme"' in response.text
+        assert 'content="dark"' in response.text
+
+    def test_description_meta_tag(self, tmp_path):
+        """Verify description meta tag is present."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+
+        assert response.status_code == 200
+        assert 'name="description"' in response.text

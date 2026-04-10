@@ -1,32 +1,59 @@
 {% extends "base.html" %}
-{% block title %}Medusa Config - SnakeCharmer{% endblock %}
+{% block title %}Medusa Configuration - SnakeCharmer{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>Medusa Configuration</h1>
-    <p class="page-description">Connect to your Medusa instance for automatic show management.</p>
+    <p class="page-description">Connect to your Medusa instance to automatically add shows to your library.</p>
 </div>
 
-<form hx-post="/config/medusa" hx-target="#result-banner" hx-swap="innerHTML">
+<form hx-post="/config/medusa" hx-target="#result-banner" hx-swap="innerHTML" id="medusa-form">
     <fieldset>
-        <legend>Connection</legend>
+        <legend>Connection Settings</legend>
+        
         <label class="field-label">
-            URL
-            <input type="url" name="url" value="{{ config.medusa.url }}" placeholder="http://localhost:8081" required>
-            <small>Medusa base URL (e.g. http://localhost:8081)</small>
+            Medusa URL
+            <input type="url" 
+                   name="url" 
+                   value="{{ config.medusa.url }}" 
+                   placeholder="http://localhost:8081" 
+                   required
+                   autocomplete="off"
+                   aria-describedby="url-help">
+            <small id="url-help">Full URL to your Medusa instance (include port if not 80/443)</small>
         </label>
+        
         <label class="field-label">
             API Key
-            <input type="password" name="api_key" value="{{ config.medusa.api_key }}" placeholder="Your Medusa API key" required>
+            <input type="password" 
+                   name="api_key" 
+                   value="{{ config.medusa.api_key }}" 
+                   placeholder="Your Medusa API key" 
+                   required
+                   autocomplete="off"
+                   aria-describedby="api-key-help">
+            <small id="api-key-help">Found in Medusa under <em>Config → General → Advanced</em></small>
         </label>
     </fieldset>
-    <div class="page-actions">
-        <button type="submit">Save Medusa Settings</button>
+    
+    <fieldset>
+        <legend>Connection Test</legend>
+        <p style="color: var(--gd-text-secondary); font-size: 14px; margin-bottom: 16px;">
+            Verify your connection before saving.
+        </p>
         <button type="button" class="btn-secondary"
                 hx-post="/test/medusa"
                 hx-target="#result-banner"
                 hx-swap="innerHTML"
                 hx-include="[name='url'],[name='api_key']">
+            <i data-lucide="plug" style="width:14px;height:14px"></i>
             Test Connection
+        </button>
+    </fieldset>
+    
+    <div class="page-actions">
+        <button type="submit">
+            <i data-lucide="save" style="width:16px;height:16px"></i>
+            Save Medusa Settings
         </button>
     </div>
 </form>

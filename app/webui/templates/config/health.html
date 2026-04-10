@@ -1,25 +1,53 @@
 {% extends "base.html" %}
-{% block title %}Health Config - SnakeCharmer{% endblock %}
+{% block title %}Health Configuration - SnakeCharmer{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>Health Configuration</h1>
-    <p class="page-description">Configure the HTTP health endpoint for Docker and monitoring tools.</p>
+    <p class="page-description">Configure the HTTP health endpoint for Docker, Kubernetes, and monitoring tools.</p>
 </div>
 
-<form hx-post="/config/health" hx-target="#result-banner" hx-swap="innerHTML">
+<form hx-post="/config/health" hx-target="#result-banner" hx-swap="innerHTML" id="health-form">
     <fieldset>
-        <legend>Endpoint</legend>
+        <legend>Health Endpoint</legend>
+        
         <label class="field-label">
             <input type="checkbox" name="enabled" {{ "checked" if config.health.enabled }}>
-            Enabled
-            <small>Start HTTP health endpoint for Docker/monitoring tools</small>
+            <span>Enable Health Endpoint</span>
+            <small>Exposes a <code>/health</code> endpoint that returns the current sync status</small>
         </label>
+        
         <label class="field-label">
             Port
-            <input type="number" name="port" value="{{ config.health.port }}" min="1" max="65535">
-            <small>Port for the health check endpoint</small>
+            <input type="number" 
+                   name="port" 
+                   value="{{ config.health.port }}" 
+                   min="1" 
+                   max="65535"
+                   aria-describedby="port-help">
+            <small id="port-help">
+                Port to listen on for health check requests. Ensure this port is not already in use.<br>
+                When the Web UI is enabled, health checks are served on the Web UI port instead.
+            </small>
         </label>
     </fieldset>
-    <button type="submit">Save Health Settings</button>
+    
+    <fieldset>
+        <legend>About Health Checks</legend>
+        <div style="background: var(--gd-surface-2); padding: 16px; border-radius: var(--gd-radius-md); font-size: 14px; color: var(--gd-text-secondary);">
+            <p style="margin: 0 0 12px 0;"><strong style="color: var(--gd-text);">Response Codes:</strong></p>
+            <ul style="margin: 0; padding-left: 20px;">
+                <li><strong>200 OK</strong> - Last sync was successful or no sync yet</li>
+                <li><strong>503 Service Unavailable</strong> - Last sync failed</li>
+            </ul>
+            <p style="margin: 12px 0 0 0;">Compatible with Docker HEALTHCHECK, Kubernetes liveness/readiness probes, and monitoring tools like Uptime Kuma.</p>
+        </div>
+    </fieldset>
+    
+    <div class="page-actions">
+        <button type="submit">
+            <i data-lucide="save" style="width:16px;height:16px"></i>
+            Save Health Settings
+        </button>
+    </div>
 </form>
 {% endblock %}

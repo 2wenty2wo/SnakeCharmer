@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Pending Approval</h1>
-    <p class="page-description">Shows waiting for manual approval before being added to Medusa.</p>
+    <p class="page-description">Review and approve shows before they are added to Medusa.</p>
     {% if pending_count > 0 %}
     <div class="page-actions">
         <button type="button" class="btn-primary"
@@ -11,26 +11,31 @@
                 hx-target="#result-banner"
                 hx-swap="innerHTML"
                 hx-vals='{"select_all": true}'
-                hx-confirm="Approve all {{ pending_count }} pending shows?">
-            Approve All
+                hx-confirm="Approve all {{ pending_count }} pending shows?"
+                title="Approve all shows at once">
+            <i data-lucide="check-check" style="width:16px;height:16px"></i>
+            Approve All ({{ pending_count }})
         </button>
     </div>
     {% endif %}
 </div>
 
-<div id="result-banner"></div>
+<div id="result-banner" role="status" aria-live="polite"></div>
 
 {% if pending_count == 0 %}
-<div class="empty-state">
-    <i data-lucide="inbox" class="empty-icon"></i>
-    <p>No shows pending approval.</p>
-    <p class="empty-hint">Shows from sources with "Auto-approve" disabled will appear here.</p>
+<div class="empty-state" role="status">
+    <i data-lucide="inbox" aria-hidden="true"></i>
+    <p class="empty-state-title">No shows pending approval</p>
+    <p class="empty-state-hint">Shows from sources with "Auto-approve" disabled will appear here for manual review.</p>
+    <div class="empty-state-action">
+        <a href="/config/trakt" class="btn-secondary">Configure Sources</a>
+    </div>
 </div>
 {% else %}
 <div class="pending-stats">
-    <span class="stat-badge">
-        <i data-lucide="clock" class="stat-icon"></i>
-        {{ pending_count }} show{{ "s" if pending_count != 1 }} pending
+    <span class="stat-badge" title="Shows waiting for approval">
+        <i data-lucide="clock" class="stat-icon" aria-hidden="true"></i>
+        <span><strong>{{ pending_count }}</strong> show{{ "s" if pending_count != 1 }} pending</span>
     </span>
 </div>
 
@@ -40,47 +45,47 @@
       hx-swap="innerHTML">
     <div class="bulk-actions-bar">
         <label class="select-all-label">
-            <input type="checkbox" id="select-all" onchange="toggleSelectAll(this)">
+            <input type="checkbox" id="select-all" onchange="toggleSelectAll(this)" aria-label="Select all shows">
             <span>Select All</span>
         </label>
         <div class="bulk-buttons">
-            <button type="submit" name="action" value="approve" class="btn-primary btn-small">
-                <i data-lucide="check" class="btn-icon"></i>
+            <button type="submit" name="action" value="approve" class="btn-primary btn-small" title="Add selected shows to Medusa">
+                <i data-lucide="check" class="btn-icon" aria-hidden="true"></i>
                 Approve Selected
             </button>
-            <button type="submit" name="action" value="reject" class="btn-secondary btn-small">
-                <i data-lucide="x" class="btn-icon"></i>
+            <button type="submit" name="action" value="reject" class="btn-secondary btn-small" title="Remove selected shows from queue">
+                <i data-lucide="x" class="btn-icon" aria-hidden="true"></i>
                 Reject Selected
             </button>
         </div>
     </div>
 
-    <div class="pending-list">
+    <div class="pending-list" role="list" aria-label="Pending shows">
         {% for show in pending_shows %}
-        <div class="pending-row" id="pending-row-{{ show.tvdb_id }}">
+        <div class="pending-row" id="pending-row-{{ show.tvdb_id }}" role="listitem">
             <div class="pending-select">
-                <input type="checkbox" name="tvdb_ids" value="{{ show.tvdb_id }}" class="row-checkbox">
+                <input type="checkbox" name="tvdb_ids" value="{{ show.tvdb_id }}" class="row-checkbox" aria-label="Select {{ show.title }}">
             </div>
             <div class="pending-info">
                 <div class="pending-title">{{ show.title }}</div>
                 <div class="pending-meta">
                     {% if show.year %}{{ show.year }} • {% endif %}
-                    TVDB: {{ show.tvdb_id }}
+                    TVDB: <span class="mono-compact-text">{{ show.tvdb_id }}</span>
                 </div>
             </div>
             <div class="pending-source">
-                <span class="source-chip">{{ show.source_label }}</span>
+                <span class="source-chip" title="Source: {{ show.source_label }}">{{ show.source_label }}</span>
             </div>
             <div class="pending-options">
                 {% if show.quality %}
-                <span class="option-badge">{{ show.quality }}</span>
+                <span class="option-badge" title="Quality preset">{{ show.quality }}</span>
                 {% endif %}
                 {% if show.required_words %}
-                <span class="option-badge">{{ show.required_words | join(", ") }}</span>
+                <span class="option-badge" title="Required words">{{ show.required_words | join(", ") }}</span>
                 {% endif %}
             </div>
-            <div class="pending-discovered">
-                {{ show.discovered_at | truncate(16, true, "") }}
+            <div class="pending-discovered" title="Discovered: {{ show.discovered_at }}">
+                {{ show.discovered_at[:16] }}
             </div>
             <div class="pending-actions">
                 <button type="button" class="btn-icon-approve"
@@ -88,16 +93,18 @@
                         hx-target="#pending-row-{{ show.tvdb_id }}"
                         hx-swap="outerHTML"
                         hx-confirm="Approve '{{ show.title }}'?"
-                        title="Approve">
-                    <i data-lucide="check"></i>
+                        title="Approve '{{ show.title }}'">
+                    <i data-lucide="check" aria-hidden="true"></i>
+                    <span class="visually-hidden">Approve {{ show.title }}</span>
                 </button>
                 <button type="button" class="btn-icon-reject"
                         hx-post="/pending/reject/{{ show.tvdb_id }}"
                         hx-target="#pending-row-{{ show.tvdb_id }}"
                         hx-swap="outerHTML"
                         hx-confirm="Reject '{{ show.title }}'?"
-                        title="Reject">
-                    <i data-lucide="x"></i>
+                        title="Reject '{{ show.title }}'">
+                    <i data-lucide="x" aria-hidden="true"></i>
+                    <span class="visually-hidden">Reject {{ show.title }}</span>
                 </button>
             </div>
         </div>
@@ -106,18 +113,91 @@
 </form>
 
 <script>
-function toggleSelectAll(checkbox) {
-    const rowCheckboxes = document.querySelectorAll('.row-checkbox');
-    rowCheckboxes.forEach(cb => cb.checked = checkbox.checked);
+(function() {
+    var selectAllCheckbox = document.getElementById('select-all');
+    var rowCheckboxes = document.querySelectorAll('.row-checkbox');
+    
+    window.toggleSelectAll = function(checkbox) {
+        rowCheckboxes.forEach(function(cb) {
+            cb.checked = checkbox.checked;
+        });
+        updateSelectAllState();
+    };
+    
+    function updateSelectAllState() {
+        var checkedCount = document.querySelectorAll('.row-checkbox:checked').length;
+        var totalCount = rowCheckboxes.length;
+        
+        if (selectAllCheckbox) {
+            selectAllCheckbox.checked = checkedCount === totalCount && totalCount > 0;
+            selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < totalCount;
+        }
+        
+        // Update bulk buttons state
+        var hasSelection = checkedCount > 0;
+        document.querySelectorAll('.bulk-buttons button').forEach(function(btn) {
+            btn.disabled = !hasSelection;
+        });
+    }
+    
+    // Attach listeners to all row checkboxes
+    rowCheckboxes.forEach(function(cb) {
+        cb.addEventListener('change', updateSelectAllState);
+    });
+    
+    // Initialize state
+    updateSelectAllState();
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        // Ctrl/Cmd + A to select all (if not in a text field)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'a' && 
+            document.activeElement.tagName !== 'INPUT' && 
+            document.activeElement.tagName !== 'TEXTAREA') {
+            e.preventDefault();
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = !selectAllCheckbox.checked;
+                toggleSelectAll(selectAllCheckbox);
+            }
+        }
+    });
+})();
+</script>
+
+<style>
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
-document.querySelectorAll('.row-checkbox').forEach(cb => {
-    cb.addEventListener('change', function() {
-        const allChecked = document.querySelectorAll('.row-checkbox:checked').length === 
-                          document.querySelectorAll('.row-checkbox').length;
-        document.getElementById('select-all').checked = allChecked;
-    });
-});
-</script>
+.bulk-buttons button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+input[type="checkbox"]:indeterminate {
+    background: var(--gd-primary);
+    border-color: var(--gd-primary);
+}
+
+input[type="checkbox"]:indeterminate::after {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 7px;
+    width: 8px;
+    height: 2px;
+    background: white;
+    border: none;
+    transform: none;
+}
+</style>
 {% endif %}
 {% endblock %}

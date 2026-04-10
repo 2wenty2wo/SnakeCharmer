@@ -1,47 +1,68 @@
 {% extends "base.html" %}
-{% block title %}Notify Config - SnakeCharmer{% endblock %}
+{% block title %}Notification Configuration - SnakeCharmer{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>Notification Configuration</h1>
-    <p class="page-description">Set up notifications for sync events via Pushover, Discord, Telegram, and more.</p>
+    <p class="page-description">Set up notifications for sync events via Pushover, Discord, Telegram, and 100+ services.</p>
 </div>
 
-<form hx-post="/config/notify" hx-target="#result-banner" hx-swap="innerHTML">
+<form hx-post="/config/notify" hx-target="#result-banner" hx-swap="innerHTML" id="notify-form">
     <fieldset>
-        <legend>Settings</legend>
+        <legend>Notification Settings</legend>
+        
         <label class="field-label">
             <input type="checkbox" name="enabled" {{ "checked" if config.notify.enabled }}>
-            Enabled
-            <small>Enable notifications after each sync cycle</small>
+            <span>Enable Notifications</span>
+            <small>Send notifications after each sync cycle completes</small>
         </label>
+        
         <label class="field-label">
             Apprise URLs
-            <textarea name="urls" rows="4" placeholder="pushover://user@token&#10;discord://webhook_id/webhook_token">{{ config.notify.urls | join('\n') }}</textarea>
-            <small>One Apprise URL per line. Supports 100+ services (Pushover, Discord, Telegram, ntfy, etc.)</small>
-        </label>
-        <label class="field-label">
-            <input type="checkbox" name="on_success" {{ "checked" if config.notify.on_success }}>
-            Notify on success
-            <small>Send a notification after a successful sync</small>
-        </label>
-        <label class="field-label">
-            <input type="checkbox" name="on_failure" {{ "checked" if config.notify.on_failure }}>
-            Notify on failure
-            <small>Send a notification after a failed sync</small>
-        </label>
-        <label class="field-label">
-            <input type="checkbox" name="only_if_added" {{ "checked" if config.notify.only_if_added }}>
-            Only if shows added
-            <small>Suppress success notifications when no new shows were added</small>
+            <textarea name="urls" 
+                      rows="5" 
+                      placeholder="pushover://user@token&#10;discord://webhook_id/webhook_token&#10;telegram://bottoken/chatid"
+                      aria-describedby="urls-help">{{ config.notify.urls | join('\n') }}</textarea>
+            <small id="urls-help">
+                One Apprise URL per line. Supports 100+ notification services including Pushover, Discord, Telegram, ntfy, Slack, and more.<br>
+                <a href="https://github.com/caronc/apprise/wiki#notification-services" target="_blank" rel="noopener noreferrer">View all supported services →</a>
+            </small>
         </label>
     </fieldset>
+    
+    <fieldset>
+        <legend>Notification Triggers</legend>
+        
+        <label class="field-label">
+            <input type="checkbox" name="on_success" {{ "checked" if config.notify.on_success }}>
+            <span>Notify on Success</span>
+            <small>Send a notification when a sync completes successfully</small>
+        </label>
+        
+        <label class="field-label">
+            <input type="checkbox" name="on_failure" {{ "checked" if config.notify.on_failure }}>
+            <span>Notify on Failure</span>
+            <small>Send a notification when a sync fails or encounters errors</small>
+        </label>
+        
+        <label class="field-label">
+            <input type="checkbox" name="only_if_added" {{ "checked" if config.notify.only_if_added }}>
+            <span>Only If Shows Added</span>
+            <small>Suppress success notifications when no new shows were added (still sends on failure)</small>
+        </label>
+    </fieldset>
+    
     <div class="page-actions">
-        <button type="submit">Save Notification Settings</button>
+        <button type="submit">
+            <i data-lucide="save" style="width:16px;height:16px"></i>
+            Save Notification Settings
+        </button>
         <button type="button" class="btn-secondary"
                 hx-post="/test/notify"
                 hx-target="#result-banner"
                 hx-swap="innerHTML"
-                hx-include="[name='urls']">
+                hx-include="[name='urls']"
+                {% if not config.notify.urls %}disabled title="Add notification URLs first"{% endif %}>
+            <i data-lucide="send" style="width:14px;height:14px"></i>
             Send Test
         </button>
     </div>
