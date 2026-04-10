@@ -404,29 +404,38 @@ The image uses `python:3.11-slim` and includes a healthcheck (every 30s, 10s sta
 snakecharmer/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml
+│       ├── ci.yml
+│       ├── codeql.yml
+│       ├── docker.yml
+│       ├── release.yml
+│       └── security.yml
 ├── app/
 │   ├── __init__.py
 │   ├── config.py
 │   ├── health.py
+│   ├── http_client.py         # RetryClient base class
 │   ├── medusa.py
+│   ├── models.py              # Config dataclass definitions
 │   ├── notify.py
-│   ├── pending_queue.py      # Manual approval queue storage
+│   ├── pending_queue.py       # Manual approval queue storage
 │   ├── sync.py
 │   ├── trakt.py
 │   └── webui/
 │       ├── __init__.py
 │       ├── config_io.py
+│       ├── oauth.py           # Trakt OAuth device code flow
 │       ├── routes.py
 │       ├── sync_manager.py
+│       ├── test_routes.py     # Test connection routes
 │       ├── static/
+│       │   ├── logo.webp
 │       │   └── style.css
 │       └── templates/
 │           ├── base.html
 │           ├── dashboard.html
 │           ├── dashboard_status.html
 │           ├── library.html
-│           ├── pending.html     # Manual approval queue UI
+│           ├── pending.html   # Manual approval queue UI
 │           ├── config/
 │           │   ├── health.html
 │           │   ├── medusa.html
@@ -442,11 +451,13 @@ snakecharmer/
 │   ├── test_config.py
 │   ├── test_config_io.py
 │   ├── test_health.py
+│   ├── test_http_client.py
 │   ├── test_main.py
 │   ├── test_medusa.py
 │   ├── test_notify.py
 │   ├── test_pending_queue.py  # Pending queue tests
 │   ├── test_sync.py
+│   ├── test_sync_integration.py
 │   ├── test_trakt.py
 │   └── test_webui.py
 ├── .gitignore

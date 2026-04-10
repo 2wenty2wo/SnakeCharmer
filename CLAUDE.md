@@ -61,7 +61,7 @@ Config is in `pyproject.toml`. Rules: `E`, `F`, `W`, `I`, `UP`, `B`, `SIM`. Line
 ## Architecture
 
 ```
-main.py                    CLI entry point, argparse, logging setup (text/JSON); orchestrates via helpers: _run_once, _start_webui, _run_interval_loop, _run_webui_wait_loop
+main.py                    CLI entry point, argparse, logging setup (text/JSON); orchestrates via helpers: _run_once, _start_webui, _run_webui_sync_cycle, _run_interval_loop, _run_webui_wait_loop
 app/models.py              Config dataclass definitions: AppConfig, TraktConfig, MedusaConfig, SyncConfig, HealthConfig, WebUIConfig, NotifyConfig, TraktSource, MedusaAddOptions, PendingShow, ConfigError
 app/config.py              Config loading: YAML parsing → env var overrides → validation; re-exports all models from app/models.py
 app/http_client.py         RetryClient base class: exponential backoff retry on 5xx/connection errors, hook methods (_handle_rate_limit, _on_connection_exhausted)
@@ -77,8 +77,8 @@ app/webui/oauth.py         Trakt OAuth device code flow: oauth_trakt_start, oaut
 app/webui/test_routes.py   Test connection routes: test_trakt, test_medusa, test_notify
 app/webui/config_io.py     Config serialization: AppConfig ↔ dict ↔ YAML file, atomic writes, validation
 app/webui/sync_manager.py  SyncManager: thread-safe manual sync trigger from web UI, background execution
-app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, dashboard_status.html, library.html, config/*.html, sync/history.html)
-app/webui/static/style.css Green Deck design system: custom CSS with design tokens, sidebar layout, DM Sans typography
+app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, dashboard_status.html, library.html, pending.html, config/*.html, sync/history.html)
+app/webui/static/          Green Deck design system: style.css (custom CSS with design tokens, sidebar layout, DM Sans typography), logo.webp
 DESIGN.md                  Green Deck design system spec: colors, typography, components, spacing, elevation rules
 ```
 
@@ -252,6 +252,6 @@ Two log formats are available, configured via `sync.log_format` or `--log-format
 - Token refresh in trakt.py can silently fail and fall through to device auth
 - No removal/unsync support — shows added to Medusa are never removed if removed from a Trakt list
 - Legacy `list`/`lists` config keys are still supported but undocumented in README; env vars `SNAKECHARMER_TRAKT_LIST` and `SNAKECHARMER_TRAKT_LISTS` trigger the legacy path
-- Web UI does not support OAuth token management
+- Web UI supports OAuth device code flow (start + poll) but not full token management (view status, revoke)
 - Web UI does not support editing WebUI settings (intentional — cannot change UI port/enabled from within the UI)
 - Pending queue history is limited to 100 entries; old entries are lost when limit is reached
