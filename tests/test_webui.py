@@ -1113,6 +1113,35 @@ class TestTraktOAuth:
             token = json.load(f)
         assert token["access_token"] == "tok123"
 
+    def test_oauth_poll_success_token_save_failure(self, tmp_path):
+        client, holder, _ = _create_client(tmp_path)
+        holder.get().config_dir = str(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "access_token": "tok123",
+            "refresh_token": "ref456",
+            "created_at": 1000,
+            "expires_in": 100000,
+        }
+        with (
+            patch("app.webui.routes.requests.post", return_value=mock_resp),
+            patch("app.webui.oauth.open", side_effect=OSError("permission denied")),
+        ):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "failed to save token" in response.text.lower()
+        assert "Check file permissions" in response.text
+
     def test_oauth_poll_pending_continues(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
         mock_resp = MagicMock()
