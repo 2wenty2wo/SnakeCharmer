@@ -45,13 +45,17 @@ async def test_trakt(request: Request):
             "Cannot reach Trakt API. Check your network connection.</div>"
         )
     except requests.HTTPError as e:
-        status = e.response.status_code if e.response is not None else "unknown"
+        log.error("Trakt API HTTP error: %s", e)
         return HTMLResponse(
             '<div class="banner error" role="alert">'
-            f"Trakt API error (HTTP {status}). Check your Client ID.</div>"
+            "Trakt API error. Check your Client ID and credentials.</div>"
         )
-    except Exception as e:
-        return HTMLResponse(f'<div class="banner error" role="alert">Trakt test failed: {e}</div>')
+    except Exception:
+        log.exception("Trakt connection test failed")
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            "Trakt test failed. Please try again later.</div>"
+        )
 
 
 @router.post("/test/medusa", response_class=HTMLResponse)
@@ -79,13 +83,16 @@ async def test_medusa(request: Request):
             f"Cannot reach Medusa at {safe_url}. Is it running?</div>"
         )
     except requests.HTTPError as e:
-        status = e.response.status_code if e.response is not None else "unknown"
+        log.error("Medusa API HTTP error: %s", e)
+        return HTMLResponse(
+            '<div class="banner error" role="alert">Medusa API error. Check your API key.</div>'
+        )
+    except Exception:
+        log.exception("Medusa connection test failed")
         return HTMLResponse(
             '<div class="banner error" role="alert">'
-            f"Medusa API error (HTTP {status}). Check your API key.</div>"
+            "Medusa test failed. Please try again later.</div>"
         )
-    except Exception as e:
-        return HTMLResponse(f'<div class="banner error" role="alert">Medusa test failed: {e}</div>')
 
 
 @router.post("/test/notify", response_class=HTMLResponse)
@@ -117,7 +124,9 @@ async def test_notify(request: Request):
             '<div class="banner error" role="alert">'
             "Notification delivery failed. Check your URLs.</div>"
         )
-    except Exception as e:
+    except Exception:
+        log.exception("Notification test failed")
         return HTMLResponse(
-            f'<div class="banner error" role="alert">Notification test failed: {e}</div>'
+            '<div class="banner error" role="alert">'
+            "Notification test failed. Please try again later.</div>"
         )

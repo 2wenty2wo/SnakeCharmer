@@ -340,11 +340,12 @@ async def source_preview(request: Request):
             "config/source_preview.html",
             context={"shows": shows},
         )
-    except Exception as e:
+    except Exception:
+        log.exception("Source preview failed")
         return HTMLResponse(
             '<div class="source-preview">'
-            f'<div class="preview-header" style="color:var(--gd-error)">'
-            f"Preview failed: {e}</div></div>"
+            '<div class="preview-header" style="color:var(--gd-error)">'
+            "Preview failed. Check your Trakt credentials and source settings.</div></div>"
         )
 
 
@@ -363,10 +364,11 @@ async def library(request: Request):
     except requests.ConnectionError:
         error = f"Cannot reach Medusa at {config.medusa.url}. Is it running?"
     except requests.HTTPError as e:
-        status = e.response.status_code if e.response is not None else "unknown"
-        error = f"Medusa API error (HTTP {status}). Check your API key."
-    except Exception as e:
-        error = f"Failed to fetch library: {e}"
+        log.error("Medusa API HTTP error: %s", e)
+        error = "Medusa API error. Check your API key."
+    except Exception:
+        log.exception("Failed to fetch Medusa library")
+        error = "Failed to fetch library. Please try again later."
 
     return _templates(request).TemplateResponse(
         request,
@@ -437,10 +439,11 @@ async def approve_single(request: Request, tvdb_id: int):
             f'<div class="pending-info"><div class="pending-title">{escape(show.title)}</div>'
             f'<div class="pending-meta">Approved and added to Medusa</div></div></div>'
         )
-    except Exception as e:
+    except Exception:
+        log.exception("Failed to add show '%s' (tvdb:%d)", show.title, show.tvdb_id)
         return HTMLResponse(
-            f'<div class="banner error">Failed to add "{escape(show.title)}": '
-            f"{escape(str(e))}</div>"
+            f'<div class="banner error">Failed to add "{escape(show.title)}". '
+            f"Please try again later.</div>"
         )
 
 
@@ -503,11 +506,13 @@ async def bulk_approve(request: Request):
                 medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
                 pending_queue.approve_show(tvdb_id)
                 approved.append(show.title)
-            except Exception as e:
-                failed.append(f"{show.title}: {e}")
-    except Exception as e:
+            except Exception:
+                log.exception("Failed to add show '%s' (tvdb:%d)", show.title, show.tvdb_id)
+                failed.append(show.title)
+    except Exception:
+        log.exception("Failed to connect to Medusa during bulk approve")
         return HTMLResponse(
-            f'<div class="banner error">Failed to connect to Medusa: {escape(str(e))}</div>'
+            '<div class="banner error">Failed to connect to Medusa. Please try again later.</div>'
         )
 
     if failed:
@@ -644,6 +649,9 @@ def _save_and_respond(request: Request, config_dict: dict, holder, section: str)
             error_html += f"<li>{err}</li>"
         error_html += "</ul></div>"
         return HTMLResponse(error_html, status_code=422)
-    except Exception as e:
+    except Exception:
         log.exception("Failed to save config")
-        return HTMLResponse(f'<div class="banner error" role="alert">Failed to save: {e}</div>')
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            "Failed to save configuration. Please try again later.</div>"
+        )
