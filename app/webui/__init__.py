@@ -17,22 +17,22 @@ WEBUI_DIR = Path(__file__).parent
 
 def format_timestamp(value: str | None) -> str:
     """Format an ISO timestamp into a human-readable format.
-    
+
     Input format: 2026-04-10T07:38:11Z or 2026-04-10T07:38:11+00:00
     Output format: Apr 10, 2026, 07:38 AM (local time)
     """
     if not value:
         return "—"
-    
+
     try:
         # Parse the ISO timestamp
         # Handle both Z suffix and +00:00 suffix
         timestamp_str = value.replace("Z", "+00:00")
         dt = datetime.fromisoformat(timestamp_str)
-        
+
         # Convert to local time
         dt_local = dt.astimezone()
-        
+
         # Format: "Apr 10, 2026, 07:38 AM"
         return dt_local.strftime("%b %d, %Y, %I:%M %p")
     except (ValueError, TypeError):
@@ -42,24 +42,24 @@ def format_timestamp(value: str | None) -> str:
 
 def format_timestamp_short(value: str | None) -> str:
     """Format an ISO timestamp into a shorter human-readable format.
-    
+
     Input format: 2026-04-10T07:38:11Z or 2026-04-10T07:38:11+00:00
     Output format: Apr 10, 07:38 AM (local time, current year omitted)
     """
     if not value:
         return "—"
-    
+
     try:
         # Parse the ISO timestamp
         timestamp_str = value.replace("Z", "+00:00")
         dt = datetime.fromisoformat(timestamp_str)
-        
+
         # Convert to local time
         dt_local = dt.astimezone()
-        
+
         # Get current year to decide if we should show the year
         now = datetime.now(timezone.utc)
-        
+
         if dt_local.year == now.year:
             # Same year: "Apr 10, 07:38 AM"
             return dt_local.strftime("%b %d, %I:%M %p")
@@ -95,7 +95,7 @@ def create_app(
     app = FastAPI(title="SnakeCharmer", docs_url=None, redoc_url=None)
 
     templates = Jinja2Templates(directory=str(WEBUI_DIR / "templates"))
-    
+
     # Register custom template filters for datetime formatting
     templates.env.filters["format_timestamp"] = format_timestamp
     templates.env.filters["format_timestamp_short"] = format_timestamp_short
