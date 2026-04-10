@@ -7,6 +7,10 @@
   <a href="https://codecov.io/gh/2wenty2wo/SnakeCharmer"><img src="https://codecov.io/gh/2wenty2wo/SnakeCharmer/branch/main/graph/badge.svg" alt="codecov" /></a>
   <a href="https://github.com/2wenty2wo/SnakeCharmer"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+" /></a>
   <a href="https://github.com/2wenty2wo/SnakeCharmer/blob/main/Dockerfile"><img src="https://img.shields.io/badge/docker-supported-blue?logo=docker&logoColor=white" alt="Docker" /></a>
+  <a href="https://github.com/2wenty2wo/SnakeCharmer/releases/latest"><img src="https://img.shields.io/github/v/release/2wenty2wo/SnakeCharmer?logo=github&label=release" alt="Release" /></a>
+  <a href="https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/codeql.yml"><img src="https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/codeql.yml/badge.svg" alt="CodeQL" /></a>
+  <a href="https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/security.yml"><img src="https://github.com/2wenty2wo/SnakeCharmer/actions/workflows/security.yml/badge.svg" alt="Security" /></a>
+  <a href="https://github.com/2wenty2wo/SnakeCharmer/pkgs/container/snakecharmer"><img src="https://img.shields.io/badge/ghcr.io-available-blue?logo=github" alt="GHCR" /></a>
   <a href="https://github.com/2wenty2wo/SnakeCharmer"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" /></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff" /></a>
   <a href="https://github.com/sponsors/2wenty2wo"><img src="https://img.shields.io/badge/sponsor-♥-ea4aaa?logo=github" alt="Sponsor" /></a>
