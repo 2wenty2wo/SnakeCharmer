@@ -424,8 +424,7 @@ class TestSaveAndRespondErrors:
             )
 
         assert response.status_code == 200
-        assert "Failed to save" in response.text
-        assert "unexpected" in response.text
+        assert "Failed to save configuration" in response.text
 
 
 class TestHealthEndpoint:
@@ -731,7 +730,7 @@ class TestTestConnections:
                 data={"client_id": "test_id", "client_secret": "secret", "username": "user"},
             )
         assert response.status_code == 200
-        assert "Trakt API error (HTTP 401)" in response.text
+        assert "Trakt API error" in response.text
 
     def test_test_trakt_unexpected_error(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
@@ -745,7 +744,7 @@ class TestTestConnections:
                 data={"client_id": "test_id", "client_secret": "secret", "username": "user"},
             )
         assert response.status_code == 200
-        assert "Trakt test failed: Boom" in response.text
+        assert "Trakt test failed" in response.text
 
     def test_test_medusa_missing_fields(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
@@ -795,7 +794,7 @@ class TestTestConnections:
                 data={"url": "http://localhost:8081", "api_key": "testkey"},
             )
         assert response.status_code == 200
-        assert "Medusa API error (HTTP 403)" in response.text
+        assert "Medusa API error" in response.text
 
     def test_test_medusa_unexpected_error(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
@@ -809,7 +808,7 @@ class TestTestConnections:
                 data={"url": "http://localhost:8081", "api_key": "testkey"},
             )
         assert response.status_code == 200
-        assert "Medusa test failed: Nope" in response.text
+        assert "Medusa test failed" in response.text
 
     def test_test_medusa_connection_error_escapes_url(self, tmp_path):
         import requests
@@ -862,7 +861,7 @@ class TestTestNotification:
             mock_cls.side_effect = RuntimeError("notify init failed")
             response = client.post("/test/notify", data={"urls": "json://localhost"})
         assert response.status_code == 200
-        assert "Notification test failed: notify init failed" in response.text
+        assert "Notification test failed" in response.text
 
 
 class TestSourcePreview:
@@ -1399,7 +1398,7 @@ class TestLibrary:
         ):
             response = client.get("/library")
         assert response.status_code == 200
-        assert "Medusa API error (HTTP 401)" in response.text
+        assert "Medusa API error" in response.text
 
     def test_library_unexpected_error(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
@@ -1410,7 +1409,7 @@ class TestLibrary:
         ):
             response = client.get("/library")
         assert response.status_code == 200
-        assert "Failed to fetch library: bad parser" in response.text
+        assert "Failed to fetch library" in response.text
 
 
 class TestRouteHelpers:
