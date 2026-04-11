@@ -100,7 +100,6 @@ class TestParseShow:
         assert show is not None
         assert show.poster_url == "https://image.tmdb.org/t/p/dict.jpg"
 
-
     def test_poster_dict_entry_uses_thumb(self, client):
         data = {
             "title": "Poster Dict Direct",
