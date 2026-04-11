@@ -163,8 +163,16 @@ class TraktClient(RetryClient):
         if isinstance(poster_data, dict) and "thumb" in poster_data:
             poster_url = poster_data["thumb"]
         elif isinstance(poster_data, list) and poster_data:
-            # List of URLs - use first one, ensure https prefix
-            url = poster_data[0]
+            # List of poster entries - handle both string URLs and object entries.
+            first_entry = poster_data[0]
+            if isinstance(first_entry, str):
+                url = first_entry
+            elif isinstance(first_entry, dict):
+                thumb = first_entry.get("thumb")
+                url = thumb if isinstance(thumb, str) else None
+            else:
+                url = None
+
             if url and not url.startswith("http"):
                 url = f"https://{url}"
             poster_url = url
