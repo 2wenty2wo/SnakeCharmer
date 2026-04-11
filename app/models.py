@@ -33,6 +33,7 @@ class PendingShow:
     status: str = "pending"  # "pending", "approved", "rejected"
     quality: str | list[str] | None = None
     required_words: list[str] = field(default_factory=list)
+    poster_url: str | None = None
 
 
 @dataclass

@@ -331,6 +331,13 @@ ul, ol {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
+/* 2-column layout for dashboard cards */
+.config-cards.layout-2col,
+.status-cards.layout-2col,
+.quick-actions-grid.layout-2col {
+    grid-template-columns: repeat(2, 1fr);
+}
+
 .config-cards .card {
     height: auto;
     min-height: unset;
@@ -367,11 +374,19 @@ ul, ol {
 }
 
 /* === Quick Actions Grid === */
+/* Section titles */
+.section-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 40px 0 16px;
+    color: var(--gd-text);
+}
+
 .quick-actions-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 16px;
-    margin-top: 40px;
+    margin-top: 0;
 }
 
 .quick-action-card {
@@ -828,7 +843,12 @@ ul, ol {
 }
 
 /* === Forms === */
+/* Default forms are full-width; use .form-config for narrow config forms */
 form {
+    max-width: none;
+}
+
+.form-config {
     max-width: 800px;
 }
 
@@ -2060,12 +2080,11 @@ button[type="submit"]:disabled {
 }
 
 .pending-row {
-    display: grid;
-    grid-template-columns: 44px 2fr 1fr 1.5fr 140px 100px;
+    display: flex;
     align-items: center;
     gap: 16px;
-    padding: 18px 20px;
-    min-height: 64px;
+    padding: 16px 20px;
+    min-height: 120px;
     border-bottom: 1px solid var(--gd-border);
     transition: all var(--gd-transition-fast);
 }
@@ -2088,6 +2107,55 @@ button[type="submit"]:disabled {
     width: 18px;
     height: 18px;
     cursor: pointer;
+}
+
+/* Poster thumbnail */
+.pending-poster-wrap {
+    flex-shrink: 0;
+}
+
+.pending-poster {
+    width: 60px;
+    height: 90px;
+    border-radius: var(--gd-radius-md);
+    object-fit: cover;
+    background: var(--gd-surface-2);
+    display: block;
+}
+
+.pending-poster-placeholder {
+    width: 60px;
+    height: 90px;
+    border-radius: var(--gd-radius-md);
+    background: linear-gradient(135deg, var(--gd-surface-2) 0%, var(--gd-surface-3) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--gd-primary);
+    border: 1px solid var(--gd-border);
+}
+
+.poster-initial {
+    font-size: 28px;
+    font-weight: 800;
+    font-family: 'DM Sans', sans-serif;
+    line-height: 1;
+}
+
+/* TVDB link */
+.pending-tvdb-link {
+    color: var(--gd-primary);
+    text-decoration: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.pending-tvdb-link:hover {
+    color: var(--gd-primary-hover);
+    text-decoration: underline;
 }
 
 .pending-title {
@@ -2280,8 +2348,15 @@ button[type="submit"]:disabled {
     }
 
     .pending-row {
-        grid-template-columns: 44px 2fr 1fr 100px;
         gap: 12px;
+        padding: 12px 16px;
+        min-height: 100px;
+    }
+    
+    .pending-poster,
+    .pending-poster-placeholder {
+        width: 50px;
+        height: 75px;
     }
     
     .pending-options,
@@ -2301,6 +2376,12 @@ button[type="submit"]:disabled {
     }
 
     .config-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .config-cards.layout-2col,
+    .status-cards.layout-2col,
+    .quick-actions-grid.layout-2col {
         grid-template-columns: 1fr;
     }
 
@@ -2380,13 +2461,16 @@ button[type="submit"]:disabled {
 
     .pending-row {
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
+        flex-wrap: wrap;
         gap: 12px;
         padding: 16px;
         background: var(--gd-surface);
         border-radius: var(--gd-radius-lg);
         border-bottom: none;
         margin-bottom: 12px;
+        min-height: auto;
+        position: relative;
     }
 
     .pending-row:last-child {
@@ -2403,22 +2487,34 @@ button[type="submit"]:disabled {
         right: 16px;
     }
 
-    .pending-row {
-        position: relative;
+    .pending-poster-wrap {
+        order: 0;
+    }
+
+    .pending-info {
+        order: 1;
+        flex: 1;
+        min-width: calc(100% - 80px);
     }
 
     .pending-source {
         display: flex;
+        order: 2;
+        width: 100%;
     }
 
     .pending-options {
         display: flex;
+        order: 3;
+        width: 100%;
     }
 
     .pending-discovered {
         display: block;
         font-size: 12px;
         color: var(--gd-text-secondary);
+        order: 4;
+        width: 100%;
     }
 
     .pending-actions {
@@ -2426,6 +2522,9 @@ button[type="submit"]:disabled {
         gap: 8px;
         padding-top: 8px;
         border-top: 1px solid var(--gd-border);
+        order: 5;
+        width: 100%;
+        justify-content: flex-end;
     }
 
     .bulk-actions-bar {

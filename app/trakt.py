@@ -21,6 +21,7 @@ class TraktShow:
     tvdb_id: int
     imdb_id: str | None = None
     year: int | None = None
+    poster_url: str | None = None
 
 
 class TraktClient(RetryClient):
@@ -106,7 +107,7 @@ class TraktClient(RetryClient):
         fetched.
         """
         page_size = min(limit, 100) if limit is not None else 100
-        params: dict = {"limit": page_size, "page": 1}
+        params: dict = {"limit": page_size, "page": 1, "extended": "full"}
         shows: list[TraktShow] = []
 
         while limit is None or len(shows) < limit:
@@ -153,11 +154,27 @@ class TraktClient(RetryClient):
             log.warning("Skipping '%s' - no TVDB ID available", title)
             return None
 
+        # Extract poster URL from images
+        poster_url = None
+        images = data.get("images", {})
+        poster_data = images.get("poster")
+
+        # Handle both dict format {thumb: url} and list format [url1, url2, ...]
+        if isinstance(poster_data, dict) and "thumb" in poster_data:
+            poster_url = poster_data["thumb"]
+        elif isinstance(poster_data, list) and poster_data:
+            # List of URLs - use first one, ensure https prefix
+            url = poster_data[0]
+            if url and not url.startswith("http"):
+                url = f"https://{url}"
+            poster_url = url
+
         return TraktShow(
             title=title,
             tvdb_id=int(tvdb_id),
             imdb_id=ids.get("imdb"),
             year=data.get("year"),
+            poster_url=poster_url,
         )
 
     # --- OAuth Device Auth ---

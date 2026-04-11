@@ -66,16 +66,43 @@
             <div class="pending-select">
                 <input type="checkbox" name="tvdb_ids" value="{{ show.tvdb_id }}" class="row-checkbox" aria-label="Select {{ show.title }}">
             </div>
+            
+            <!-- Poster -->
+            <div class="pending-poster-wrap">
+                {% if show.poster_url %}
+                <img src="{{ show.poster_url }}" 
+                     alt="{{ show.title }} poster" 
+                     class="pending-poster" 
+                     loading="lazy"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                {% endif %}
+                <div class="pending-poster-placeholder" {% if show.poster_url %}style="display:none;"{% endif %}>
+                    <span class="poster-initial">{{ show.title[0] | upper }}</span>
+                </div>
+            </div>
+            
+            <!-- Show Info -->
             <div class="pending-info">
                 <div class="pending-title">{{ show.title }}</div>
                 <div class="pending-meta">
                     {% if show.year %}{{ show.year }} • {% endif %}
-                    TVDB: <span class="mono-compact-text">{{ show.tvdb_id }}</span>
+                    <a href="https://thetvdb.com/dereferrer/series/{{ show.tvdb_id }}" 
+                       target="_blank" 
+                       rel="noopener noreferrer" 
+                       class="pending-tvdb-link"
+                       title="View on TVDB">
+                        TVDB: <span class="mono-compact-text">{{ show.tvdb_id }}</span>
+                        <i data-lucide="external-link" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-left:2px"></i>
+                    </a>
                 </div>
             </div>
+            
+            <!-- Source -->
             <div class="pending-source">
                 <span class="source-chip" title="Source: {{ show.source_label }}">{{ show.source_label }}</span>
             </div>
+            
+            <!-- Options (Quality, Required Words) -->
             <div class="pending-options">
                 {% if show.quality %}
                 <span class="option-badge" title="Quality preset">{{ show.quality }}</span>
@@ -84,9 +111,13 @@
                 <span class="option-badge" title="Required words">{{ show.required_words | join(", ") }}</span>
                 {% endif %}
             </div>
+            
+            <!-- Discovered Time -->
             <div class="pending-discovered" title="Discovered: {{ show.discovered_at }}">
                 {{ show.discovered_at[:16] }}
             </div>
+            
+            <!-- Actions -->
             <div class="pending-actions">
                 <button type="button" class="btn-icon-approve"
                         hx-post="/pending/approve/{{ show.tvdb_id }}"
@@ -165,6 +196,11 @@
 </script>
 
 <style>
+/* Full-width form override */
+#pending-form {
+    max-width: none;
+}
+
 .visually-hidden {
     position: absolute;
     width: 1px;
