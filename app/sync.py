@@ -148,6 +148,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                 source_label=selected_source_label,
                 quality=selected_source.medusa.quality,
                 required_words=selected_source.medusa.required_words,
+                poster_url=show.poster_url,
             )
 
             if config.sync.dry_run:

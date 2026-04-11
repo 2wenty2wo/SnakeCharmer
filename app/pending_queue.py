@@ -68,6 +68,7 @@ class PendingQueue:
             "status": show.status,
             "quality": show.quality,
             "required_words": show.required_words,
+            "poster_url": show.poster_url,
         }
 
     def _dict_to_show(self, data: dict) -> PendingShow:
@@ -83,6 +84,7 @@ class PendingQueue:
             status=str(data.get("status", "pending")),
             quality=data.get("quality"),
             required_words=list(data.get("required_words", [])),
+            poster_url=data.get("poster_url"),
         )
 
     def _now_iso(self) -> str:

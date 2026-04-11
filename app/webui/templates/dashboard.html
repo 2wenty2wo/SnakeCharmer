@@ -38,7 +38,7 @@
 {% endif %}
 
 <!-- Config Cards -->
-<div class="card-grid config-cards">
+<div class="card-grid config-cards layout-2col">
     <div class="card interactive">
         <div class="card-header">
             <i data-lucide="film" class="card-icon" aria-hidden="true"></i>
@@ -159,7 +159,7 @@
 </div>
 
 <!-- Status Cards -->
-<div id="live-status" class="status-cards"
+<div id="live-status" class="status-cards layout-2col"
      hx-get="/dashboard/status"
      hx-trigger="every 10s"
      hx-swap="innerHTML">
@@ -167,15 +167,11 @@
 </div>
 
 <!-- Quick Actions -->
-<h2 style="font-size: 18px; margin-bottom: 0;">Quick Actions</h2>
-<div class="quick-actions-grid">
+<h2 class="section-title">Quick Actions</h2>
+<div class="quick-actions-grid layout-2col">
     <a href="/pending" class="quick-action-card">
         <i data-lucide="inbox" style="width:20px;height:20px"></i>
         <span class="quick-action-label">Review Pending</span>
-    </a>
-    <a href="/library" class="quick-action-card">
-        <i data-lucide="library" style="width:20px;height:20px"></i>
-        <span class="quick-action-label">View Library</span>
     </a>
     <a href="/sync/history" class="quick-action-card">
         <i data-lucide="history" style="width:20px;height:20px"></i>

@@ -76,6 +76,54 @@ class TestParseShow:
         assert show.title == "élite"
         assert show.tvdb_id == 12345
 
+    def test_poster_list_string_entry_gets_normalized(self, client):
+        data = {
+            "title": "Poster String",
+            "ids": {"tvdb": 101},
+            "images": {"poster": ["image.tmdb.org/t/p/thumb.jpg"]},
+        }
+
+        show = client._parse_show(data)
+
+        assert show is not None
+        assert show.poster_url == "https://image.tmdb.org/t/p/thumb.jpg"
+
+    def test_poster_list_dict_entry_uses_thumb(self, client):
+        data = {
+            "title": "Poster Dict",
+            "ids": {"tvdb": 102},
+            "images": {"poster": [{"thumb": "https://image.tmdb.org/t/p/dict.jpg"}]},
+        }
+
+        show = client._parse_show(data)
+
+        assert show is not None
+        assert show.poster_url == "https://image.tmdb.org/t/p/dict.jpg"
+
+    def test_poster_dict_entry_uses_thumb(self, client):
+        data = {
+            "title": "Poster Dict Direct",
+            "ids": {"tvdb": 104},
+            "images": {"poster": {"thumb": "https://image.tmdb.org/t/p/direct.jpg"}},
+        }
+
+        show = client._parse_show(data)
+
+        assert show is not None
+        assert show.poster_url == "https://image.tmdb.org/t/p/direct.jpg"
+
+    def test_poster_list_non_string_entry_is_ignored(self, client):
+        data = {
+            "title": "Poster Invalid",
+            "ids": {"tvdb": 103},
+            "images": {"poster": [123]},
+        }
+
+        show = client._parse_show(data)
+
+        assert show is not None
+        assert show.poster_url is None
+
 
 class TestGetShows:
     def test_normalize_source_alias(self, client):
