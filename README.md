@@ -208,21 +208,6 @@ trakt:
 
 ---
 
-## Release Automation
-
-Pushing a version tag (for example `v1.2.0`) triggers `.github/workflows/release.yml`, which:
-
-1. Builds Python distribution artifacts (`sdist` and wheel)
-2. Publishes a GitHub Release for that tag
-3. Uploads the built artifacts to both the workflow run and the Release assets
-
-```bash
-git tag v1.2.0
-git push origin v1.2.0
-```
-
----
-
 ## Usage
 
 ### Run manually
@@ -398,82 +383,6 @@ docker run -e SNAKECHARMER_SYNC_DRY_RUN=true \
 ```
 
 The image uses `python:3.11-slim` and includes a healthcheck (every 30s, 10s start period) that queries the health endpoint when `health.enabled` is true, or validates config otherwise.
-
----
-
-## Project Structure
-
-```
-snakecharmer/
-├── .github/
-│   └── workflows/
-│       ├── ci.yml
-│       ├── codeql.yml
-│       ├── docker.yml
-│       ├── release.yml
-│       └── security.yml
-├── app/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── health.py
-│   ├── http_client.py         # RetryClient base class
-│   ├── medusa.py
-│   ├── models.py              # Config dataclass definitions
-│   ├── notify.py
-│   ├── pending_queue.py       # Manual approval queue storage
-│   ├── sync.py
-│   ├── trakt.py
-│   └── webui/
-│       ├── __init__.py
-│       ├── config_io.py
-│       ├── oauth.py           # Trakt OAuth device code flow
-│       ├── routes.py
-│       ├── sync_manager.py
-│       ├── test_routes.py     # Test connection routes
-│       ├── static/
-│       │   ├── logo.webp
-│       │   └── style.css
-│       └── templates/
-│           ├── base.html
-│           ├── dashboard.html
-│           ├── dashboard_status.html
-│           ├── library.html
-│           ├── pending.html   # Manual approval queue UI
-│           ├── config/
-│           │   ├── health.html
-│           │   ├── medusa.html
-│           │   ├── notify.html
-│           │   ├── source_preview.html
-│           │   ├── source_row.html
-│           │   ├── sync.html
-│           │   └── trakt.html
-│           └── sync/
-│               └── history.html
-├── tests/
-│   ├── __init__.py
-│   ├── test_config.py
-│   ├── test_config_io.py
-│   ├── test_health.py
-│   ├── test_http_client.py
-│   ├── test_main.py
-│   ├── test_medusa.py
-│   ├── test_notify.py
-│   ├── test_pending_queue.py  # Pending queue tests
-│   ├── test_sync.py
-│   ├── test_sync_integration.py
-│   ├── test_trakt.py
-│   └── test_webui.py
-├── .gitignore
-├── CLAUDE.md
-├── DESIGN.md
-├── Dockerfile
-├── config.yaml.example
-├── logo.webp
-├── main.py
-├── pyproject.toml
-├── README.md
-└── requirements.txt
-```
 
 ---
 

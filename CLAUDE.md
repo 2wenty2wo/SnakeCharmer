@@ -58,6 +58,19 @@ ruff check --fix .    # auto-fix
 
 Config is in `pyproject.toml`. Rules: `E`, `F`, `W`, `I`, `UP`, `B`, `SIM`. Line length: 100. Target: Python 3.10. CI (`.github/workflows/ci.yml`) runs both lint and format checks. Tests run on Python 3.10, 3.11, and 3.12.
 
+## Release Automation
+
+Pushing a version tag (e.g. `v1.2.0`) triggers `.github/workflows/release.yml`, which:
+
+1. Builds Python distribution artifacts (`sdist` and wheel)
+2. Publishes a GitHub Release for that tag
+3. Uploads the built artifacts to both the workflow run and the Release assets
+
+```bash
+git tag v1.2.0
+git push origin v1.2.0
+```
+
 ## Architecture
 
 ```
