@@ -100,6 +100,19 @@ class TestParseShow:
         assert show is not None
         assert show.poster_url == "https://image.tmdb.org/t/p/dict.jpg"
 
+
+    def test_poster_dict_entry_uses_thumb(self, client):
+        data = {
+            "title": "Poster Dict Direct",
+            "ids": {"tvdb": 104},
+            "images": {"poster": {"thumb": "https://image.tmdb.org/t/p/direct.jpg"}},
+        }
+
+        show = client._parse_show(data)
+
+        assert show is not None
+        assert show.poster_url == "https://image.tmdb.org/t/p/direct.jpg"
+
     def test_poster_list_non_string_entry_is_ignored(self, client):
         data = {
             "title": "Poster Invalid",
