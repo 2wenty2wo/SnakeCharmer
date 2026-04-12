@@ -345,7 +345,6 @@ When enabled, SnakeCharmer runs a browser-based config management interface buil
 - **Source Preview** (`POST /config/trakt/sources/preview`): fetch and display shows from a Trakt source inline
 - **Test Connection** (`POST /test/trakt`, `POST /test/medusa`): validate API credentials without saving
 - **Test Notification** (`POST /test/notify`): send a test notification to configured Apprise URLs
-- **Library** (`/library`): browse all shows in the Medusa library with client-side filtering
 - **Atomic saves**: config is written to a temp file then atomically replaced to prevent corruption
 - **Validation**: config is validated before saving; errors are shown inline
 - **Live reload**: the sync loop picks up config changes on the next cycle
