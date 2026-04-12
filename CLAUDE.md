@@ -81,6 +81,7 @@ app/http_client.py         RetryClient base class: exponential backoff retry on 
 app/trakt.py               TraktClient(RetryClient): public list fetching, OAuth device flow, token persistence, 429 rate-limit handling
 app/medusa.py              MedusaClient(RetryClient): library listing (get_existing_tvdb_ids, get_series_list), show addition, quality resolution via Medusa v2 API
 app/sync.py                run_sync(): orchestrates fetch → diff → add cycle, returns SyncResult metrics
+app/sync_history.py        SyncHistoryDB: SQLite-backed persistent sync history (sync_runs + sync_items tables)
 app/health.py              HTTP health endpoint: SyncStatus tracking, /health JSON responses (200 ok / 503 degraded)
 app/notify.py              Apprise-based notifications: sends alerts on sync success/failure to 100+ services
 app/pending_queue.py       PendingQueue: thread-safe JSON file storage for manual approval queue
@@ -155,7 +156,7 @@ Optional browser-based config management built with FastAPI + Jinja2 + HTMX, sty
 - Runs on `webui.port` (default 8089) in a daemon thread using uvicorn
 - **Dashboard** (`/`): shows current config summary and sync status in a card grid, auto-refreshes status every 10s via HTMX polling
 - **Sync Now** (`POST /sync/run`): triggers a manual sync from the dashboard or history page via `SyncManager`
-- **Sync History** (`/sync/history`): table of last 20 sync results with status, counts, and duration
+- **Sync History** (`/sync/history`): SQLite-backed persistent history with pagination (50 runs/page) and per-show action logs (`added`, `queued`, `skipped`, `failed`) including reasons
 - **Pending** (`/pending`): manual approval queue for shows from sources with `auto_approve: false`; approve/reject individual shows or in bulk
 - **Config sections** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`, `/config/notify`): edit and save each config section via HTMX form submissions
 - **Source management**: add/remove Trakt sources dynamically with per-source Medusa quality, required_words, and auto_approve settings
@@ -194,7 +195,7 @@ Core: `requests`, `pyyaml`, `apprise`. Web UI: `fastapi`, `uvicorn[standard]`, `
 - `TraktSource` (`app/models.py`): describes one source to fetch — `type`, `owner`, `list_slug`, `auth`, `auto_approve`, `medusa` (add options)
 - `MedusaAddOptions` (`app/models.py`): per-source Medusa overrides — `quality` (preset name, individual value, or list), `required_words` (list of strings)
 - `PendingShow` (`app/models.py`): a show awaiting manual approval — `tvdb_id`, `title`, `year`, `imdb_id`, `source_type`, `source_label`, `discovered_at`, `status`, `quality`, `required_words`
-- `SyncResult` (`app/sync.py`): sync cycle metrics — `total_fetched`, `unique_shows`, `already_in_medusa`, `added`, `queued`, `skipped`, `failed`, `duration_seconds`, `per_source`, `success`
+- `SyncResult` (`app/sync.py`): sync cycle metrics — `total_fetched`, `unique_shows`, `already_in_medusa`, `added`, `queued`, `skipped`, `failed`, `duration_seconds`, `per_source`, `success`, `show_actions`
 - `PendingQueue` (`app/pending_queue.py`): thread-safe JSON-backed queue for manual approval — `add_show()`, `approve_show()`, `reject_show()`, `bulk_approve()`, `bulk_reject()`, `get_pending()`, `is_pending()`, `get_count()`, `get_history()`
 - `SyncStatus` (`app/health.py`): thread-safe container for last sync result and application uptime
 - `ConfigHolder` (`app/webui/__init__.py`): thread-safe mutable holder for the active `AppConfig`
