@@ -95,6 +95,18 @@ class TestSyncStatus:
         assert not errors
         assert all(s in ("ok", "degraded", "unknown") for s in statuses)
 
+    def test_update_with_db_record_failure_keeps_in_memory_history(self):
+        class BrokenDB:
+            def record(self, result, timestamp):
+                raise RuntimeError("db write failed")
+
+        sync_status = SyncStatus(_db=BrokenDB())
+        sync_status.update(SyncResult(added=4, success=True))
+
+        history = sync_status.get_history()
+        assert len(history) == 1
+        assert history[0]["added"] == 4
+
 
 class TestHealthServer:
     def test_health_endpoint_returns_json(self, sync_status):
@@ -352,3 +364,35 @@ class TestSyncStatusWithDB:
         history = db_sync_status.get_history()
         assert len(history[0]["show_actions"]) == 1
         assert history[0]["show_actions"][0]["title"] == "Test Show"
+
+    def test_get_history_falls_back_to_memory_if_db_read_fails(self):
+        class BrokenReadDB:
+            def get_history(self, limit, offset):
+                raise RuntimeError("db read failed")
+
+            def get_total_runs(self):
+                return 99
+
+        sync_status = SyncStatus(_db=BrokenReadDB())
+        sync_status.update(SyncResult(added=7, success=True))
+
+        history = sync_status.get_history(limit=10, offset=0)
+        assert len(history) == 1
+        assert history[0]["added"] == 7
+
+    def test_get_total_runs_falls_back_to_memory_if_db_count_fails(self):
+        class BrokenCountDB:
+            def record(self, result, timestamp):
+                return None
+
+            def get_history(self, limit, offset):
+                return []
+
+            def get_total_runs(self):
+                raise RuntimeError("db count failed")
+
+        sync_status = SyncStatus(_db=BrokenCountDB())
+        sync_status.update(SyncResult(added=1, success=True))
+        sync_status.update(SyncResult(added=2, success=True))
+
+        assert sync_status.get_total_runs() == 2

@@ -88,6 +88,23 @@ def _run_once(config, sync_status, log) -> None:
         log.warning("Notification error: %s", exc)
 
 
+def _build_sync_status(config, log):
+    from app.health import SyncStatus
+    from app.sync_history import SyncHistoryDB
+
+    db_path = os.path.join(config.config_dir, "sync_history.db")
+    try:
+        history_db = SyncHistoryDB(db_path)
+    except Exception as exc:
+        log.warning(
+            "Failed to initialize sync history database at %s, using in-memory history: %s",
+            db_path,
+            exc,
+        )
+        return SyncStatus()
+    return SyncStatus(_db=history_db)
+
+
 def _start_webui(config, args, sync_status, log):
     """Initialize and start the web UI in a daemon thread.
 
@@ -100,11 +117,7 @@ def _start_webui(config, args, sync_status, log):
     from app.webui.sync_manager import SyncManager
 
     if sync_status is None:
-        from app.health import SyncStatus
-        from app.sync_history import SyncHistoryDB
-
-        history_db = SyncHistoryDB(os.path.join(config.config_dir, "sync_history.db"))
-        sync_status = SyncStatus(_db=history_db)
+        sync_status = _build_sync_status(config, log)
 
     pending_queue = PendingQueue(config_dir=config.config_dir)
     config_holder = ConfigHolder(config=config, config_path=args.config)
@@ -224,11 +237,9 @@ def main() -> None:
     # Start health server if enabled
     sync_status = None
     if config.health.enabled:
-        from app.health import SyncStatus, start_health_server
-        from app.sync_history import SyncHistoryDB
+        from app.health import start_health_server
 
-        history_db = SyncHistoryDB(os.path.join(config.config_dir, "sync_history.db"))
-        sync_status = SyncStatus(_db=history_db)
+        sync_status = _build_sync_status(config, log)
 
     webui_enabled = args.webui or config.webui.enabled
 

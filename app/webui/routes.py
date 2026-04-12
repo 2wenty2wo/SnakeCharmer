@@ -290,13 +290,11 @@ async def sync_history(request: Request):
         page = 1
     page = max(1, page)
     per_page = 50
-    offset = (page - 1) * per_page
-    if sync_status:
-        history = sync_status.get_history(limit=per_page, offset=offset)
-        total = sync_status.get_total_runs()
-    else:
-        history, total = [], 0
+    total = sync_status.get_total_runs() if sync_status else 0
     total_pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    offset = (page - 1) * per_page
+    history = sync_status.get_history(limit=per_page, offset=offset) if sync_status else []
     return _templates(request).TemplateResponse(
         request,
         "sync/history.html",
