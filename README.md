@@ -369,16 +369,49 @@ See the [Apprise wiki](https://github.com/caronc/apprise/wiki) for the full list
 
 ## Docker
 
-``` bash
+SnakeCharmer uses a single `/config` volume for both configuration and persistent data. Mount a host directory containing your `config.yaml` and all runtime state (OAuth tokens, sync history, pending queue) will be written alongside it.
+
+```bash
+mkdir -p ./snakecharmer-data
+cp config.yaml.example ./snakecharmer-data/config.yaml
+# edit ./snakecharmer-data/config.yaml with your credentials
+
 docker build -t snakecharmer .
-docker run -v $(pwd)/config.yaml:/app/config.yaml snakecharmer
+docker run -v $(pwd)/snakecharmer-data:/config snakecharmer
 ```
 
-Environment variable overrides work with Docker:
+### Persistent data
+
+These files live in `/config` inside the container (i.e. the mounted host directory):
+
+| File | Purpose |
+|---|---|
+| `config.yaml` | your configuration |
+| `sync_history.db` | SQLite log of every sync run and per-show action |
+| `trakt_token.json` | Trakt OAuth access + refresh tokens |
+| `pending_queue.json` | manual-approval queue (for sources with `auto_approve: false`) |
+
+Losing the volume means re-authenticating with Trakt, an empty sync history page, and an empty pending queue — back up this directory the same way you back up any other appdata.
+
+### Environment variable overrides
 
 ```bash
 docker run -e SNAKECHARMER_SYNC_DRY_RUN=true \
-  -v $(pwd)/config.yaml:/app/config.yaml snakecharmer
+  -v $(pwd)/snakecharmer-data:/config snakecharmer
+```
+
+### docker-compose
+
+```yaml
+services:
+  snakecharmer:
+    build: .
+    volumes:
+      - ./snakecharmer-data:/config
+    ports:
+      - "8089:8089"   # web UI (if enabled)
+      - "8095:8095"   # health endpoint (if enabled)
+    restart: unless-stopped
 ```
 
 The image uses `python:3.11-slim` and includes a healthcheck (every 30s, 10s start period) that queries the health endpoint when `health.enabled` is true, or validates config otherwise.

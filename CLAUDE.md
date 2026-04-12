@@ -23,11 +23,22 @@ python main.py --webui --webui-port 9000  # web UI on custom port
 ## Docker
 
 ```bash
+mkdir -p ./snakecharmer-data
+cp config.yaml.example ./snakecharmer-data/config.yaml
 docker build -t snakecharmer .
-docker run -v $(pwd)/config.yaml:/app/config.yaml snakecharmer
+docker run -v $(pwd)/snakecharmer-data:/config snakecharmer
 ```
 
-The image uses `python:3.11-slim`. Config is mounted at `/app/config.yaml`. Environment variable overrides work with `docker run -e SNAKECHARMER_SYNC_DRY_RUN=true ...`.
+The image uses `python:3.11-slim`. The container exposes a single `/config` volume that holds both configuration and runtime state. Mount one host directory there and all four persistent files are kept together:
+
+- `config.yaml` — user configuration (loaded by `main.py --config /config/config.yaml`, the default `CMD`)
+- `sync_history.db` — SQLite created by `SyncHistoryDB` at `os.path.join(config.config_dir, "sync_history.db")` (`main.py:95`)
+- `trakt_token.json` — OAuth tokens written by `TraktClient._save_token()` to `config_dir` (`app/trakt.py:15,38`)
+- `pending_queue.json` — manual-approval queue written by `PendingQueue._save()` to `config_dir` (`app/pending_queue.py:14,22`)
+
+All three data files are path-derived from `config.config_dir` (`app/config.py:145`), which is the parent directory of the resolved `--config` path. Mounting `/config` is therefore sufficient to persist everything — no separate data volume or config keys needed.
+
+Environment variable overrides work with `docker run -e SNAKECHARMER_SYNC_DRY_RUN=true ...`.
 
 The Docker image includes a healthcheck that queries the health endpoint when `health.enabled` is true in config, or validates config otherwise. Healthcheck runs every 30s with a 10s start period.
 
