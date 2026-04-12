@@ -162,7 +162,6 @@ Optional browser-based config management built with FastAPI + Jinja2 + HTMX, sty
 - **Source Preview** (`POST /config/trakt/sources/preview`): fetches and displays shows from a Trakt source inline
 - **Test Connection** (`POST /test/trakt`, `POST /test/medusa`): validates API credentials without saving
 - **Test Notification** (`POST /test/notify`): sends a test notification to configured Apprise URLs
-- **Library** (`/library`): browse all shows in the Medusa library with client-side filtering
 - **Atomic saves**: config is written to a temp file then `os.replace()`'d to prevent corruption
 - **Validation**: config is validated before saving; validation errors are shown as HTMX banners
 - **Live reload**: `ConfigHolder` (thread-safe dataclass with `threading.Lock`) allows the sync loop to pick up config changes on the next cycle
