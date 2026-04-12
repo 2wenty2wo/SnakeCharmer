@@ -283,7 +283,12 @@ async def sync_state(request: Request):
 @router.get("/sync/history", response_class=HTMLResponse)
 async def sync_history(request: Request):
     sync_status = _sync_status(request)
-    page = max(1, int(request.query_params.get("page", 1)))
+    page_param = request.query_params.get("page", "1")
+    try:
+        page = int(page_param)
+    except (TypeError, ValueError):
+        page = 1
+    page = max(1, page)
     per_page = 50
     offset = (page - 1) * per_page
     if sync_status:

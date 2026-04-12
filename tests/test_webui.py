@@ -680,6 +680,18 @@ class TestSyncHistory:
         assert "History" in response.text
         assert "5" in response.text  # added count
 
+    def test_sync_history_invalid_page_defaults_to_page_1(self, tmp_path):
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+        response = client.get("/sync/history?page=abc")
+        assert response.status_code == 200
+        assert "History" in response.text
+
+    def test_sync_history_page_below_one_defaults_to_page_1(self, tmp_path):
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+        response = client.get("/sync/history?page=0")
+        assert response.status_code == 200
+        assert "History" in response.text
+
 
 class TestTestConnections:
     def test_test_trakt_missing_client_id(self, tmp_path):
