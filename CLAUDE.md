@@ -213,7 +213,7 @@ Core: `requests`, `pyyaml`, `apprise`. Web UI: `fastapi`, `uvicorn[standard]`, `
 - `NotifyConfig` (`app/models.py`): notification settings — `enabled`, `urls` (list of Apprise URLs), `on_success`, `on_failure`, `only_if_added`
 - `ConfigError` (`app/models.py`): exception with `errors: list[str]` for validation failures
 - Config hierarchy (`app/models.py`): `AppConfig` → `TraktConfig` / `MedusaConfig` / `SyncConfig` / `HealthConfig` / `WebUIConfig` / `NotifyConfig`
-- All models are re-exported from `app/config.py` for backward compatibility — existing `from app.config import AppConfig` imports continue to work
+- All models are re-exported from `app/config.py` as the public import path — `from app.config import AppConfig` is the canonical style across the codebase
 
 ### Quality resolution (`app/medusa.py`)
 
@@ -232,8 +232,6 @@ Only the config keys listed below can be overridden via environment variables wi
 | `SNAKECHARMER_TRAKT_CLIENT_ID` | `trakt.client_id` |
 | `SNAKECHARMER_TRAKT_CLIENT_SECRET` | `trakt.client_secret` |
 | `SNAKECHARMER_TRAKT_USERNAME` | `trakt.username` |
-| `SNAKECHARMER_TRAKT_LIST` | `trakt.list` (legacy single-list) |
-| `SNAKECHARMER_TRAKT_LISTS` | `trakt.lists` (legacy comma-separated) |
 | `SNAKECHARMER_TRAKT_LIMIT` | `trakt.limit` |
 | `SNAKECHARMER_MEDUSA_URL` | `medusa.url` |
 | `SNAKECHARMER_MEDUSA_API_KEY` | `medusa.api_key` |
@@ -275,7 +273,6 @@ Two log formats are available, configured via `sync.log_format` or `--log-format
 
 - Token refresh in trakt.py can silently fail and fall through to device auth
 - No removal/unsync support — shows added to Medusa are never removed if removed from a Trakt list
-- Legacy `list`/`lists` config keys are still supported but undocumented in README; env vars `SNAKECHARMER_TRAKT_LIST` and `SNAKECHARMER_TRAKT_LISTS` trigger the legacy path
 - Web UI supports OAuth device code flow (start + poll) but not full token management (view status, revoke)
 - Web UI does not support editing WebUI settings (intentional — cannot change UI port/enabled from within the UI)
 - Pending queue history is limited to 100 entries; old entries are lost when limit is reached

@@ -13,7 +13,7 @@ def trakt_config():
         client_id="test-client-id",
         client_secret="test-secret",
         username="testuser",
-        lists=["trending"],
+        sources=[TraktSource(type="trending")],
         limit=10,
     )
 

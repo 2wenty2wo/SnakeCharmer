@@ -4,7 +4,7 @@ import sys
 
 import yaml
 
-from app.models import (  # noqa: F401 — re-exported for backward compatibility
+from app.models import (  # noqa: F401 — re-exported as the public config API
     PUBLIC_LISTS,
     SOURCE_TYPES,
     AppConfig,
@@ -26,8 +26,6 @@ ENV_MAP = {
     "SNAKECHARMER_TRAKT_CLIENT_ID": ("trakt", "client_id"),
     "SNAKECHARMER_TRAKT_CLIENT_SECRET": ("trakt", "client_secret"),
     "SNAKECHARMER_TRAKT_USERNAME": ("trakt", "username"),
-    "SNAKECHARMER_TRAKT_LIST": ("trakt", "list"),
-    "SNAKECHARMER_TRAKT_LISTS": ("trakt", "lists"),
     "SNAKECHARMER_TRAKT_LIMIT": ("trakt", "limit"),
     "SNAKECHARMER_MEDUSA_URL": ("medusa", "url"),
     "SNAKECHARMER_MEDUSA_API_KEY": ("medusa", "api_key"),
@@ -80,27 +78,11 @@ def load_config(path: str, skip_validate: bool = False) -> AppConfig:
             target[key] = value
 
     # Build config objects
-    trakt_lists = _normalize_trakt_lists(trakt_raw)
-    username = str(trakt_raw.get("username", ""))
-    has_sources_key = "sources" in trakt_raw
-    env_list_override = any(
-        os.environ.get(env_var) is not None
-        for env_var in ("SNAKECHARMER_TRAKT_LIST", "SNAKECHARMER_TRAKT_LISTS")
-    )
-
-    if env_list_override:
-        trakt_sources = _legacy_lists_to_sources(trakt_lists, username)
-    elif has_sources_key:
-        trakt_sources = _normalize_trakt_sources(trakt_raw)
-    else:
-        trakt_sources = _legacy_lists_to_sources(trakt_lists, username)
-
     trakt = TraktConfig(
         client_id=str(trakt_raw.get("client_id", "")),
         client_secret=str(trakt_raw.get("client_secret", "")),
         username=str(trakt_raw.get("username", "")),
-        lists=trakt_lists,
-        sources=trakt_sources,
+        sources=_normalize_trakt_sources(trakt_raw),
         limit=int(trakt_raw.get("limit", 50)),
     )
 
@@ -169,35 +151,6 @@ def _normalize_notify_urls(notify_raw: dict) -> list[str]:
     if isinstance(raw, str):
         return [u.strip() for u in raw.split(",") if u.strip()]
     return []
-
-
-def _normalize_trakt_lists(trakt_raw: dict) -> list[str]:
-    raw_lists = trakt_raw.get("lists", trakt_raw.get("list", "watchlist"))
-    if isinstance(raw_lists, list):
-        parsed_lists = [str(item).strip() for item in raw_lists if str(item).strip()]
-    elif isinstance(raw_lists, str):
-        parsed_lists = [item.strip() for item in raw_lists.split(",") if item.strip()]
-    else:
-        parsed_lists = [str(raw_lists).strip()]
-
-    return parsed_lists or ["watchlist"]
-
-
-def _legacy_lists_to_sources(lists: list[str], username: str) -> list[TraktSource]:
-    sources: list[TraktSource] = []
-    for list_name in lists:
-        if list_name in SOURCE_TYPES:
-            sources.append(TraktSource(type=list_name))
-            continue
-        sources.append(
-            TraktSource(
-                type="user_list",
-                owner=username,
-                list_slug=list_name,
-                auth=True,
-            )
-        )
-    return sources
 
 
 def _normalize_trakt_sources(trakt_raw: dict) -> list[TraktSource]:

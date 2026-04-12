@@ -115,9 +115,7 @@ def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfi
         SyncConfig,
         TraktConfig,
         WebUIConfig,
-        _legacy_lists_to_sources,
         _normalize_notify_urls,
-        _normalize_trakt_lists,
         _normalize_trakt_sources,
         _to_bool,
         _validate,
@@ -130,21 +128,11 @@ def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfi
     webui_raw = raw.get("webui", {})
     notify_raw = raw.get("notify", {})
 
-    trakt_lists = _normalize_trakt_lists(trakt_raw)
-    username = str(trakt_raw.get("username", ""))
-    has_sources_key = "sources" in trakt_raw
-
-    if has_sources_key:
-        trakt_sources = _normalize_trakt_sources(trakt_raw)
-    else:
-        trakt_sources = _legacy_lists_to_sources(trakt_lists, username)
-
     trakt = TraktConfig(
         client_id=str(trakt_raw.get("client_id", "")),
         client_secret=str(trakt_raw.get("client_secret", "")),
         username=str(trakt_raw.get("username", "")),
-        lists=trakt_lists,
-        sources=trakt_sources,
+        sources=_normalize_trakt_sources(trakt_raw),
         limit=int(trakt_raw.get("limit", 50)),
     )
 

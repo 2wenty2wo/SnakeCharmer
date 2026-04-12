@@ -231,7 +231,9 @@ def main() -> None:
         config.sync.dry_run = True
 
     log.info(
-        "SnakeCharmer starting (list: %s, dry_run: %s)", config.trakt.list, config.sync.dry_run
+        "SnakeCharmer starting (sources: %d, dry_run: %s)",
+        len(config.trakt.sources),
+        config.sync.dry_run,
     )
 
     # Start health server if enabled
