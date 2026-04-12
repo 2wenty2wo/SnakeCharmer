@@ -7,11 +7,18 @@ import pytest
 
 from app.health import SyncStatus, start_health_server
 from app.sync import SyncResult
+from app.sync_history import SyncHistoryDB
 
 
 @pytest.fixture
 def sync_status():
     return SyncStatus()
+
+
+@pytest.fixture
+def db_sync_status(tmp_path):
+    db = SyncHistoryDB(str(tmp_path / "test_history.db"))
+    return SyncStatus(_db=db)
 
 
 class TestSyncStatus:
@@ -284,3 +291,64 @@ class TestHealthSnapshotSchema:
             t.join()
 
         assert not errors
+
+
+class TestSyncStatusWithDB:
+    """Tests for SyncStatus backed by SyncHistoryDB."""
+
+    def test_history_persisted(self, db_sync_status):
+        db_sync_status.update(SyncResult(added=3, success=True))
+        history = db_sync_status.get_history()
+        assert len(history) == 1
+        assert history[0]["added"] == 3
+
+    def test_history_no_cap(self, db_sync_status):
+        """DB-backed history is not limited to 20 entries."""
+        for i in range(25):
+            db_sync_status.update(SyncResult(added=i, success=True))
+        assert db_sync_status.get_total_runs() == 25
+        history = db_sync_status.get_history(limit=30)
+        assert len(history) == 25
+
+    def test_pagination(self, db_sync_status):
+        for i in range(10):
+            db_sync_status.update(SyncResult(added=i, success=True))
+        page1 = db_sync_status.get_history(limit=3, offset=0)
+        page2 = db_sync_status.get_history(limit=3, offset=3)
+        assert len(page1) == 3
+        assert len(page2) == 3
+        assert page1[0]["added"] == 9
+        assert page2[0]["added"] == 6
+
+    def test_get_total_runs(self, db_sync_status):
+        assert db_sync_status.get_total_runs() == 0
+        db_sync_status.update(SyncResult(added=1, success=True))
+        assert db_sync_status.get_total_runs() == 1
+
+    def test_snapshot_still_works(self, db_sync_status):
+        result = SyncResult(added=5, failed=0, success=True, duration_seconds=2.5)
+        db_sync_status.update(result)
+        snap = db_sync_status.snapshot()
+        assert snap["status"] == "ok"
+        assert snap["last_sync"]["added"] == 5
+
+    def test_show_actions_persisted(self, db_sync_status):
+        result = SyncResult(
+            added=1,
+            success=True,
+            show_actions=[
+                {
+                    "tvdb_id": 100,
+                    "title": "Test Show",
+                    "year": 2024,
+                    "imdb_id": "tt100",
+                    "action": "added",
+                    "source_label": "trending",
+                    "reason": None,
+                },
+            ],
+        )
+        db_sync_status.update(result)
+        history = db_sync_status.get_history()
+        assert len(history[0]["show_actions"]) == 1
+        assert history[0]["show_actions"][0]["title"] == "Test Show"

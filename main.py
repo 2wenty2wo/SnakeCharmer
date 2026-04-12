@@ -101,8 +101,10 @@ def _start_webui(config, args, sync_status, log):
 
     if sync_status is None:
         from app.health import SyncStatus
+        from app.sync_history import SyncHistoryDB
 
-        sync_status = SyncStatus()
+        history_db = SyncHistoryDB(os.path.join(config.config_dir, "sync_history.db"))
+        sync_status = SyncStatus(_db=history_db)
 
     pending_queue = PendingQueue(config_dir=config.config_dir)
     config_holder = ConfigHolder(config=config, config_path=args.config)
@@ -223,8 +225,10 @@ def main() -> None:
     sync_status = None
     if config.health.enabled:
         from app.health import SyncStatus, start_health_server
+        from app.sync_history import SyncHistoryDB
 
-        sync_status = SyncStatus()
+        history_db = SyncHistoryDB(os.path.join(config.config_dir, "sync_history.db"))
+        sync_status = SyncStatus(_db=history_db)
 
     webui_enabled = args.webui or config.webui.enabled
 

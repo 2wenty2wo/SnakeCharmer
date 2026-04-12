@@ -20,12 +20,18 @@ class SyncStatus:
     _start_time: float = field(default_factory=time.monotonic)
     _history: list = field(default_factory=list, repr=False)
     _max_history: int = 20
+    _db: object = field(default=None, repr=False)
 
     def update(self, result) -> None:
         with self._lock:
             self._last_sync_time = time.time()
             self._last_result = result
             if result is not None:
+                if self._db is not None:
+                    try:
+                        self._db.record(result, self._last_sync_time)
+                    except Exception:
+                        log.exception("Failed to persist sync result to database")
                 entry = self._result_to_entry(result, self._last_sync_time)
                 self._history.insert(0, entry)
                 self._history = self._history[: self._max_history]
@@ -58,10 +64,31 @@ class SyncStatus:
             }
             return data
 
-    def get_history(self) -> list[dict]:
-        """Return a copy of the sync history (newest first)."""
+    def get_history(self, limit: int = 50, offset: int = 0) -> list[dict]:
+        """Return sync history (newest first).
+
+        When a database is configured, reads from SQLite with pagination.
+        Otherwise falls back to the in-memory list.
+        """
         with self._lock:
-            return list(self._history)
+            if self._db is not None:
+                try:
+                    return self._db.get_history(limit=limit, offset=offset)
+                except Exception:
+                    log.exception("Failed to read sync history from database")
+                    return list(self._history)
+            return list(self._history[offset : offset + limit])
+
+    def get_total_runs(self) -> int:
+        """Return total number of recorded sync runs."""
+        with self._lock:
+            if self._db is not None:
+                try:
+                    return self._db.get_total_runs()
+                except Exception:
+                    log.exception("Failed to read run count from database")
+                    return len(self._history)
+            return len(self._history)
 
     @staticmethod
     def _result_to_entry(result, sync_time: float) -> dict:
@@ -77,6 +104,11 @@ class SyncStatus:
             "success": result.success,
             "per_source": dict(result.per_source),
             "added_shows": list(result.added_shows) if result.added_shows else [],
+            "show_actions": (
+                list(result.show_actions)
+                if hasattr(result, "show_actions") and result.show_actions
+                else []
+            ),
         }
 
 
