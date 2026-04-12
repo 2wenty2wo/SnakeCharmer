@@ -56,36 +56,14 @@ class TraktSource:
             return f"user_list:{self.owner}/{self.list_slug}{suffix}"
         return self.type
 
-    @property
-    def legacy_name(self) -> str:
-        if self.type == "user_list":
-            return self.list_slug
-        return self.type
-
 
 @dataclass
 class TraktConfig:
     client_id: str = ""
     client_secret: str = ""
     username: str = ""
-    lists: list[str] = field(default_factory=lambda: ["watchlist"])
     sources: list[TraktSource] = field(default_factory=lambda: [TraktSource(type="watchlist")])
     limit: int = 50
-
-    @property
-    def list(self) -> str:
-        """Backward-compatible alias for legacy single-list config access."""
-        if self.sources:
-            return self.sources[0].legacy_name
-        return self.lists[0] if self.lists else "watchlist"
-
-    @list.setter
-    def list(self, value: str) -> None:
-        from app.config import _legacy_lists_to_sources
-
-        normalized = str(value).strip()
-        self.lists = [normalized] if normalized else ["watchlist"]
-        self.sources = _legacy_lists_to_sources(self.lists, self.username)
 
 
 @dataclass

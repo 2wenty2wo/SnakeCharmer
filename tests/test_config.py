@@ -7,7 +7,6 @@ from app.config import (
     MedusaConfig,
     TraktConfig,
     TraktSource,
-    _normalize_trakt_lists,
     _normalize_trakt_sources,
     _to_bool,
     get_config_errors,
@@ -27,7 +26,10 @@ def _write_config(tmp_path, data):
 def minimal_config():
     """Minimal valid config for a public list."""
     return {
-        "trakt": {"client_id": "test-client-id", "list": "trending"},
+        "trakt": {
+            "client_id": "test-client-id",
+            "sources": [{"type": "trending"}],
+        },
         "medusa": {"url": "http://localhost:8081", "api_key": "test-api-key"},
     }
 
@@ -38,7 +40,7 @@ class TestLoadConfig:
         config = load_config(path)
 
         assert config.trakt.client_id == "test-client-id"
-        assert config.trakt.lists == ["trending"]
+        assert [s.type for s in config.trakt.sources] == ["trending"]
         assert config.medusa.url == "http://localhost:8081"
         assert config.medusa.api_key == "test-api-key"
 
@@ -70,7 +72,7 @@ class TestLoadConfig:
 
     def test_missing_client_id_exits(self, tmp_path):
         data = {
-            "trakt": {"list": "trending"},
+            "trakt": {"sources": [{"type": "trending"}]},
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
         }
         path = _write_config(tmp_path, data)
@@ -80,7 +82,7 @@ class TestLoadConfig:
 
     def test_missing_medusa_url_exits(self, tmp_path):
         data = {
-            "trakt": {"client_id": "id", "list": "trending"},
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
             "medusa": {"api_key": "key"},
         }
         path = _write_config(tmp_path, data)
@@ -90,7 +92,7 @@ class TestLoadConfig:
 
     def test_missing_medusa_api_key_exits(self, tmp_path):
         data = {
-            "trakt": {"client_id": "id", "list": "trending"},
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
             "medusa": {"url": "http://localhost:8081"},
         }
         path = _write_config(tmp_path, data)
@@ -100,7 +102,11 @@ class TestLoadConfig:
 
     def test_personal_list_requires_username(self, tmp_path):
         data = {
-            "trakt": {"client_id": "id", "client_secret": "secret", "list": "watchlist"},
+            "trakt": {
+                "client_id": "id",
+                "client_secret": "secret",
+                "sources": [{"type": "watchlist"}],
+            },
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
         }
         path = _write_config(tmp_path, data)
@@ -110,7 +116,11 @@ class TestLoadConfig:
 
     def test_personal_list_requires_client_secret(self, tmp_path):
         data = {
-            "trakt": {"client_id": "id", "username": "user", "list": "watchlist"},
+            "trakt": {
+                "client_id": "id",
+                "username": "user",
+                "sources": [{"type": "watchlist"}],
+            },
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
         }
         path = _write_config(tmp_path, data)
@@ -124,7 +134,7 @@ class TestLoadConfig:
                 "client_id": "id",
                 "client_secret": "secret",
                 "username": "user",
-                "list": "watchlist",
+                "sources": [{"type": "watchlist"}],
             },
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
         }
@@ -132,8 +142,7 @@ class TestLoadConfig:
         config = load_config(path)
 
         assert config.trakt.username == "user"
-        assert config.trakt.lists == ["watchlist"]
-        assert config.trakt.list == "watchlist"
+        assert [s.type for s in config.trakt.sources] == ["watchlist"]
 
     def test_user_list_source_requires_owner(self, tmp_path):
         data = {
@@ -177,26 +186,10 @@ class TestLoadConfig:
         assert config.trakt.sources[0].list_slug == "top-tv"
         assert config.trakt.sources[0].requires_auth is False
 
-    def test_lists_accepts_multiple_values(self, tmp_path):
+    def test_sources_without_type_fail_validation(self, tmp_path):
         data = {
             "trakt": {
                 "client_id": "id",
-                "client_secret": "secret",
-                "username": "user",
-                "lists": ["watchlist", "trending"],
-            },
-            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
-        }
-        path = _write_config(tmp_path, data)
-        config = load_config(path)
-
-        assert config.trakt.lists == ["watchlist", "trending"]
-
-    def test_invalid_sources_do_not_fallback_to_legacy_lists(self, tmp_path):
-        data = {
-            "trakt": {
-                "client_id": "id",
-                "list": "trending",
                 "sources": [{"owner": "alice", "list_slug": "top-tv"}],
             },
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
@@ -206,50 +199,17 @@ class TestLoadConfig:
         with pytest.raises(SystemExit):
             load_config(path)
 
-    def test_env_var_lists_override_sources(self, tmp_path, monkeypatch):
-        data = {
-            "trakt": {
-                "client_id": "id",
-                "sources": [{"type": "user_list", "owner": "alice", "list_slug": "top-tv"}],
-            },
-            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
-        }
-        path = _write_config(tmp_path, data)
-        monkeypatch.setenv("SNAKECHARMER_TRAKT_LISTS", "popular,watched")
-
-        config = load_config(path)
-
-        assert config.trakt.lists == ["popular", "watched"]
-        assert [source.type for source in config.trakt.sources] == ["popular", "watched"]
-
-    def test_env_var_lists_splits_commas(self, tmp_path, minimal_config, monkeypatch):
-        path = _write_config(tmp_path, minimal_config)
-        monkeypatch.setenv("SNAKECHARMER_TRAKT_CLIENT_SECRET", "secret")
-        monkeypatch.setenv("SNAKECHARMER_TRAKT_USERNAME", "user")
-        monkeypatch.setenv("SNAKECHARMER_TRAKT_LISTS", "watchlist, trending")
-
-        config = load_config(path)
-
-        assert config.trakt.lists == ["watchlist", "trending"]
-
-    def test_legacy_list_alias_setter_updates_lists(self, tmp_path, minimal_config):
-        path = _write_config(tmp_path, minimal_config)
-        config = load_config(path)
-
-        config.trakt.list = "popular"
-
-        assert config.trakt.list == "popular"
-        assert config.trakt.lists == ["popular"]
-
     def test_missing_file_uses_env_only(self, tmp_path, monkeypatch):
         monkeypatch.setenv("SNAKECHARMER_TRAKT_CLIENT_ID", "env-id")
-        monkeypatch.setenv("SNAKECHARMER_TRAKT_LIST", "trending")
         monkeypatch.setenv("SNAKECHARMER_MEDUSA_URL", "http://localhost:8081")
         monkeypatch.setenv("SNAKECHARMER_MEDUSA_API_KEY", "env-key")
 
-        config = load_config(str(tmp_path / "nonexistent.yaml"))
+        # With no YAML file and no sources, validation fails — but env var
+        # scalars are still read. Use skip_validate to exercise the env path.
+        config = load_config(str(tmp_path / "nonexistent.yaml"), skip_validate=True)
 
         assert config.trakt.client_id == "env-id"
+        assert config.medusa.url == "http://localhost:8081"
         assert config.medusa.api_key == "env-key"
 
     def test_invalid_yaml_exits(self, tmp_path):
@@ -476,14 +436,6 @@ class TestPublicLists:
 
 
 class TestNormalizeHelpers:
-    def test_normalize_trakt_lists_from_numeric_value(self):
-        parsed = _normalize_trakt_lists({"lists": 123})
-        assert parsed == ["123"]
-
-    def test_normalize_trakt_lists_falls_back_to_watchlist_for_empty_values(self):
-        parsed = _normalize_trakt_lists({"lists": " , "})
-        assert parsed == ["watchlist"]
-
     def test_normalize_trakt_sources_returns_empty_for_non_list(self):
         parsed = _normalize_trakt_sources({"sources": "trending"})
         assert parsed == []
@@ -503,25 +455,6 @@ class TestNormalizeHelpers:
         parsed = _normalize_trakt_sources({"sources": ["popular"]})
         assert len(parsed) == 1
         assert parsed[0].type == "popular"
-
-    def test_legacy_lists_to_sources_custom_list_sets_user_list_fields(self, tmp_path):
-        data = {
-            "trakt": {
-                "client_id": "id",
-                "client_secret": "secret",
-                "username": "alice",
-                "lists": ["my-private-list"],
-            },
-            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
-        }
-        path = _write_config(tmp_path, data)
-
-        config = load_config(path)
-
-        assert config.trakt.sources[0].type == "user_list"
-        assert config.trakt.sources[0].owner == "alice"
-        assert config.trakt.sources[0].list_slug == "my-private-list"
-        assert config.trakt.sources[0].requires_auth is True
 
     def test_invalid_source_type_exits(self, tmp_path):
         data = {
@@ -549,16 +482,10 @@ class TestNormalizeHelpers:
         with pytest.raises(SystemExit):
             load_config(path)
 
-    def test_trakt_source_user_list_label_and_legacy_name_properties(self):
+    def test_trakt_source_user_list_label(self):
         source = TraktSource(type="user_list", owner="alice", list_slug="top-tv", auth=True)
 
         assert source.label == "user_list:alice/top-tv (auth)"
-        assert source.legacy_name == "top-tv"
-
-    def test_trakt_config_list_property_falls_back_to_watchlist(self):
-        config = TraktConfig(lists=[], sources=[])
-
-        assert config.list == "watchlist"
 
     def test_user_list_auth_true_requires_username_and_client_secret(self, tmp_path):
         data = {
