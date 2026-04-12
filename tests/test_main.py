@@ -1,4 +1,5 @@
 import logging
+import sqlite3
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -147,6 +148,40 @@ class TestMain:
             main.main()
 
         mock_start.assert_called_once_with(9999, mock_start.call_args[0][1])
+
+    def test_health_enabled_falls_back_to_memory_if_history_db_init_fails(self, base_config):
+        base_config.health.enabled = True
+        with (
+            patch("main.parse_args", return_value=_mock_args()),
+            patch("main.load_config", return_value=base_config),
+            patch("main.run_sync"),
+            patch(
+                "app.sync_history.SyncHistoryDB",
+                side_effect=sqlite3.OperationalError("readonly"),
+            ),
+            patch("app.health.start_health_server") as mock_start,
+        ):
+            main.main()
+
+        sync_status = mock_start.call_args[0][1]
+        assert sync_status._db is None
+
+    def test_webui_falls_back_to_memory_if_history_db_init_fails(self, base_config):
+        with (
+            patch("main.parse_args", return_value=_mock_args(webui=True)),
+            patch("main.load_config", return_value=base_config),
+            patch("main.run_sync"),
+            patch(
+                "app.sync_history.SyncHistoryDB",
+                side_effect=sqlite3.OperationalError("readonly"),
+            ),
+            patch("app.webui.ConfigHolder"),
+            patch("app.webui.create_app"),
+            patch("main.threading.Thread") as mock_thread,
+        ):
+            main.main()
+
+        mock_thread.return_value.start.assert_called_once()
 
     def test_health_server_not_started_when_webui_active(self, base_config):
         base_config.health.enabled = True

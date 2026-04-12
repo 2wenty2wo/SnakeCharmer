@@ -10,3 +10,4 @@ dist/
 build/
 .coverage
 pending_queue.json
+sync_history.db

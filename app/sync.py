@@ -23,6 +23,7 @@ class SyncResult:
     per_source: dict[str, int] = field(default_factory=dict)
     success: bool = True
     added_shows: list[dict] = field(default_factory=list)
+    show_actions: list[dict] = field(default_factory=list)
 
 
 def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
@@ -128,6 +129,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                 selected_source_label,
             )
             result.skipped += 1
+            _track_action(result, show, selected_source_label, "skipped", "no_pending_queue")
             continue
 
         # Check if this show should go to pending queue
@@ -136,6 +138,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
             if pending_queue.is_pending(show.tvdb_id):
                 log.debug("Already in pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
                 result.skipped += 1
+                _track_action(result, show, selected_source_label, "skipped", "already_pending")
                 continue
 
             # Add to pending queue
@@ -159,6 +162,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     selected_source_label,
                 )
                 result.queued += 1
+                _track_action(result, show, selected_source_label, "queued")
                 continue
 
             if pending_queue.add_show(pending_show):
@@ -169,8 +173,10 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     selected_source_label,
                 )
                 result.queued += 1
+                _track_action(result, show, selected_source_label, "queued")
             else:
                 result.skipped += 1
+                _track_action(result, show, selected_source_label, "skipped", "already_pending")
             continue
 
         # Auto-approve path: add directly to Medusa
@@ -194,6 +200,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     "imdb_id": show.imdb_id,
                 }
             )
+            _track_action(result, show, selected_source_label, "added")
             continue
 
         try:
@@ -217,16 +224,36 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                         "imdb_id": show.imdb_id,
                     }
                 )
+                _track_action(result, show, selected_source_label, "added")
             else:
                 result.skipped += 1
+                _track_action(
+                    result, show, selected_source_label, "skipped", "medusa_returned_false"
+                )
         except Exception as e:
             log.error("Failed to add '%s' (tvdb:%d): %s", show.title, show.tvdb_id, e)
             result.failed += 1
+            _track_action(result, show, selected_source_label, "failed", str(e))
 
     result.success = result.failed == 0
     result.duration_seconds = _elapsed_seconds(start_time_ns)
     _log_summary(result, config.sync.dry_run)
     return result
+
+
+def _track_action(result, show, source_label, action, reason=None) -> None:
+    """Append a per-show action entry to the result."""
+    result.show_actions.append(
+        {
+            "tvdb_id": show.tvdb_id,
+            "title": show.title,
+            "year": show.year,
+            "imdb_id": show.imdb_id,
+            "action": action,
+            "source_label": source_label,
+            "reason": reason,
+        }
+    )
 
 
 def _elapsed_seconds(start_time_ns: int) -> float:

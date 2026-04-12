@@ -680,6 +680,35 @@ class TestSyncHistory:
         assert "History" in response.text
         assert "5" in response.text  # added count
 
+    def test_sync_history_invalid_page_defaults_to_page_1(self, tmp_path):
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+        response = client.get("/sync/history?page=abc")
+        assert response.status_code == 200
+        assert "History" in response.text
+
+    def test_sync_history_page_below_one_defaults_to_page_1(self, tmp_path):
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+        response = client.get("/sync/history?page=0")
+        assert response.status_code == 200
+        assert "History" in response.text
+
+    def test_sync_history_page_above_range_clamps_to_last_page(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(SyncResult(added=2, success=True))
+        app = create_app(holder, sync_status=sync_status)
+        client = TestClient(app)
+
+        response = client.get("/sync/history?page=999")
+        assert response.status_code == 200
+        assert "No sync history yet" not in response.text
+        assert "2" in response.text
+
 
 class TestTestConnections:
     def test_test_trakt_missing_client_id(self, tmp_path):

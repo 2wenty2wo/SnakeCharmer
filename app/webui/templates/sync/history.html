@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Sync History</h1>
-    <p class="page-description">Review recent sync operations and their results.</p>
+    <p class="page-description">Review sync operations and their results.</p>
     <div class="page-actions">
         <button type="button" class="btn-primary"
                 hx-post="/sync/run"
@@ -25,7 +25,7 @@
 <div id="result-banner" role="status" aria-live="polite"></div>
 
 {% if history %}
-<div hx-get="/sync/history"
+<div hx-get="/sync/history?page={{ page }}"
      hx-trigger="every 30s"
      hx-select=".history-list-container"
      hx-target=".history-list-container"
@@ -47,27 +47,56 @@
                     <span class="metric-badge {{ 'skipped' if entry.skipped > 0 }}" title="Skipped">{{ entry.skipped }}</span>
                     <span class="metric-badge {{ 'failed' if entry.failed > 0 }}" title="Failed">{{ entry.failed }}</span>
                 </div>
-                {% if entry.added_shows %}
+                {% set show_actions = entry.get('show_actions', []) %}
+                {% if show_actions or entry.added_shows %}
                 <button type="button" class="history-toggle-btn" onclick="toggleHistoryShows(this)" aria-expanded="false" aria-controls="history-shows-{{ loop.index }}">
                     <i data-lucide="chevron-down" style="width:16px;height:16px"></i>
                 </button>
                 {% endif %}
             </div>
-            {% if entry.added_shows %}
+            {% set show_actions = entry.get('show_actions', []) %}
+            {% if show_actions or entry.added_shows %}
             <div class="history-shows-list" id="history-shows-{{ loop.index }}" hidden>
-                {% for show in entry.added_shows %}
-                <div class="history-show-item">
-                    <span class="history-show-title">{{ show.title }}</span>
-                    {% if show.year %}
-                    <span class="history-show-year">({{ show.year }})</span>
+                {% if show_actions %}
+                    {% for action_type, action_class in [('added', 'added'), ('queued', 'queued'), ('skipped', 'skipped'), ('failed', 'failed')] %}
+                    {% set items = show_actions | selectattr('action', 'equalto', action_type) | list %}
+                    {% if items %}
+                    <div class="history-action-group">
+                        <span class="history-action-label metric-badge {{ action_class }}">{{ action_type | title }} ({{ items | length }})</span>
+                        {% for show in items %}
+                        <div class="history-show-item">
+                            <span class="history-show-title">{{ show.title }}</span>
+                            {% if show.year %}
+                            <span class="history-show-year">({{ show.year }})</span>
+                            {% endif %}
+                            {% if show.reason %}
+                            <span class="history-show-reason">{{ show.reason }}</span>
+                            {% endif %}
+                            {% if show.imdb_id %}
+                            <a href="https://www.imdb.com/title/{{ show.imdb_id }}" target="_blank" rel="noopener noreferrer" class="history-show-link" title="View on IMDb">
+                                <i data-lucide="external-link" style="width:12px;height:12px"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
                     {% endif %}
-                    {% if show.imdb_id %}
-                    <a href="https://www.imdb.com/title/{{ show.imdb_id }}" target="_blank" rel="noopener noreferrer" class="history-show-link" title="View on IMDb">
-                        <i data-lucide="external-link" style="width:12px;height:12px"></i>
-                    </a>
-                    {% endif %}
-                </div>
-                {% endfor %}
+                    {% endfor %}
+                {% else %}
+                    {% for show in entry.added_shows %}
+                    <div class="history-show-item">
+                        <span class="history-show-title">{{ show.title }}</span>
+                        {% if show.year %}
+                        <span class="history-show-year">({{ show.year }})</span>
+                        {% endif %}
+                        {% if show.imdb_id %}
+                        <a href="https://www.imdb.com/title/{{ show.imdb_id }}" target="_blank" rel="noopener noreferrer" class="history-show-link" title="View on IMDb">
+                            <i data-lucide="external-link" style="width:12px;height:12px"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% endif %}
             </div>
             {% endif %}
         </div>
@@ -84,14 +113,31 @@
     </script>
 </div>
 
-<p class="library-count" style="margin-top: 20px;">
-    Showing <strong>{{ history | length }}</strong> of max 20 recent syncs
-</p>
+<div class="history-pagination">
+    <p class="library-count">
+        Showing page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
+        ({{ total_runs }} total sync{{ "s" if total_runs != 1 }})
+    </p>
+    {% if total_pages > 1 %}
+    <div class="pagination-controls">
+        {% if page > 1 %}
+        <a href="/sync/history?page={{ page - 1 }}" class="pagination-btn">
+            <i data-lucide="chevron-left" style="width:16px;height:16px"></i> Previous
+        </a>
+        {% endif %}
+        {% if page < total_pages %}
+        <a href="/sync/history?page={{ page + 1 }}" class="pagination-btn">
+            Next <i data-lucide="chevron-right" style="width:16px;height:16px"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
 {% else %}
 <div class="empty-state" role="status">
     <i data-lucide="history" aria-hidden="true"></i>
     <p class="empty-state-title">No sync history yet</p>
-    <p class="empty-state-hint">Run a sync to see results here. History is limited to the last 20 operations.</p>
+    <p class="empty-state-hint">Run a sync to see results here.</p>
     <div class="empty-state-action">
         <button type="button" class="btn-primary"
                 hx-post="/sync/run"

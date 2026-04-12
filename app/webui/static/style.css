@@ -1546,6 +1546,69 @@ button[type="submit"]:disabled {
     color: var(--gd-primary);
 }
 
+/* === History Action Groups === */
+.history-action-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 8px;
+}
+
+.history-action-group:last-child {
+    margin-bottom: 0;
+}
+
+.history-action-label {
+    margin-bottom: 4px;
+    font-size: 11px;
+}
+
+.metric-badge.queued {
+    background: rgba(29, 185, 84, 0.15);
+    color: var(--gd-primary);
+}
+
+.history-show-reason {
+    font-size: 11px;
+    color: var(--gd-text-secondary);
+    margin-left: 8px;
+    font-style: italic;
+}
+
+/* === History Pagination === */
+.history-pagination {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.pagination-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.pagination-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 16px;
+    background: var(--gd-surface);
+    color: var(--gd-text);
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all var(--gd-transition-fast);
+}
+
+.pagination-btn:hover {
+    background: var(--gd-surface-2);
+    transform: scale(1.02);
+}
+
 /* === Legacy History Table (kept for compatibility) === */
 .history-table-container {
     overflow-x: auto;

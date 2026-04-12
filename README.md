@@ -338,7 +338,7 @@ When enabled, SnakeCharmer runs a browser-based config management interface buil
 
 - **Dashboard** (`/`): shows current config summary and sync status, auto-refreshes every 10s
 - **Sync Now** (`POST /sync/run`): trigger a manual sync from the dashboard or history page
-- **Sync History** (`/sync/history`): table of last 20 sync results with status, counts, and duration
+- **Sync History** (`/sync/history`): persistent SQLite-backed sync history with pagination (50 runs per page), including per-show action logs (`added`, `queued`, `skipped`, `failed`) and reasons
 - **Pending** (`/pending`): shows waiting for manual approval; individual and bulk approve/reject actions
 - **Config editors** (`/config/trakt`, `/config/medusa`, `/config/sync`, `/config/health`, `/config/notify`): edit and save each config section
 - **Source management**: add/remove Trakt sources with per-source Medusa quality, required_words, and auto_approve overrides
