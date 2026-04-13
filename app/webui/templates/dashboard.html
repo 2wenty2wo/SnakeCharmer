@@ -91,7 +91,13 @@
         {% if run.added_shows %}
         <div class="activity-shows">
             {% for show in run.added_shows[:3] %}
-            <span class="activity-show">{{ show }}</span>
+            <span class="activity-show">
+                {% if show is mapping %}
+                    {{ show.title or show["title"] }}
+                {% else %}
+                    {{ show }}
+                {% endif %}
+            </span>
             {% endfor %}
             {% if run.added_shows | length > 3 %}
             <span class="activity-show activity-show--more">+{{ run.added_shows | length - 3 }} more</span>
@@ -283,7 +289,10 @@
     }
     
     updateCountdown();
-    setInterval(updateCountdown, 60000); // Update every minute
+    if (window.__dashboardNextSyncTimer) {
+        clearInterval(window.__dashboardNextSyncTimer);
+    }
+    window.__dashboardNextSyncTimer = setInterval(updateCountdown, 60000); // Update every minute
 })();
 </script>
 {% endif %}

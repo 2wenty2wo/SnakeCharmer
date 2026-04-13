@@ -86,7 +86,10 @@
     }
     
     updateCountdown();
-    setInterval(updateCountdown, 60000); // Update every minute
+    if (window.__dashboardNextSyncTimer) {
+        clearInterval(window.__dashboardNextSyncTimer);
+    }
+    window.__dashboardNextSyncTimer = setInterval(updateCountdown, 60000); // Update every minute
 })();
 </script>
 {% endif %}

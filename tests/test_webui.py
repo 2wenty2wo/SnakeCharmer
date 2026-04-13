@@ -86,6 +86,48 @@ class TestDashboard:
         assert "testuser" in response.text
         assert "trending" in response.text
 
+    def test_dashboard_renders_added_show_titles_instead_of_dict_repr(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(
+            SyncResult(
+                added=1,
+                success=True,
+                added_shows=[{"title": "Example Show", "tvdb_id": 12345}],
+            )
+        )
+        app = create_app(holder, sync_status=sync_status)
+        client = TestClient(app)
+
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Example Show" in response.text
+        assert "{&#39;title&#39;" not in response.text
+
+    def test_dashboard_stats_partial_keeps_poller_and_timer_guard(self, tmp_path):
+        config = _make_config(sync=SyncConfig(interval=300))
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(SyncResult(success=True, duration_seconds=2.5))
+        app = create_app(holder, sync_status=sync_status)
+        client = TestClient(app)
+
+        response = client.get("/dashboard/stats")
+        assert response.status_code == 200
+        assert 'id="dashboard-stats-poller"' in response.text
+        assert 'hx-get="/dashboard/stats"' in response.text
+        assert 'hx-trigger="every 30s"' in response.text
+        assert "window.__dashboardNextSyncTimer" in response.text
+
 
 class TestTraktConfig:
     def test_get_trakt_page(self, tmp_path):
