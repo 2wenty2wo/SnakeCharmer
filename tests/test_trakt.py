@@ -442,7 +442,7 @@ class TestAuth:
             patch("app.trakt.time.sleep"),
             patch("app.trakt.time.time", return_value=1),
             patch("app.trakt.log.error"),
-            pytest.raises(SystemExit),
+            pytest.raises(RuntimeError),
         ):
             client._authenticate()
 
@@ -464,7 +464,7 @@ class TestAuth:
             patch("app.trakt.time.sleep"),
             patch("app.trakt.time.time", side_effect=[0, 0.5, 2, 2]),
             patch("app.trakt.log.error"),
-            pytest.raises(SystemExit),
+            pytest.raises(RuntimeError),
         ):
             client._authenticate()
 

@@ -321,7 +321,7 @@ class TraktClient(RetryClient):
                 continue
 
         log.error("Authentication failed or timed out")
-        raise SystemExit(1)
+        raise RuntimeError("Trakt authentication failed or timed out")
 
     def _save_token(self, token: dict) -> None:
         """Persist OAuth token to disk."""
