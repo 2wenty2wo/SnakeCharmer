@@ -1,50 +1,59 @@
 <!-- Stats Overview Row - HTMX Refresh Target -->
-<div class="stats-overview" id="stats-overview">
-    <div class="stat-hero">
-        <div class="stat-hero-icon">
-            <i data-lucide="check-circle-2" style="width:24px;height:24px"></i>
+<div
+    id="dashboard-stats-poller"
+    hx-get="/dashboard/stats"
+    hx-trigger="every 30s"
+    hx-swap="outerHTML"
+>
+    <div class="stats-overview" id="stats-overview">
+        <div class="stat-hero">
+            <div class="stat-hero-icon">
+                <i data-lucide="check-circle-2" style="width:24px;height:24px"></i>
+            </div>
+            <div class="stat-hero-content">
+                <span class="stat-hero-value">{{ stats.total_added }}</span>
+                <span class="stat-hero-label">Shows Added</span>
+            </div>
         </div>
-        <div class="stat-hero-content">
-            <span class="stat-hero-value">{{ stats.total_added }}</span>
-            <span class="stat-hero-label">Shows Added</span>
+
+        <div class="stat-hero stat-hero--success">
+            <div class="stat-hero-icon">
+                <i data-lucide="trending-up" style="width:24px;height:24px"></i>
+            </div>
+            <div class="stat-hero-content">
+                <span class="stat-hero-value">{{ stats.success_rate }}%</span>
+                <span class="stat-hero-label">Success Rate</span>
+            </div>
         </div>
-    </div>
-    
-    <div class="stat-hero stat-hero--success">
-        <div class="stat-hero-icon">
-            <i data-lucide="trending-up" style="width:24px;height:24px"></i>
-        </div>
-        <div class="stat-hero-content">
-            <span class="stat-hero-value">{{ stats.success_rate }}%</span>
-            <span class="stat-hero-label">Success Rate</span>
-        </div>
-    </div>
-    
-    <div class="stat-hero stat-hero--warning{% if stats.pending_count == 0 %} stat-hero--empty{% endif %}">
-        <div class="stat-hero-icon">
-            <i data-lucide="inbox" style="width:24px;height:24px"></i>
-        </div>
-        <div class="stat-hero-content">
-            <span class="stat-hero-value">{{ stats.pending_count }}</span>
-            <span class="stat-hero-label">Pending</span>
-        </div>
-        {% if stats.pending_count > 0 %}
-        <a href="/pending" class="stat-hero-action">Review</a>
-        {% endif %}
-    </div>
-    
-    <div class="stat-hero stat-hero--info">
-        <div class="stat-hero-icon">
-            <i data-lucide="clock" style="width:24px;height:24px"></i>
-        </div>
-        <div class="stat-hero-content">
-            {% if next_sync %}
-            <span class="stat-hero-value stat-hero-value--small" data-next-sync="{{ next_sync }}">--</span>
-            <span class="stat-hero-label">Next Sync</span>
-            {% else %}
-            <span class="stat-hero-value stat-hero-value--small">--</span>
-            <span class="stat-hero-label">{% if config.sync.interval == 0 %}Run Once{% else %}Next Sync{% endif %}</span>
+
+        <div
+            class="stat-hero stat-hero--warning{% if stats.pending_count == 0 %} stat-hero--empty{% endif %}"
+        >
+            <div class="stat-hero-icon">
+                <i data-lucide="inbox" style="width:24px;height:24px"></i>
+            </div>
+            <div class="stat-hero-content">
+                <span class="stat-hero-value">{{ stats.pending_count }}</span>
+                <span class="stat-hero-label">Pending</span>
+            </div>
+            {% if stats.pending_count > 0 %}
+            <a href="/pending" class="stat-hero-action">Review</a>
             {% endif %}
+        </div>
+
+        <div class="stat-hero stat-hero--info">
+            <div class="stat-hero-icon">
+                <i data-lucide="clock" style="width:24px;height:24px"></i>
+            </div>
+            <div class="stat-hero-content">
+                {% if next_sync %}
+                <span class="stat-hero-value stat-hero-value--small" data-next-sync="{{ next_sync }}">--</span>
+                <span class="stat-hero-label">Next Sync</span>
+                {% else %}
+                <span class="stat-hero-value stat-hero-value--small">--</span>
+                <span class="stat-hero-label">{% if config.sync.interval == 0 %}Run Once{% else %}Next Sync{% endif %}</span>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>
