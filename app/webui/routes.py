@@ -35,6 +35,50 @@ def _sync_manager(request: Request):
 # --- Dashboard ---
 
 
+def _get_dashboard_stats(request: Request) -> dict:
+    """Gather comprehensive stats for the dashboard."""
+    sync_status = _sync_status(request)
+    pending_queue = _get_pending_queue(request)
+    
+    stats = {
+        "total_added": 0,
+        "total_runs": 0,
+        "success_rate": 0,
+        "pending_count": 0,
+        "avg_duration": 0,
+        "recent_runs": [],
+    }
+    
+    # Get pending count
+    if pending_queue:
+        stats["pending_count"] = pending_queue.get_count()
+    
+    # Get sync history stats
+    if sync_status:
+        # Get recent runs (last 5)
+        recent = sync_status.get_history(limit=5, offset=0)
+        stats["recent_runs"] = recent
+        stats["total_runs"] = sync_status.get_total_runs()
+        
+        if recent:
+            # Calculate totals
+            total_added = sum(r.get("added", 0) for r in recent)
+            total_runs_with_data = len([r for r in recent if r.get("duration_seconds", 0) > 0])
+            
+            stats["total_added"] = total_added
+            
+            # Calculate success rate (runs with no failures / total runs)
+            successful_runs = len([r for r in recent if r.get("failed", 0) == 0 and r.get("success", True)])
+            stats["success_rate"] = int((successful_runs / len(recent)) * 100) if recent else 0
+            
+            # Calculate average duration
+            if total_runs_with_data > 0:
+                avg_duration = sum(r.get("duration_seconds", 0) for r in recent) / total_runs_with_data
+                stats["avg_duration"] = round(avg_duration, 1)
+    
+    return stats
+
+
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     config = _holder(request).get()
@@ -43,6 +87,20 @@ async def dashboard(request: Request):
     health_snapshot = sync_status.snapshot() if sync_status else None
     sync_manager = _sync_manager(request)
     sync_running = sync_manager.is_running() if sync_manager else False
+    stats = _get_dashboard_stats(request)
+    
+    # Calculate next sync time
+    next_sync = None
+    if config.sync.interval > 0 and health_snapshot and health_snapshot.get("last_sync"):
+        from datetime import datetime, timedelta, timezone
+        last_sync_ts = health_snapshot["last_sync"]["timestamp"]
+        try:
+            last_sync_dt = datetime.fromisoformat(last_sync_ts.replace("Z", "+00:00"))
+            next_sync_dt = last_sync_dt + timedelta(seconds=config.sync.interval)
+            next_sync = next_sync_dt.isoformat().replace("+00:00", "Z")
+        except (ValueError, TypeError):
+            pass
+    
     return _templates(request).TemplateResponse(
         request,
         "dashboard.html",
@@ -51,7 +109,40 @@ async def dashboard(request: Request):
             "config_errors": config_errors,
             "health": health_snapshot,
             "sync_running": sync_running,
+            "stats": stats,
+            "next_sync": next_sync,
             "active_page": "dashboard",
+        },
+    )
+
+
+@router.get("/dashboard/stats", response_class=HTMLResponse)
+async def dashboard_stats(request: Request):
+    """Auto-refresh partial for dashboard stats overview."""
+    stats = _get_dashboard_stats(request)
+    config = _holder(request).get()
+    sync_status = _sync_status(request)
+    health_snapshot = sync_status.snapshot() if sync_status else None
+    
+    # Calculate next sync time
+    next_sync = None
+    if config.sync.interval > 0 and health_snapshot and health_snapshot.get("last_sync"):
+        from datetime import datetime, timedelta, timezone
+        last_sync_ts = health_snapshot["last_sync"]["timestamp"]
+        try:
+            last_sync_dt = datetime.fromisoformat(last_sync_ts.replace("Z", "+00:00"))
+            next_sync_dt = last_sync_dt + timedelta(seconds=config.sync.interval)
+            next_sync = next_sync_dt.isoformat().replace("+00:00", "Z")
+        except (ValueError, TypeError):
+            pass
+    
+    return _templates(request).TemplateResponse(
+        request,
+        "dashboard_stats.html",
+        context={
+            "stats": stats,
+            "config": config,
+            "next_sync": next_sync,
         },
     )
 
@@ -63,6 +154,7 @@ async def dashboard_status(request: Request):
     health_snapshot = sync_status.snapshot() if sync_status else None
     sync_manager = _sync_manager(request)
     sync_running = sync_manager.is_running() if sync_manager else False
+    
     return _templates(request).TemplateResponse(
         request,
         "dashboard_status.html",

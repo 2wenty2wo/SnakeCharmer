@@ -63,6 +63,7 @@
     <div class="pending-list" role="list" aria-label="Pending shows">
         {% for show in pending_shows %}
         <div class="pending-row" id="pending-row-{{ show.tvdb_id }}" role="listitem">
+            <!-- Checkbox -->
             <div class="pending-select">
                 <input type="checkbox" name="tvdb_ids" value="{{ show.tvdb_id }}" class="row-checkbox" aria-label="Select {{ show.title }}">
             </div>
@@ -81,40 +82,71 @@
                 </div>
             </div>
             
-            <!-- Show Info -->
-            <div class="pending-info">
-                <div class="pending-title">{{ show.title }}</div>
-                <div class="pending-meta">
-                    {% if show.year %}{{ show.year }} • {% endif %}
+            <!-- Main Info (Title, Year, TVDB, Network, Genres) -->
+            <div class="pending-main">
+                <div class="pending-title-wrap">
+                    <div class="pending-title">{{ show.title }}</div>
+                    {% if show.year %}
+                    <span class="pending-year">{{ show.year }}</span>
+                    {% endif %}
+                </div>
+                
+                <div class="pending-details">
                     <a href="https://thetvdb.com/dereferrer/series/{{ show.tvdb_id }}" 
                        target="_blank" 
                        rel="noopener noreferrer" 
                        class="pending-tvdb-link"
                        title="View on TVDB">
-                        TVDB: <span class="mono-compact-text">{{ show.tvdb_id }}</span>
-                        <i data-lucide="external-link" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-left:2px"></i>
+                        TVDB: {{ show.tvdb_id }}
+                        <i data-lucide="external-link" style="width:12px;height:12px"></i>
                     </a>
+                    
+                    {% if show.network %}
+                    <span class="pending-network" title="Network">
+                        <i data-lucide="tv" style="width:12px;height:12px"></i>
+                        {{ show.network }}
+                    </span>
+                    {% endif %}
+                    
+                    {% if show.genres %}
+                    <div class="pending-genres">
+                        {% for genre in show.genres[:3] %}
+                        <span class="genre-chip">{{ genre }}</span>
+                        {% endfor %}
+                        {% if show.genres | length > 3 %}
+                        <span class="genre-chip genre-chip--more">+{{ show.genres | length - 3 }}</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             
-            <!-- Source -->
-            <div class="pending-source">
-                <span class="source-chip" title="Source: {{ show.source_label }}">{{ show.source_label }}</span>
-            </div>
-            
-            <!-- Options (Quality, Required Words) -->
-            <div class="pending-options">
-                {% if show.quality %}
-                <span class="option-badge" title="Quality preset">{{ show.quality }}</span>
+            <!-- Source & Options (Right side) -->
+            <div class="pending-meta-col">
+                <div class="pending-source">
+                    <span class="source-chip" title="Source: {{ show.source_label }}">{{ show.source_label }}</span>
+                </div>
+                
+                {% if show.quality or show.required_words %}
+                <div class="pending-options">
+                    {% if show.quality %}
+                    <span class="option-badge" title="Quality preset">
+                        <i data-lucide="sliders-horizontal" style="width:10px;height:10px"></i>
+                        {{ show.quality }}
+                    </span>
+                    {% endif %}
+                    {% if show.required_words %}
+                    <span class="option-badge" title="Required words: {{ show.required_words | join(', ') }}">
+                        <i data-lucide="tag" style="width:10px;height:10px"></i>
+                        {{ show.required_words | join(", ") }}
+                    </span>
+                    {% endif %}
+                </div>
                 {% endif %}
-                {% if show.required_words %}
-                <span class="option-badge" title="Required words">{{ show.required_words | join(", ") }}</span>
-                {% endif %}
-            </div>
-            
-            <!-- Discovered Time -->
-            <div class="pending-discovered" title="Discovered: {{ show.discovered_at }}">
-                {{ show.discovered_at[:16] }}
+                
+                <div class="pending-discovered" title="Discovered: {{ show.discovered_at }}">
+                    {{ show.discovered_at[:10] }}
+                </div>
             </div>
             
             <!-- Actions -->

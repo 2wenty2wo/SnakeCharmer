@@ -1,7 +1,8 @@
+<div id="live-status-content">
 {% if sync_running %}
-<div class="card">
+<div class="card card--active">
     <div class="card-header">
-        <i data-lucide="loader" class="card-icon" aria-hidden="true"></i>
+        <i data-lucide="loader" class="card-icon card-icon--spinning" aria-hidden="true"></i>
         Sync In Progress
     </div>
     <div class="sync-indicator">
@@ -12,66 +13,80 @@
 {% endif %}
 
 {% if health %}
-<div class="card">
-    <div class="card-header">
-        <i data-lucide="activity" class="card-icon" aria-hidden="true"></i>
-        System Status
-    </div>
-    <div class="info-row">
-        <span class="info-label">Health</span>
-        <span class="info-value">
-            <span class="status-badge status-{{ health.status }}">{{ health.status }}</span>
-        </span>
-    </div>
-    <div class="info-row">
-        <span class="info-label">Uptime</span>
-        <span class="info-value">
-            {% set uptime = health.uptime_seconds | int %}
-            {% if uptime >= 86400 %}
-            {{ uptime // 86400 }}d {{ (uptime % 86400) // 3600 }}h
-            {% elif uptime >= 3600 %}
-            {{ uptime // 3600 }}h {{ (uptime % 3600) // 60 }}m
-            {% elif uptime >= 60 %}
-            {{ uptime // 60 }}m {{ uptime % 60 }}s
+<div class="status-cards-row">
+    <div class="card{% if health.status == 'ok' %} card--success{% elif health.status == 'degraded' %} card--error{% endif %}">
+        <div class="card-header">
+            {% if health.status == 'ok' %}
+            <i data-lucide="check-circle" class="card-icon" aria-hidden="true"></i>
+            {% elif health.status == 'degraded' %}
+            <i data-lucide="alert-triangle" class="card-icon" aria-hidden="true"></i>
             {% else %}
-            {{ uptime }}s
+            <i data-lucide="activity" class="card-icon" aria-hidden="true"></i>
             {% endif %}
-        </span>
+            System Status
+        </div>
+        <div class="info-row">
+            <span class="info-label">Health</span>
+            <span class="info-value">
+                <span class="status-badge status-{{ health.status }}">{{ health.status }}</span>
+            </span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Uptime</span>
+            <span class="info-value">
+                {% set uptime = health.uptime_seconds | int %}
+                {% if uptime >= 86400 %}
+                {{ uptime // 86400 }}d {{ (uptime % 86400) // 3600 }}h
+                {% elif uptime >= 3600 %}
+                {{ uptime // 3600 }}h {{ (uptime % 3600) // 60 }}m
+                {% elif uptime >= 60 %}
+                {{ uptime // 60 }}m {{ uptime % 60 }}s
+                {% else %}
+                {{ uptime }}s
+                {% endif %}
+            </span>
+        </div>
     </div>
-</div>
-{% endif %}
 
-{% if health and health.last_sync %}
-<div class="card">
-    <div class="card-header">
-        <i data-lucide="bar-chart-3" class="card-icon" aria-hidden="true"></i>
-        Last Sync Result
-    </div>
-    <div class="info-row">
-        <span class="info-label">Timestamp</span>
-        <span class="info-value" title="{{ health.last_sync.timestamp }}">{{ health.last_sync.timestamp | format_timestamp }}</span>
-    </div>
-    <div class="info-row">
-        <span class="info-label">Duration</span>
-        <span class="info-value">{{ "%.1f" | format(health.last_sync.duration_seconds) }}s</span>
-    </div>
-    <div class="sync-metrics">
-        <div class="metric" title="Shows successfully added to Medusa">
-            <span class="metric-value added">{{ health.last_sync.added }}</span>
-            <span class="metric-label">Added</span>
+    {% if health.last_sync %}
+    <div class="card card--highlight">
+        <div class="card-header">
+            <i data-lucide="bar-chart-3" class="card-icon" aria-hidden="true"></i>
+            Last Sync Result
         </div>
-        <div class="metric" title="Shows already in Medusa library">
-            <span class="metric-value skipped">{{ health.last_sync.skipped }}</span>
-            <span class="metric-label">Skipped</span>
+        <div class="info-row">
+            <span class="info-label">Timestamp</span>
+            <span class="info-value" title="{{ health.last_sync.timestamp }}">{{ health.last_sync.timestamp | format_timestamp }}</span>
         </div>
-        <div class="metric" title="Shows that failed to add">
-            <span class="metric-value failed">{{ health.last_sync.failed }}</span>
-            <span class="metric-label">Failed</span>
+        <div class="info-row">
+            <span class="info-label">Duration</span>
+            <span class="info-value">{{ "%.1f" | format(health.last_sync.duration_seconds) }}s</span>
+        </div>
+        <div class="sync-metrics">
+            <div class="metric" title="Shows successfully added to Medusa">
+                <span class="metric-value added">{{ health.last_sync.added }}</span>
+                <span class="metric-label">Added</span>
+            </div>
+            {% if health.last_sync.queued > 0 %}
+            <div class="metric" title="Shows queued for approval">
+                <span class="metric-value queued">{{ health.last_sync.queued }}</span>
+                <span class="metric-label">Queued</span>
+            </div>
+            {% endif %}
+            <div class="metric" title="Shows already in Medusa library">
+                <span class="metric-value skipped">{{ health.last_sync.skipped }}</span>
+                <span class="metric-label">Skipped</span>
+            </div>
+            <div class="metric" title="Shows that failed to add">
+                <span class="metric-value failed">{{ health.last_sync.failed }}</span>
+                <span class="metric-label">Failed</span>
+            </div>
         </div>
     </div>
+    {% endif %}
 </div>
 {% elif not health %}
-<div class="empty-state" role="status">
+<div class="empty-state empty-state--compact" role="status">
     <i data-lucide="activity" aria-hidden="true"></i>
     <p class="empty-state-title">No sync data yet</p>
     <p class="empty-state-hint">Run a sync to see status information here.</p>
@@ -82,3 +97,4 @@
     </div>
 </div>
 {% endif %}
+</div>
