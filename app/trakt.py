@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import requests
 
@@ -22,6 +22,8 @@ class TraktShow:
     imdb_id: str | None = None
     year: int | None = None
     poster_url: str | None = None
+    network: str | None = None
+    genres: list[str] = field(default_factory=list)
 
 
 class TraktClient(RetryClient):
@@ -177,12 +179,18 @@ class TraktClient(RetryClient):
                 url = f"https://{url}"
             poster_url = url
 
+        # Extract network and genres
+        network = data.get("network")
+        genres = data.get("genres", [])
+
         return TraktShow(
             title=title,
             tvdb_id=int(tvdb_id),
             imdb_id=ids.get("imdb"),
             year=data.get("year"),
             poster_url=poster_url,
+            network=network,
+            genres=genres if genres else [],
         )
 
     # --- OAuth Device Auth ---

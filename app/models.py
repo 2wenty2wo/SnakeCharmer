@@ -34,6 +34,8 @@ class PendingShow:
     quality: str | list[str] | None = None
     required_words: list[str] = field(default_factory=list)
     poster_url: str | None = None
+    network: str | None = None
+    genres: list[str] = field(default_factory=list)
 
 
 @dataclass

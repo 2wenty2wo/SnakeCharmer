@@ -5,14 +5,14 @@
     <h1>Dashboard</h1>
     <p class="page-description">Overview of your SnakeCharmer configuration and sync status.</p>
     <div class="page-actions">
-        <button type="button" class="btn-primary"
+        <button type="button" class="btn-primary btn-sync"
                 hx-post="/sync/run"
                 hx-target="#result-banner"
                 hx-swap="innerHTML"
                 hx-disabled-elt="this"
                 hx-indicator="#dashboard-sync-indicator"
                 {% if config_errors %}disabled title="Complete setup first"{% endif %}>
-            <i data-lucide="refresh-cw" style="width:16px;height:16px"></i>
+            <i data-lucide="refresh-cw" style="width:18px;height:18px"></i>
             Sync Now
         </button>
         <span id="dashboard-sync-indicator" class="sync-indicator sync-indicator-inline htmx-indicator" aria-live="polite">
@@ -37,7 +37,87 @@
 </div>
 {% endif %}
 
+<!-- Stats Overview Row -->
+{% if not config_errors %}
+<div id="dashboard-stats-poller">
+    {% include "dashboard_stats.html" %}
+</div>
+{% endif %}
+
+<!-- Live Status Section -->
+<div id="live-status" class="status-section"
+     hx-get="/dashboard/status"
+     hx-trigger="every 10s"
+     hx-swap="innerHTML"
+     hx-select="#live-status-content">
+    {% include "dashboard_status.html" %}
+</div>
+
+<!-- Recent Activity -->
+{% if stats.recent_runs %}
+<h2 class="section-title">
+    <i data-lucide="history" style="width:18px;height:18px"></i>
+    Recent Activity
+</h2>
+<div class="recent-activity">
+    {% for run in stats.recent_runs %}
+    <div class="activity-card{% if run.failed > 0 %} activity-card--warning{% endif %}">
+        <div class="activity-time">
+            <span class="activity-timestamp">{{ run.timestamp | format_timestamp }}</span>
+            <span class="activity-duration">{{ "%.1f" | format(run.duration_seconds) }}s</span>
+        </div>
+        <div class="activity-metrics">
+            <div class="activity-metric activity-metric--added" title="Added">
+                <i data-lucide="plus" style="width:14px;height:14px"></i>
+                <span>{{ run.added }}</span>
+            </div>
+            {% if run.queued > 0 %}
+            <div class="activity-metric activity-metric--queued" title="Queued for approval">
+                <i data-lucide="pause" style="width:14px;height:14px"></i>
+                <span>{{ run.queued }}</span>
+            </div>
+            {% endif %}
+            <div class="activity-metric activity-metric--skipped" title="Skipped">
+                <i data-lucide="skip-forward" style="width:14px;height:14px"></i>
+                <span>{{ run.skipped }}</span>
+            </div>
+            {% if run.failed > 0 %}
+            <div class="activity-metric activity-metric--failed" title="Failed">
+                <i data-lucide="x" style="width:14px;height:14px"></i>
+                <span>{{ run.failed }}</span>
+            </div>
+            {% endif %}
+        </div>
+        {% if run.added_shows %}
+        <div class="activity-shows">
+            {% for show in run.added_shows[:3] %}
+            <span class="activity-show">
+                {% if show is mapping %}
+                    {{ show.title or show["title"] }}
+                {% else %}
+                    {{ show }}
+                {% endif %}
+            </span>
+            {% endfor %}
+            {% if run.added_shows | length > 3 %}
+            <span class="activity-show activity-show--more">+{{ run.added_shows | length - 3 }} more</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+    <a href="/sync/history" class="activity-view-all">
+        <span>View All History</span>
+        <i data-lucide="arrow-right" style="width:16px;height:16px"></i>
+    </a>
+</div>
+{% endif %}
+
 <!-- Config Cards -->
+<h2 class="section-title">
+    <i data-lucide="settings-2" style="width:18px;height:18px"></i>
+    Configuration
+</h2>
 <div class="card-grid config-cards layout-2col">
     <div class="card interactive">
         <div class="card-header">
@@ -158,24 +238,62 @@
     </div>
 </div>
 
-<!-- Status Cards -->
-<div id="live-status" class="status-cards layout-2col"
-     hx-get="/dashboard/status"
-     hx-trigger="every 10s"
-     hx-swap="innerHTML">
-    {% include "dashboard_status.html" %}
-</div>
-
 <!-- Quick Actions -->
-<h2 class="section-title">Quick Actions</h2>
+<h2 class="section-title">
+    <i data-lucide="zap" style="width:18px;height:18px"></i>
+    Quick Actions
+</h2>
 <div class="quick-actions-grid layout-2col">
-    <a href="/pending" class="quick-action-card">
-        <i data-lucide="inbox" style="width:20px;height:20px"></i>
+    <a href="/pending" class="quick-action-card{% if stats.pending_count > 0 %} quick-action-card--alert{% endif %}">
+        <div class="quick-action-icon">
+            <i data-lucide="inbox" style="width:20px;height:20px"></i>
+            {% if stats.pending_count > 0 %}
+            <span class="quick-action-badge">{{ stats.pending_count }}</span>
+            {% endif %}
+        </div>
         <span class="quick-action-label">Review Pending</span>
     </a>
     <a href="/sync/history" class="quick-action-card">
-        <i data-lucide="history" style="width:20px;height:20px"></i>
+        <div class="quick-action-icon">
+            <i data-lucide="history" style="width:20px;height:20px"></i>
+        </div>
         <span class="quick-action-label">Sync History</span>
     </a>
 </div>
+
+{% if next_sync %}
+<script>
+(function() {
+    // Countdown timer for next sync
+    function updateCountdown() {
+        const el = document.querySelector('[data-next-sync]');
+        if (!el) return;
+        
+        const nextSync = new Date(el.dataset.nextSync);
+        const now = new Date();
+        const diff = nextSync - now;
+        
+        if (diff <= 0) {
+            el.textContent = 'Due';
+            return;
+        }
+        
+        const hours = Math.floor(diff / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        
+        if (hours > 0) {
+            el.textContent = hours + 'h ' + minutes + 'm';
+        } else {
+            el.textContent = minutes + 'm';
+        }
+    }
+    
+    updateCountdown();
+    if (window.__dashboardNextSyncTimer) {
+        clearInterval(window.__dashboardNextSyncTimer);
+    }
+    window.__dashboardNextSyncTimer = setInterval(updateCountdown, 60000); // Update every minute
+})();
+</script>
+{% endif %}
 {% endblock %}

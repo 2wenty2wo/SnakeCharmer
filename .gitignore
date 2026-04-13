@@ -11,3 +11,5 @@ build/
 .coverage
 pending_queue.json
 sync_history.db
+sync_history.db-shm
+sync_history.db-wal
