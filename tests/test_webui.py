@@ -128,6 +128,77 @@ class TestDashboard:
         assert 'hx-trigger="every 30s"' in response.text
         assert "window.__dashboardNextSyncTimer" in response.text
 
+    def test_dashboard_calculates_next_sync_and_pending_count(self, tmp_path):
+        config = _make_config(sync=SyncConfig(interval=120))
+        pending_queue = PendingQueue(config_dir=str(tmp_path))
+        pending_queue.add_show(PendingShow(tvdb_id=1, title="Queued Show"))
+
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(SyncResult(success=True, duration_seconds=3.5, added=2))
+        app = create_app(holder, sync_status=sync_status, pending_queue=pending_queue)
+        client = TestClient(app)
+
+        response = client.get("/")
+        assert response.status_code == 200
+        assert 'quick-action-badge">1<' in response.text
+        assert 'data-next-sync="' in response.text
+
+    def test_dashboard_stats_handles_invalid_last_sync_timestamp(self, tmp_path):
+        config = _make_config(sync=SyncConfig(interval=120))
+        client, _, _ = _create_client(tmp_path, config=config, with_sync=True)
+
+        class _BadSyncStatus:
+            def get_history(self, limit=5, offset=0):
+                return []
+
+            def get_total_runs(self):
+                return 0
+
+            def snapshot(self):
+                return {"last_sync": {"timestamp": "not-a-date"}}
+
+        client.app.state.sync_status = _BadSyncStatus()
+
+        response = client.get("/dashboard/stats")
+        assert response.status_code == 200
+        assert "Next Sync:" not in response.text
+
+    def test_dashboard_handles_invalid_last_sync_timestamp(self, tmp_path):
+        config = _make_config(sync=SyncConfig(interval=120))
+        client, _, _ = _create_client(tmp_path, config=config, with_sync=True)
+
+        class _BadSyncStatus:
+            def get_history(self, limit=5, offset=0):
+                return []
+
+            def get_total_runs(self):
+                return 0
+
+            def snapshot(self):
+                return {
+                    "last_sync": {
+                        "timestamp": "still-not-a-date",
+                        "duration_seconds": 1.2,
+                        "added": 0,
+                        "queued": 0,
+                        "skipped": 0,
+                        "failed": 0,
+                    },
+                    "uptime_seconds": 0,
+                    "status": "unknown",
+                }
+
+        client.app.state.sync_status = _BadSyncStatus()
+
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "next-sync-timestamp" not in response.text
+
 
 class TestTraktConfig:
     def test_get_trakt_page(self, tmp_path):
@@ -1457,6 +1528,17 @@ class TestRouteHelpers:
         parsed = webui_routes._parse_sources_from_form(form)
         assert len(parsed) == 1
         assert parsed[0]["type"] == "trending"
+
+    def test_parse_sources_from_form_skips_none_type_value(self):
+        class _NoneTypeForm(dict):
+            def get(self, key, default=None):
+                if key == "source_0_type":
+                    return None
+                return super().get(key, default)
+
+        form = _NoneTypeForm({"source_0_type": "trending"})
+        parsed = webui_routes._parse_sources_from_form(form)
+        assert parsed == []
 
 
 class TestSyncStatusHistory:
