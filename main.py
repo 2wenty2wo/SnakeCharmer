@@ -108,7 +108,7 @@ def _build_sync_status(config, log):
 def _start_webui(config, args, sync_status, log):
     """Initialize and start the web UI in a daemon thread.
 
-    Returns (webui_thread, config_holder, sync_manager, webui_port).
+    Returns (webui_thread, config_holder, sync_manager, sync_status, webui_port).
     """
     import uvicorn
 

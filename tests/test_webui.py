@@ -1391,6 +1391,50 @@ class TestTraktOAuth:
         _, kwargs = mock_post.call_args
         assert kwargs["headers"]["trakt-api-key"] == "test_id"
 
+    def test_oauth_start_clamps_non_positive_interval_and_expires_in(self, tmp_path):
+        """HTMX poll delay and expiry must stay valid when Trakt sends bogus numbers."""
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "device_code": "abc123",
+            "user_code": "ABCD1234",
+            "verification_url": "https://trakt.tv/activate",
+            "expires_in": -10,
+            "interval": -2,
+        }
+        mock_resp.raise_for_status = MagicMock()
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert 'hx-trigger="load delay:1s"' in response.text
+        assert '"interval": "1"' in response.text
+        assert '"expires_in": "600"' in response.text
+
+    def test_oauth_start_non_numeric_interval_from_trakt_uses_defaults(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "device_code": "abc123",
+            "user_code": "ABCD1234",
+            "verification_url": "https://trakt.tv/activate",
+            "expires_in": 600,
+            "interval": "not-a-number",
+        }
+        mock_resp.raise_for_status = MagicMock()
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert 'hx-trigger="load delay:5s"' in response.text
+        assert '"expires_in": "600"' in response.text
+
     def test_oauth_poll_success_saves_token(self, tmp_path):
         client, holder, _ = _create_client(tmp_path)
         holder.get().config_dir = str(tmp_path)

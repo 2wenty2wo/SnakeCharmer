@@ -17,6 +17,36 @@ router = APIRouter()
 TRAKT_API_URL = "https://api.trakt.tv"
 
 
+def _parse_oauth_device_timing(interval: object, expires_in: object) -> tuple[int, int] | None:
+    """Parse Trakt device OAuth timing for polling (matches CLI safeguards).
+
+    Returns ``(interval_seconds, expires_in_seconds)`` with a minimum interval of 1
+    and a minimum expiry window of 600 seconds (same default as Trakt's typical response).
+
+    Returns ``None`` if either value is not a finite number string (caller should treat
+    as invalid user input).
+    """
+    try:
+        interval_f = float(interval)
+        expires_f = float(expires_in)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if interval_f != interval_f or expires_f != expires_f:  # NaN
+        return None
+    try:
+        interval_i = int(interval_f)
+        expires_i = int(expires_f)
+    except (ValueError, OverflowError):
+        return None
+    if interval_i < 1:
+        log.warning("Invalid OAuth poll interval %r; using 1s", interval)
+        interval_i = 1
+    if expires_i < 1:
+        log.warning("Invalid OAuth device expires_in %r; using 600s", expires_in)
+        expires_i = 600
+    return interval_i, expires_i
+
+
 def _holder(request: Request):
     return request.app.state.config_holder
 
@@ -93,8 +123,12 @@ async def oauth_trakt_start(request: Request):
     user_code = escape(device["user_code"])
     verification_url = escape(device["verification_url"])
     device_code = escape(device["device_code"])
-    interval = int(float(device.get("interval", 5)))
-    expires_in = int(float(device.get("expires_in", 600)))
+    parsed = _parse_oauth_device_timing(device.get("interval", 5), device.get("expires_in", 600))
+    if parsed is None:
+        log.warning("Non-numeric interval/expires_in from Trakt device response; using defaults")
+        interval, expires_in = 5, 600
+    else:
+        interval, expires_in = parsed
 
     return HTMLResponse(
         f'<div class="oauth-card">'
@@ -126,13 +160,12 @@ async def oauth_trakt_poll(request: Request):
     device_code = form.get("device_code", "").strip()
     client_id = form.get("client_id", "").strip()
     client_secret = form.get("client_secret", "").strip()
-    try:
-        interval = int(form.get("interval", 5))
-        expires_in = int(form.get("expires_in", 600))
-    except ValueError:
+    parsed = _parse_oauth_device_timing(form.get("interval", 5), form.get("expires_in", 600))
+    if parsed is None:
         return HTMLResponse(
             '<div class="banner error" role="alert">Invalid OAuth polling parameters.</div>'
         )
+    interval, expires_in = parsed
 
     if not device_code or not client_id or not client_secret:
         return HTMLResponse(

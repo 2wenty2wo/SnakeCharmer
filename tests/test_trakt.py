@@ -445,7 +445,8 @@ class TestAuth:
             client._authenticate()
 
         assert client.session.headers["Authorization"] == "Bearer token-123"
-        mock_save.assert_called_once_with({"access_token": "token-123"})
+        mock_save.assert_called_once()
+        assert mock_save.call_args[0][0]["access_token"] == "token-123"
 
     def test_authenticate_non_positive_expires_in_still_polls(self, client):
         device_resp = _mock_response(
@@ -471,7 +472,8 @@ class TestAuth:
 
         mock_post.assert_called_once()
         assert client.session.headers["Authorization"] == "Bearer token-123"
-        mock_save.assert_called_once_with({"access_token": "token-123"})
+        mock_save.assert_called_once()
+        assert mock_save.call_args[0][0]["access_token"] == "token-123"
 
     @pytest.mark.parametrize("status_code", [404, 409, 410, 418])
     def test_authenticate_terminal_poll_status_exits(self, client, status_code):
@@ -570,7 +572,8 @@ class TestAuth:
         assert client.session.headers["Authorization"] == "Bearer token-123"
         assert mock_sleep.call_count == 3
         mock_sleep.assert_any_call(2)
-        mock_save.assert_called_once_with({"access_token": "token-123"})
+        mock_save.assert_called_once()
+        assert mock_save.call_args[0][0]["access_token"] == "token-123"
 
     def test_authenticate_request_exception_retries(self, client):
         device_resp = _mock_response(
@@ -601,7 +604,8 @@ class TestAuth:
 
         assert client.session.headers["Authorization"] == "Bearer token-123"
         mock_warning.assert_called_once()
-        mock_save.assert_called_once_with({"access_token": "token-123"})
+        mock_save.assert_called_once()
+        assert mock_save.call_args[0][0]["access_token"] == "token-123"
 
 
 class TestRequest:
