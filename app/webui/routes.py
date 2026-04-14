@@ -580,16 +580,19 @@ async def approve_single(request: Request, tvdb_id: int):
             if show.required_words:
                 add_options["required_words"] = show.required_words
 
-            medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
+            added = medusa_client.add_show(
+                show.tvdb_id, show.title, add_options=add_options or None
+            )
 
         # Remove from pending queue
         pending_queue.approve_show(tvdb_id)
 
         safe_id = escape(str(tvdb_id))
+        meta = "Approved and added to Medusa" if added else "Already exists in Medusa"
         return HTMLResponse(
             f'<div class="pending-row pending-row-approved" id="pending-row-{safe_id}">'
             f'<div class="pending-info"><div class="pending-title">{escape(show.title)}</div>'
-            f'<div class="pending-meta">Approved and added to Medusa</div></div></div>'
+            f'<div class="pending-meta">{meta}</div></div></div>'
         )
     except Exception:
         log.exception("Failed to add show '%s' (tvdb:%d)", show.title, show.tvdb_id)
