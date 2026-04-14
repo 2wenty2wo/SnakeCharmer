@@ -339,6 +339,21 @@ class TestTraktConfig:
         assert "<script>alert(1)</script>" not in response.text
         assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
 
+    def test_save_trakt_invalid_limit_returns_validation_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "abc",
+                "source_0_type": "trending",
+            },
+        )
+        assert response.status_code == 422
+        assert "limit must be a valid integer" in response.text.lower()
+
     def test_save_trakt_rejects_missing_csrf_token(self, tmp_path):
         from fastapi.testclient import TestClient
         from app.webui import ConfigHolder, create_app
@@ -480,6 +495,20 @@ class TestSyncConfig:
         updated = holder.get()
         assert updated.sync.dry_run is False
 
+    def test_save_sync_invalid_interval_returns_validation_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/sync",
+            data={
+                "interval": "abc",
+                "max_retries": "3",
+                "retry_backoff": "2.0",
+                "log_format": "text",
+            },
+        )
+        assert response.status_code == 422
+        assert "sync settings must be valid numbers" in response.text.lower()
+
 
 class TestHealthConfig:
     def test_get_health_page(self, tmp_path):
@@ -498,6 +527,15 @@ class TestHealthConfig:
         updated = holder.get()
         assert updated.health.enabled is True
         assert updated.health.port == 9999
+
+    def test_save_health_invalid_port_returns_validation_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/health",
+            data={"enabled": "on", "port": "abc"},
+        )
+        assert response.status_code == 422
+        assert "port must be a valid integer" in response.text.lower()
 
 
 class TestNotifyConfig:
@@ -778,27 +816,29 @@ class TestConfigHolderThreadSafety:
 
 
 class TestWebuiFormEdgeCases:
-    def test_save_sync_non_numeric_interval_raises(self, tmp_path):
-        """Non-numeric values in numeric fields cause an unhandled ValueError."""
+    def test_save_sync_non_numeric_interval_returns_banner(self, tmp_path):
+        """Non-numeric values in numeric fields return a friendly error banner."""
         client, _, _ = _create_client(tmp_path)
-        with pytest.raises(ValueError):
-            client.post(
-                "/config/sync",
-                data={
-                    "interval": "abc",
-                    "max_retries": "3",
-                    "retry_backoff": "2.0",
-                    "log_format": "text",
-                },
-            )
+        response = client.post(
+            "/config/sync",
+            data={
+                "interval": "abc",
+                "max_retries": "3",
+                "retry_backoff": "2.0",
+                "log_format": "text",
+            },
+        )
+        assert response.status_code == 422
+        assert "sync settings must be valid numbers" in response.text.lower()
 
-    def test_save_health_non_numeric_port_raises(self, tmp_path):
+    def test_save_health_non_numeric_port_returns_banner(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
-        with pytest.raises(ValueError):
-            client.post(
-                "/config/health",
-                data={"port": "not_a_port"},
-            )
+        response = client.post(
+            "/config/health",
+            data={"port": "not_a_port"},
+        )
+        assert response.status_code == 422
+        assert "port must be a valid integer" in response.text.lower()
 
     def test_save_trakt_no_sources_returns_validation_error(self, tmp_path):
         """Submitting a Trakt form with no sources should trigger validation."""

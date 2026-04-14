@@ -1,5 +1,6 @@
 """Tests for the pending queue functionality."""
 
+import contextlib
 import json
 from datetime import datetime, timezone
 
@@ -281,13 +282,12 @@ class TestPendingQueueRollback:
         with patch.object(pq, "_save", side_effect=OSError("disk full")):
             with pq._lock:
                 pass
-            try:
+            with contextlib.suppress(OSError):
                 pq.add_show(show)
-            except OSError:
-                pass
 
         assert pq.is_pending(1) is False
         assert pq.get_count() == 0
+        assert show.discovered_at == ""
 
     def test_approve_show_rollback_on_save_failure(self, tmp_path):
         pq = PendingQueue(str(tmp_path))
@@ -296,11 +296,11 @@ class TestPendingQueueRollback:
 
         from unittest.mock import patch
 
-        with patch.object(pq, "_save", side_effect=OSError("disk full")):
-            try:
-                pq.approve_show(1)
-            except OSError:
-                pass
+        with (
+            patch.object(pq, "_save", side_effect=OSError("disk full")),
+            contextlib.suppress(OSError),
+        ):
+            pq.approve_show(1)
 
         assert pq.is_pending(1) is True
         retrieved = pq.get_show(1)
@@ -313,11 +313,11 @@ class TestPendingQueueRollback:
 
         from unittest.mock import patch
 
-        with patch.object(pq, "_save", side_effect=OSError("disk full")):
-            try:
-                pq.reject_show(1)
-            except OSError:
-                pass
+        with (
+            patch.object(pq, "_save", side_effect=OSError("disk full")),
+            contextlib.suppress(OSError),
+        ):
+            pq.reject_show(1)
 
         assert pq.is_pending(1) is True
         retrieved = pq.get_show(1)
@@ -330,11 +330,11 @@ class TestPendingQueueRollback:
 
         from unittest.mock import patch
 
-        with patch.object(pq, "_save", side_effect=OSError("disk full")):
-            try:
-                pq.bulk_approve([1, 2])
-            except OSError:
-                pass
+        with (
+            patch.object(pq, "_save", side_effect=OSError("disk full")),
+            contextlib.suppress(OSError),
+        ):
+            pq.bulk_approve([1, 2])
 
         assert pq.get_count() == 2
         assert pq.get_show(1).status == "pending"
@@ -347,11 +347,11 @@ class TestPendingQueueRollback:
 
         from unittest.mock import patch
 
-        with patch.object(pq, "_save", side_effect=OSError("disk full")):
-            try:
-                pq.bulk_reject([1, 2])
-            except OSError:
-                pass
+        with (
+            patch.object(pq, "_save", side_effect=OSError("disk full")),
+            contextlib.suppress(OSError),
+        ):
+            pq.bulk_reject([1, 2])
 
         assert pq.get_count() == 2
         assert pq.get_show(1).status == "pending"
@@ -363,11 +363,11 @@ class TestPendingQueueRollback:
 
         from unittest.mock import patch
 
-        with patch.object(pq, "_save", side_effect=OSError("disk full")):
-            try:
-                pq.clear()
-            except OSError:
-                pass
+        with (
+            patch.object(pq, "_save", side_effect=OSError("disk full")),
+            contextlib.suppress(OSError),
+        ):
+            pq.clear()
 
         assert pq.get_count() == 1
         assert pq.is_pending(1) is True

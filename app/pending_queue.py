@@ -118,6 +118,7 @@ class PendingQueue:
                 return False
             pending_snapshot = self._pending.copy()
             history_snapshot = list(self._history)
+            original_discovered_at = show.discovered_at
             if not show.discovered_at:
                 show.discovered_at = self._now_iso()
             self._pending[show.tvdb_id] = show
@@ -125,6 +126,7 @@ class PendingQueue:
             try:
                 self._save()
             except OSError:
+                show.discovered_at = original_discovered_at
                 self._pending = pending_snapshot
                 self._history = history_snapshot
                 raise

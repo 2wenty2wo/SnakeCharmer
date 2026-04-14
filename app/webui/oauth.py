@@ -126,8 +126,14 @@ async def oauth_trakt_poll(request: Request):
     device_code = form.get("device_code", "").strip()
     client_id = form.get("client_id", "").strip()
     client_secret = form.get("client_secret", "").strip()
-    interval = int(form.get("interval", 5))
-    expires_in = int(form.get("expires_in", 600))
+    try:
+        interval = int(form.get("interval", 5))
+        expires_in = int(form.get("expires_in", 600))
+    except ValueError:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            "Invalid OAuth polling parameters.</div>"
+        )
 
     if not device_code or not client_id or not client_secret:
         return HTMLResponse(

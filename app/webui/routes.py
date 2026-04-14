@@ -216,7 +216,13 @@ async def save_trakt(request: Request):
     config_dict["trakt"]["client_id"] = form.get("client_id", "")
     config_dict["trakt"]["client_secret"] = form.get("client_secret", "")
     config_dict["trakt"]["username"] = form.get("username", "")
-    config_dict["trakt"]["limit"] = int(form.get("limit", 50))
+    try:
+        config_dict["trakt"]["limit"] = int(form.get("limit", 50))
+    except ValueError:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">Limit must be a valid integer.</div>',
+            status_code=422,
+        )
 
     # Parse sources from form
     sources = _parse_sources_from_form(form)
@@ -301,9 +307,16 @@ async def save_sync(request: Request):
     config_dict = config_to_dict(config)
 
     config_dict["sync"]["dry_run"] = form.get("dry_run") == "on"
-    config_dict["sync"]["interval"] = int(form.get("interval", 0))
-    config_dict["sync"]["max_retries"] = int(form.get("max_retries", 3))
-    config_dict["sync"]["retry_backoff"] = float(form.get("retry_backoff", 2.0))
+    try:
+        config_dict["sync"]["interval"] = int(form.get("interval", 0))
+        config_dict["sync"]["max_retries"] = int(form.get("max_retries", 3))
+        config_dict["sync"]["retry_backoff"] = float(form.get("retry_backoff", 2.0))
+    except ValueError:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            "Sync settings must be valid numbers.</div>",
+            status_code=422,
+        )
     config_dict["sync"]["log_format"] = form.get("log_format", "text")
 
     return _save_and_respond(request, config_dict, holder, "sync")
@@ -333,7 +346,13 @@ async def save_health(request: Request):
     config_dict = config_to_dict(config)
 
     config_dict["health"]["enabled"] = form.get("enabled") == "on"
-    config_dict["health"]["port"] = int(form.get("port", 8095))
+    try:
+        config_dict["health"]["port"] = int(form.get("port", 8095))
+    except ValueError:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">Port must be a valid integer.</div>',
+            status_code=422,
+        )
 
     return _save_and_respond(request, config_dict, holder, "health")
 
