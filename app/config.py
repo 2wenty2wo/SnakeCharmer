@@ -319,6 +319,13 @@ def get_config_errors(config: AppConfig) -> list[str]:
                     "trakt.sources[].medusa.required_words must be a list of non-empty strings"
                 )
 
+    if config.sync.interval < 0:
+        errors.append("sync.interval must be >= 0")
+    if config.sync.max_retries < 0:
+        errors.append("sync.max_retries must be >= 0")
+    if config.sync.retry_backoff <= 0:
+        errors.append("sync.retry_backoff must be > 0")
+
     return errors
 
 
