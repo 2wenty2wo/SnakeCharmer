@@ -2472,3 +2472,126 @@ class TestResponsiveMetaTags:
 
         assert response.status_code == 200
         assert 'name="description"' in response.text
+
+
+# --- CSRF guard coverage for every mutating endpoint ---
+
+
+def _raw_client_with_sync_and_queue(tmp_path):
+    """Build an app with sync manager and pending queue and return a raw TestClient."""
+    config = _make_config()
+    config_path = str(tmp_path / "config.yaml")
+    save_app_config(config, config_path)
+    config.config_dir = str(tmp_path)
+    holder = ConfigHolder(config=config, config_path=config_path)
+    sync_status = SyncStatus()
+    pq = PendingQueue(config_dir=str(tmp_path))
+    sync_manager = SyncManager(
+        config_holder=holder,
+        sync_status=sync_status,
+        pending_queue=pq,
+    )
+    app = create_app(
+        holder,
+        sync_status=sync_status,
+        sync_manager=sync_manager,
+        pending_queue=pq,
+    )
+    return TestClient(app)
+
+
+class TestCSRFGuards:
+    """Every mutating endpoint should return 403 when no CSRF credentials are sent."""
+
+    @pytest.mark.parametrize(
+        "method,path,payload",
+        [
+            ("POST", "/config/trakt/sources/add", {}),
+            ("DELETE", "/config/trakt/sources/0", None),
+            ("POST", "/config/medusa", {}),
+            ("POST", "/config/sync", {}),
+            ("POST", "/config/health", {}),
+            ("POST", "/config/notify", {}),
+            ("POST", "/sync/run", {}),
+            ("POST", "/config/trakt/sources/preview", {}),
+            ("POST", "/pending/approve/123", {}),
+            ("POST", "/pending/reject/123", {}),
+            ("POST", "/pending/bulk-approve", {}),
+            ("POST", "/pending/bulk-reject", {}),
+            ("POST", "/pending/bulk-action", {"action": "approve"}),
+            ("POST", "/oauth/trakt/start", {"client_id": "x", "client_secret": "y"}),
+            (
+                "POST",
+                "/oauth/trakt/poll",
+                {
+                    "device_code": "abc",
+                    "client_id": "x",
+                    "client_secret": "y",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            ),
+            ("POST", "/test/trakt", {"client_id": "x"}),
+            ("POST", "/test/medusa", {"url": "http://x", "api_key": "y"}),
+            ("POST", "/test/notify", {"urls": "json://localhost"}),
+        ],
+    )
+    def test_csrf_required_for_mutating_endpoint(self, tmp_path, method, path, payload):
+        client = _raw_client_with_sync_and_queue(tmp_path)
+        if method == "POST":
+            response = client.post(path, data=payload or {})
+        elif method == "DELETE":
+            response = client.delete(path)
+        else:  # pragma: no cover - only POST/DELETE parameterized
+            raise AssertionError(f"unexpected method {method}")
+        assert response.status_code == 403, (
+            f"{method} {path} should return 403 without CSRF, got {response.status_code}: "
+            f"{response.text[:200]}"
+        )
+        assert "csrf" in response.text.lower()
+
+
+# --- ValueError paths for bulk approve/reject and oauth poll ---
+
+
+class TestMalformedInputs:
+    def test_bulk_approve_non_integer_tvdb_id_returns_422(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.post(
+            "/pending/bulk-approve",
+            data={"tvdb_ids": ["not-a-number"]},
+        )
+
+        assert response.status_code == 422
+        assert "Invalid selection" in response.text
+
+    def test_bulk_reject_non_integer_tvdb_id_returns_422(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.post(
+            "/pending/bulk-reject",
+            data={"tvdb_ids": ["not-a-number"]},
+        )
+
+        assert response.status_code == 422
+        assert "Invalid selection" in response.text
+
+    def test_oauth_poll_invalid_interval_returns_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/oauth/trakt/poll",
+            data={
+                "device_code": "abc",
+                "client_id": "test_id",
+                "client_secret": "secret",
+                "interval": "not-a-number",
+                "expires_in": "600",
+            },
+        )
+        assert response.status_code == 200
+        assert "Invalid OAuth polling parameters" in response.text
