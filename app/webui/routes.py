@@ -641,7 +641,14 @@ async def bulk_approve(request: Request):
         tvdb_ids = [s.tvdb_id for s in shows]
     else:
         # Approve selected shows
-        tvdb_ids = [int(v) for v in form.getlist("tvdb_ids") if v]
+        try:
+            tvdb_ids = [int(v) for v in form.getlist("tvdb_ids") if v]
+        except (TypeError, ValueError):
+            return HTMLResponse(
+                '<div class="banner error" role="alert">'
+                "Invalid selection. Please refresh the page and try again.</div>",
+                status_code=422,
+            )
 
     if not tvdb_ids:
         return HTMLResponse('<div class="banner warning">No shows selected.</div>')
@@ -702,7 +709,14 @@ async def bulk_reject(request: Request):
         return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
 
     form = await request.form()
-    tvdb_ids = [int(v) for v in form.getlist("tvdb_ids") if v]
+    try:
+        tvdb_ids = [int(v) for v in form.getlist("tvdb_ids") if v]
+    except (TypeError, ValueError):
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            "Invalid selection. Please refresh the page and try again.</div>",
+            status_code=422,
+        )
 
     if not tvdb_ids:
         return HTMLResponse('<div class="banner warning">No shows selected.</div>')
