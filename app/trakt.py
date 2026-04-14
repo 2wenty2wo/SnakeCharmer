@@ -275,8 +275,8 @@ class TraktClient(RetryClient):
 
         user_code = device["user_code"]
         verification_url = device["verification_url"]
-        expires_in = device["expires_in"]
-        interval = device["interval"]
+        expires_in = int(device["expires_in"])
+        interval = int(device["interval"])
 
         print()
         print("=" * 50)
