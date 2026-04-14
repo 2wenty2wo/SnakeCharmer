@@ -2,49 +2,17 @@ import logging
 
 import requests
 
-from app.config import MedusaConfig
+from app.config import (
+    _QUALITY_BY_NAME,
+    _QUALITY_VALUES,
+    MedusaConfig,
+)
 from app.http_client import REQUEST_TIMEOUT, RetryClient
 
 # Re-export for backward compatibility
 __all__ = ["MedusaClient", "REQUEST_TIMEOUT", "resolve_quality"]
 
 log = logging.getLogger(__name__)
-
-# Medusa individual quality values (bitmask flags)
-_QUALITY_VALUES = {
-    "na": 0,
-    "unknown": 1,
-    "sdtv": 2,
-    "sddvd": 4,
-    "hdtv": 8,
-    "rawhdtv": 16,
-    "fullhdtv": 32,
-    "hdwebdl": 64,
-    "fullhdwebdl": 128,
-    "hdbluray": 256,
-    "fullhdbluray": 512,
-    "uhd4ktv": 1024,
-    "uhd4kwebdl": 2048,
-    "uhd4kbluray": 4096,
-    "uhd8ktv": 8192,
-    "uhd8kwebdl": 16384,
-    "uhd8kbluray": 32768,
-}
-
-# Medusa quality presets (bitmask combinations of individual values)
-_QUALITY_PRESETS = {
-    "any": 65518,
-    "sd": 6,
-    "hd": 1000,
-    "hd720p": 328,
-    "hd1080p": 672,
-    "uhd": 64512,
-    "uhd4k": 7168,
-    "uhd8k": 57344,
-}
-
-# Combined lookup: name → bitmask value
-_QUALITY_BY_NAME = {**_QUALITY_VALUES, **_QUALITY_PRESETS}
 
 
 def _bitmask_to_quality_list(bitmask: int) -> list[int]:
@@ -100,7 +68,10 @@ class MedusaClient(RetryClient):
         for series in series_list:
             tvdb_id = series.get("id", {}).get("tvdb")
             if tvdb_id:
-                tvdb_ids.add(int(tvdb_id))
+                try:
+                    tvdb_ids.add(int(tvdb_id))
+                except (ValueError, TypeError):
+                    log.warning("Skipping series with malformed TVDB ID: %r", tvdb_id)
 
         log.info("Found %d existing shows in Medusa", len(tvdb_ids))
         return tvdb_ids
@@ -115,13 +86,18 @@ class MedusaClient(RetryClient):
             tvdb_id = series.get("id", {}).get("tvdb")
             if not tvdb_id:
                 continue
+            try:
+                tvdb_id_int = int(tvdb_id)
+            except (ValueError, TypeError):
+                log.warning("Skipping series with malformed TVDB ID: %r", tvdb_id)
+                continue
             year = series.get("year")
             if isinstance(year, dict):
                 year = year.get("start") or year.get("end")
             shows.append(
                 {
                     "title": series.get("title", "Unknown"),
-                    "tvdb_id": int(tvdb_id),
+                    "tvdb_id": tvdb_id_int,
                     "imdb_id": series.get("id", {}).get("imdb"),
                     "year": year,
                     "status": series.get("status"),

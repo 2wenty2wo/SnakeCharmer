@@ -92,6 +92,8 @@ class TraktClient(RetryClient):
             type="user_list",
             owner=self.config.username,
             list_slug=list_name,
+            # When a bare string is provided we treat it as a user list owned by the
+            # configured user. Default to requiring auth so private lists work.
             auth=True,
         )
 
@@ -124,7 +126,10 @@ class TraktClient(RetryClient):
                 if show:
                     shows.append(show)
 
-            page_count = int(resp.headers.get("X-Pagination-Page-Count", 1))
+            try:
+                page_count = int(resp.headers.get("X-Pagination-Page-Count", 1))
+            except (ValueError, TypeError):
+                page_count = 1
             if params["page"] >= page_count:
                 break
             params["page"] += 1
@@ -156,6 +161,12 @@ class TraktClient(RetryClient):
             log.warning("Skipping '%s' - no TVDB ID available", title)
             return None
 
+        try:
+            tvdb_id_int = int(tvdb_id)
+        except (ValueError, TypeError):
+            log.warning("Skipping '%s' - malformed TVDB ID: %r", title, tvdb_id)
+            return None
+
         # Extract poster URL from images
         poster_url = None
         images = data.get("images", {})
@@ -185,7 +196,7 @@ class TraktClient(RetryClient):
 
         return TraktShow(
             title=title,
-            tvdb_id=int(tvdb_id),
+            tvdb_id=tvdb_id_int,
             imdb_id=ids.get("imdb"),
             year=data.get("year"),
             poster_url=poster_url,
@@ -316,6 +327,13 @@ class TraktClient(RetryClient):
                     # Slow down
                     time.sleep(interval)
                     continue
+                else:
+                    log.error(
+                        "Unexpected poll response %d: %s",
+                        poll_resp.status_code,
+                        poll_resp.text,
+                    )
+                    break
             except requests.RequestException as e:
                 log.warning("Poll request failed: %s", e)
                 continue

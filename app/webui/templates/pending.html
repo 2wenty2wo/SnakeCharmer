@@ -43,6 +43,7 @@
       hx-post="/pending/bulk-action"
       hx-target="#result-banner"
       hx-swap="innerHTML">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="bulk-actions-bar">
         <label class="select-all-label">
             <input type="checkbox" id="select-all" onchange="toggleSelectAll(this)" aria-label="Select all shows">

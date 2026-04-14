@@ -8,19 +8,29 @@ from fastapi.responses import HTMLResponse
 from app.config import MedusaConfig, TraktConfig, TraktSource
 from app.medusa import MedusaClient
 from app.trakt import TraktClient
+from app.webui.csrf import verify_csrf
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def _holder(request: Request):
-    return request.app.state.config_holder
+async def _require_csrf(request: Request) -> HTMLResponse | None:
+    error = await verify_csrf(request)
+    if error:
+        return HTMLResponse(
+            f'<div class="banner error" role="alert">{escape(error)}</div>',
+            status_code=403,
+        )
+    return None
 
 
 @router.post("/test/trakt", response_class=HTMLResponse)
 async def test_trakt(request: Request):
     """Test Trakt API connection using current form values."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     form = await request.form()
     client_id = form.get("client_id", "").strip()
     if not client_id:
@@ -33,8 +43,8 @@ async def test_trakt(request: Request):
             sources=[TraktSource(type="trending")],
             limit=1,
         )
-        client = TraktClient(trakt_config, max_retries=1, retry_backoff=1.0)
-        shows = client.get_shows(TraktSource(type="trending"))
+        with TraktClient(trakt_config, max_retries=1, retry_backoff=1.0) as client:
+            shows = client.get_shows(TraktSource(type="trending"))
         return HTMLResponse(
             '<div class="banner success" role="alert">'
             f"Trakt connection successful! Fetched {len(shows)} trending show(s).</div>"
@@ -61,6 +71,9 @@ async def test_trakt(request: Request):
 @router.post("/test/medusa", response_class=HTMLResponse)
 async def test_medusa(request: Request):
     """Test Medusa API connection using current form values."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     form = await request.form()
     url = form.get("url", "").strip()
     api_key = form.get("api_key", "").strip()
@@ -70,8 +83,8 @@ async def test_medusa(request: Request):
         )
     try:
         medusa_config = MedusaConfig(url=url.rstrip("/"), api_key=api_key)
-        client = MedusaClient(medusa_config, max_retries=1, retry_backoff=1.0)
-        tvdb_ids = client.get_existing_tvdb_ids()
+        with MedusaClient(medusa_config, max_retries=1, retry_backoff=1.0) as client:
+            tvdb_ids = client.get_existing_tvdb_ids()
         return HTMLResponse(
             '<div class="banner success" role="alert">'
             f"Medusa connection successful! Found {len(tvdb_ids)} show(s) in library.</div>"
@@ -98,6 +111,9 @@ async def test_medusa(request: Request):
 @router.post("/test/notify", response_class=HTMLResponse)
 async def test_notify(request: Request):
     """Send a test notification using current form URLs."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     form = await request.form()
     urls_raw = form.get("urls", "")
     urls = [u.strip() for u in urls_raw.splitlines() if u.strip()]

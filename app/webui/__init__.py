@@ -100,6 +100,10 @@ def create_app(
     templates.env.filters["format_timestamp"] = format_timestamp
     templates.env.filters["format_timestamp_short"] = format_timestamp_short
 
+    from app.webui.csrf import CSRFMiddleware
+
+    app.add_middleware(CSRFMiddleware)
+
     static_dir = WEBUI_DIR / "static"
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 

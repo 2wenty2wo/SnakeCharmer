@@ -42,6 +42,42 @@ ENV_MAP = {
     "SNAKECHARMER_NOTIFY_URLS": ("notify", "urls"),
 }
 
+# Medusa individual quality values (bitmask flags)
+_QUALITY_VALUES = {
+    "na": 0,
+    "unknown": 1,
+    "sdtv": 2,
+    "sddvd": 4,
+    "hdtv": 8,
+    "rawhdtv": 16,
+    "fullhdtv": 32,
+    "hdwebdl": 64,
+    "fullhdwebdl": 128,
+    "hdbluray": 256,
+    "fullhdbluray": 512,
+    "uhd4ktv": 1024,
+    "uhd4kwebdl": 2048,
+    "uhd4kbluray": 4096,
+    "uhd8ktv": 8192,
+    "uhd8kwebdl": 16384,
+    "uhd8kbluray": 32768,
+}
+
+# Medusa quality presets (bitmask combinations of individual values)
+_QUALITY_PRESETS = {
+    "any": 65518,
+    "sd": 6,
+    "hd": 1000,
+    "hd720p": 328,
+    "hd1080p": 672,
+    "uhd": 64512,
+    "uhd4k": 7168,
+    "uhd8k": 57344,
+}
+
+# Combined lookup: name → bitmask value
+_QUALITY_BY_NAME = {**_QUALITY_VALUES, **_QUALITY_PRESETS}
+
 
 def load_config(path: str, skip_validate: bool = False) -> AppConfig:
     """Load configuration from YAML file with environment variable overrides."""
@@ -258,6 +294,19 @@ def get_config_errors(config: AppConfig) -> list[str]:
             errors.append("trakt.sources[].medusa.quality must be a string or list of strings")
         if isinstance(quality, list) and any(not isinstance(item, str) for item in quality):
             errors.append("trakt.sources[].medusa.quality must be a string or list of strings")
+        if isinstance(quality, str) and quality.strip().lower() not in _QUALITY_BY_NAME:
+            errors.append(
+                f"trakt.sources[].medusa.quality contains invalid value '{quality}'. "
+                f"Valid values: {', '.join(sorted(_QUALITY_BY_NAME))}"
+            )
+        if isinstance(quality, list) and all(isinstance(item, str) for item in quality):
+            invalid = [q for q in quality if q.strip().lower() not in _QUALITY_BY_NAME]
+            if invalid:
+                errors.append(
+                    f"trakt.sources[].medusa.quality contains invalid value(s) "
+                    f"{', '.join(repr(q) for q in invalid)}. "
+                    f"Valid values: {', '.join(sorted(_QUALITY_BY_NAME))}"
+                )
 
         required_words = source.medusa.required_words
         if not isinstance(required_words, list):

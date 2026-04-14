@@ -9,11 +9,22 @@ from app.config import ConfigError, TraktConfig, TraktSource, get_config_errors,
 from app.medusa import MedusaClient
 from app.trakt import TraktClient
 from app.webui.config_io import config_to_dict, load_config_dict, save_config
+from app.webui.csrf import template_context, verify_csrf
 from app.webui.oauth import _get_trakt_token_status
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _require_csrf(request: Request) -> HTMLResponse | None:
+    error = await verify_csrf(request)
+    if error:
+        return HTMLResponse(
+            f'<div class="banner error" role="alert">{escape(error)}</div>',
+            status_code=403,
+        )
+    return None
 
 
 def _templates(request: Request):
@@ -109,15 +120,16 @@ async def dashboard(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "dashboard.html",
-        context={
-            "config": config,
-            "config_errors": config_errors,
-            "health": health_snapshot,
-            "sync_running": sync_running,
-            "stats": stats,
-            "next_sync": next_sync,
-            "active_page": "dashboard",
-        },
+        context=template_context(
+            request,
+            config=config,
+            config_errors=config_errors,
+            health=health_snapshot,
+            sync_running=sync_running,
+            stats=stats,
+            next_sync=next_sync,
+            active_page="dashboard",
+        ),
     )
 
 
@@ -145,11 +157,12 @@ async def dashboard_stats(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "dashboard_stats.html",
-        context={
-            "stats": stats,
-            "config": config,
-            "next_sync": next_sync,
-        },
+        context=template_context(
+            request,
+            stats=stats,
+            config=config,
+            next_sync=next_sync,
+        ),
     )
 
 
@@ -164,10 +177,11 @@ async def dashboard_status(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "dashboard_status.html",
-        context={
-            "health": health_snapshot,
-            "sync_running": sync_running,
-        },
+        context=template_context(
+            request,
+            health=health_snapshot,
+            sync_running=sync_running,
+        ),
     )
 
 
@@ -180,16 +194,20 @@ async def config_trakt(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/trakt.html",
-        context={
-            "config": config,
-            "active_page": "trakt",
-            "trakt_token_status": _get_trakt_token_status(config),
-        },
+        context=template_context(
+            request,
+            config=config,
+            active_page="trakt",
+            trakt_token_status=_get_trakt_token_status(config),
+        ),
     )
 
 
 @router.post("/config/trakt", response_class=HTMLResponse)
 async def save_trakt(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     holder = _holder(request)
     form = await request.form()
     config = holder.get()
@@ -198,7 +216,13 @@ async def save_trakt(request: Request):
     config_dict["trakt"]["client_id"] = form.get("client_id", "")
     config_dict["trakt"]["client_secret"] = form.get("client_secret", "")
     config_dict["trakt"]["username"] = form.get("username", "")
-    config_dict["trakt"]["limit"] = int(form.get("limit", 50))
+    try:
+        config_dict["trakt"]["limit"] = int(form.get("limit", 50))
+    except ValueError:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">Limit must be a valid integer.</div>',
+            status_code=422,
+        )
 
     # Parse sources from form
     sources = _parse_sources_from_form(form)
@@ -209,18 +233,24 @@ async def save_trakt(request: Request):
 
 @router.post("/config/trakt/sources/add", response_class=HTMLResponse)
 async def add_source(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     config = _holder(request).get()
     index = len(config.trakt.sources)
     source = TraktSource(type="trending")
     return _templates(request).TemplateResponse(
         request,
         "config/source_row.html",
-        context={"source": source, "index": index},
+        context=template_context(request, source=source, index=index),
     )
 
 
 @router.delete("/config/trakt/sources/{index}", response_class=HTMLResponse)
 async def delete_source(request: Request, index: int):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     return HTMLResponse("")
 
 
@@ -233,12 +263,15 @@ async def config_medusa(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/medusa.html",
-        context={"config": config, "active_page": "medusa"},
+        context=template_context(request, config=config, active_page="medusa"),
     )
 
 
 @router.post("/config/medusa", response_class=HTMLResponse)
 async def save_medusa(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     holder = _holder(request)
     form = await request.form()
     config = holder.get()
@@ -259,21 +292,30 @@ async def config_sync(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/sync.html",
-        context={"config": config, "active_page": "sync"},
+        context=template_context(request, config=config, active_page="sync"),
     )
 
 
 @router.post("/config/sync", response_class=HTMLResponse)
 async def save_sync(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     holder = _holder(request)
     form = await request.form()
     config = holder.get()
     config_dict = config_to_dict(config)
 
     config_dict["sync"]["dry_run"] = form.get("dry_run") == "on"
-    config_dict["sync"]["interval"] = int(form.get("interval", 0))
-    config_dict["sync"]["max_retries"] = int(form.get("max_retries", 3))
-    config_dict["sync"]["retry_backoff"] = float(form.get("retry_backoff", 2.0))
+    try:
+        config_dict["sync"]["interval"] = int(form.get("interval", 0))
+        config_dict["sync"]["max_retries"] = int(form.get("max_retries", 3))
+        config_dict["sync"]["retry_backoff"] = float(form.get("retry_backoff", 2.0))
+    except ValueError:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">Sync settings must be valid numbers.</div>',
+            status_code=422,
+        )
     config_dict["sync"]["log_format"] = form.get("log_format", "text")
 
     return _save_and_respond(request, config_dict, holder, "sync")
@@ -288,19 +330,28 @@ async def config_health(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/health.html",
-        context={"config": config, "active_page": "health"},
+        context=template_context(request, config=config, active_page="health"),
     )
 
 
 @router.post("/config/health", response_class=HTMLResponse)
 async def save_health(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     holder = _holder(request)
     form = await request.form()
     config = holder.get()
     config_dict = config_to_dict(config)
 
     config_dict["health"]["enabled"] = form.get("enabled") == "on"
-    config_dict["health"]["port"] = int(form.get("port", 8095))
+    try:
+        config_dict["health"]["port"] = int(form.get("port", 8095))
+    except ValueError:
+        return HTMLResponse(
+            '<div class="banner error" role="alert">Port must be a valid integer.</div>',
+            status_code=422,
+        )
 
     return _save_and_respond(request, config_dict, holder, "health")
 
@@ -314,12 +365,15 @@ async def config_notify(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/notify.html",
-        context={"config": config, "active_page": "notify"},
+        context=template_context(request, config=config, active_page="notify"),
     )
 
 
 @router.post("/config/notify", response_class=HTMLResponse)
 async def save_notify(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     holder = _holder(request)
     form = await request.form()
     config = holder.get()
@@ -354,6 +408,9 @@ async def health_json(request: Request):
 @router.post("/sync/run", response_class=HTMLResponse)
 async def sync_run(request: Request):
     """Trigger a manual sync from the web UI."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     sync_manager = _sync_manager(request)
     if sync_manager is None:
         return HTMLResponse(
@@ -396,13 +453,14 @@ async def sync_history(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "sync/history.html",
-        context={
-            "history": history,
-            "active_page": "history",
-            "page": page,
-            "total_pages": total_pages,
-            "total_runs": total,
-        },
+        context=template_context(
+            request,
+            history=history,
+            active_page="history",
+            page=page,
+            total_pages=total_pages,
+            total_runs=total,
+        ),
     )
 
 
@@ -412,6 +470,9 @@ async def sync_history(request: Request):
 @router.post("/config/trakt/sources/preview", response_class=HTMLResponse)
 async def source_preview(request: Request):
     """Preview shows from a Trakt source."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     form = await request.form()
     client_id = form.get("client_id", "").strip()
     if not client_id:
@@ -442,17 +503,17 @@ async def source_preview(request: Request):
             auth=source_auth if source_auth else None,
         )
         config = _holder(request).get()
-        client = TraktClient(
+        with TraktClient(
             trakt_config,
             config_dir=config.config_dir,
             max_retries=1,
             retry_backoff=1.0,
-        )
-        shows = client.get_shows(source)
+        ) as client:
+            shows = client.get_shows(source)
         return _templates(request).TemplateResponse(
             request,
             "config/source_preview.html",
-            context={"shows": shows},
+            context=template_context(request, shows=shows),
         )
     except Exception:
         log.exception("Source preview failed")
@@ -487,17 +548,21 @@ async def pending_page(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "pending.html",
-        context={
-            "pending_shows": pending_shows,
-            "pending_count": pending_count,
-            "active_page": "pending",
-        },
+        context=template_context(
+            request,
+            pending_shows=pending_shows,
+            pending_count=pending_count,
+            active_page="pending",
+        ),
     )
 
 
 @router.post("/pending/approve/{tvdb_id}", response_class=HTMLResponse)
 async def approve_single(request: Request, tvdb_id: int):
     """Approve a single pending show and add it to Medusa."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     pending_queue = _get_pending_queue(request)
     if pending_queue is None:
         return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
@@ -508,14 +573,14 @@ async def approve_single(request: Request, tvdb_id: int):
 
     # Add to Medusa
     try:
-        medusa_client = _get_medusa_client(request)
-        add_options = {}
-        if show.quality:
-            add_options["quality"] = show.quality
-        if show.required_words:
-            add_options["required_words"] = show.required_words
+        with _get_medusa_client(request) as medusa_client:
+            add_options = {}
+            if show.quality:
+                add_options["quality"] = show.quality
+            if show.required_words:
+                add_options["required_words"] = show.required_words
 
-        medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
+            medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
 
         # Remove from pending queue
         pending_queue.approve_show(tvdb_id)
@@ -537,6 +602,9 @@ async def approve_single(request: Request, tvdb_id: int):
 @router.post("/pending/reject/{tvdb_id}", response_class=HTMLResponse)
 async def reject_single(request: Request, tvdb_id: int):
     """Reject a single pending show."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     pending_queue = _get_pending_queue(request)
     if pending_queue is None:
         return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
@@ -556,6 +624,9 @@ async def reject_single(request: Request, tvdb_id: int):
 @router.post("/pending/bulk-approve", response_class=HTMLResponse)
 async def bulk_approve(request: Request):
     """Approve multiple pending shows."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     pending_queue = _get_pending_queue(request)
     if pending_queue is None:
         return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
@@ -569,7 +640,14 @@ async def bulk_approve(request: Request):
         tvdb_ids = [s.tvdb_id for s in shows]
     else:
         # Approve selected shows
-        tvdb_ids = [int(v) for v in form.getlist("tvdb_ids") if v]
+        try:
+            tvdb_ids = [int(v) for v in form.getlist("tvdb_ids") if v]
+        except (TypeError, ValueError):
+            return HTMLResponse(
+                '<div class="banner error" role="alert">'
+                "Invalid selection. Please refresh the page and try again.</div>",
+                status_code=422,
+            )
 
     if not tvdb_ids:
         return HTMLResponse('<div class="banner warning">No shows selected.</div>')
@@ -578,25 +656,27 @@ async def bulk_approve(request: Request):
     failed = []
 
     try:
-        medusa_client = _get_medusa_client(request)
-        for tvdb_id in tvdb_ids:
-            show = pending_queue.get_show(tvdb_id)
-            if show is None:
-                continue
+        with _get_medusa_client(request) as medusa_client:
+            for tvdb_id in tvdb_ids:
+                show = pending_queue.get_show(tvdb_id)
+                if show is None:
+                    continue
 
-            add_options = {}
-            if show.quality:
-                add_options["quality"] = show.quality
-            if show.required_words:
-                add_options["required_words"] = show.required_words
+                add_options = {}
+                if show.quality:
+                    add_options["quality"] = show.quality
+                if show.required_words:
+                    add_options["required_words"] = show.required_words
 
-            try:
-                medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
-                pending_queue.approve_show(tvdb_id)
-                approved.append(show.title)
-            except Exception:
-                log.exception("Failed to add show '%s' (tvdb:%d)", show.title, show.tvdb_id)
-                failed.append(show.title)
+                try:
+                    medusa_client.add_show(
+                        show.tvdb_id, show.title, add_options=add_options or None
+                    )
+                    pending_queue.approve_show(tvdb_id)
+                    approved.append(show.title)
+                except Exception:
+                    log.exception("Failed to add show '%s' (tvdb:%d)", show.title, show.tvdb_id)
+                    failed.append(show.title)
     except Exception:
         log.exception("Failed to connect to Medusa during bulk approve")
         return HTMLResponse(
@@ -620,12 +700,22 @@ async def bulk_approve(request: Request):
 @router.post("/pending/bulk-reject", response_class=HTMLResponse)
 async def bulk_reject(request: Request):
     """Reject multiple pending shows."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     pending_queue = _get_pending_queue(request)
     if pending_queue is None:
         return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
 
     form = await request.form()
-    tvdb_ids = [int(v) for v in form.getlist("tvdb_ids") if v]
+    try:
+        tvdb_ids = [int(v) for v in form.getlist("tvdb_ids") if v]
+    except (TypeError, ValueError):
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            "Invalid selection. Please refresh the page and try again.</div>",
+            status_code=422,
+        )
 
     if not tvdb_ids:
         return HTMLResponse('<div class="banner warning">No shows selected.</div>')
@@ -643,6 +733,9 @@ async def bulk_reject(request: Request):
 @router.post("/pending/bulk-action", response_class=HTMLResponse)
 async def bulk_action(request: Request):
     """Handle bulk action form submission."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     form = await request.form()
     action = form.get("action")
 
@@ -734,7 +827,7 @@ def _save_and_respond(request: Request, config_dict: dict, holder, section: str)
             '<div class="banner error" role="alert"><strong>Validation errors:</strong><ul>'
         )
         for err in e.errors:
-            error_html += f"<li>{err}</li>"
+            error_html += f"<li>{escape(err)}</li>"
         error_html += "</ul></div>"
         return HTMLResponse(error_html, status_code=422)
     except Exception:

@@ -116,11 +116,20 @@ class PendingQueue:
             if show.tvdb_id in self._pending:
                 log.debug("Show already in pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
                 return False
+            pending_snapshot = self._pending.copy()
+            history_snapshot = list(self._history)
+            original_discovered_at = show.discovered_at
             if not show.discovered_at:
                 show.discovered_at = self._now_iso()
             self._pending[show.tvdb_id] = show
             self._add_to_history(show, "added")
-            self._save()
+            try:
+                self._save()
+            except OSError:
+                show.discovered_at = original_discovered_at
+                self._pending = pending_snapshot
+                self._history = history_snapshot
+                raise
             log.info("Added to pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
             return True
 
@@ -144,10 +153,19 @@ class PendingQueue:
             show = self._pending.get(tvdb_id)
             if show is None:
                 return None
+            pending_snapshot = self._pending.copy()
+            history_snapshot = list(self._history)
+            original_status = show.status
             show.status = "approved"
             self._add_to_history(show, "approved")
             del self._pending[tvdb_id]
-            self._save()
+            try:
+                self._save()
+            except OSError:
+                show.status = original_status
+                self._pending = pending_snapshot
+                self._history = history_snapshot
+                raise
             log.info("Approved from pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
             return show
 
@@ -160,10 +178,19 @@ class PendingQueue:
             show = self._pending.get(tvdb_id)
             if show is None:
                 return None
+            pending_snapshot = self._pending.copy()
+            history_snapshot = list(self._history)
+            original_status = show.status
             show.status = "rejected"
             self._add_to_history(show, "rejected")
             del self._pending[tvdb_id]
-            self._save()
+            try:
+                self._save()
+            except OSError:
+                show.status = original_status
+                self._pending = pending_snapshot
+                self._history = history_snapshot
+                raise
             log.info("Rejected from pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
             return show
 
@@ -171,15 +198,27 @@ class PendingQueue:
         """Approve multiple shows at once."""
         approved = []
         with self._lock:
+            pending_snapshot = self._pending.copy()
+            history_snapshot = list(self._history)
+            mutated = []
             for tvdb_id in tvdb_ids:
                 show = self._pending.get(tvdb_id)
                 if show and show.status == "pending":
+                    mutated.append((show, show.status))
                     show.status = "approved"
                     self._add_to_history(show, "approved")
                     del self._pending[tvdb_id]
                     approved.append(show)
             if approved:
-                self._save()
+                try:
+                    self._save()
+                except OSError:
+                    for show, original_status in mutated:
+                        show.status = original_status
+                    self._pending = pending_snapshot
+                    self._history = history_snapshot
+                    approved.clear()
+                    raise
                 log.info("Bulk approved %d shows from pending queue", len(approved))
         return approved
 
@@ -187,15 +226,27 @@ class PendingQueue:
         """Reject multiple shows at once."""
         rejected = []
         with self._lock:
+            pending_snapshot = self._pending.copy()
+            history_snapshot = list(self._history)
+            mutated = []
             for tvdb_id in tvdb_ids:
                 show = self._pending.get(tvdb_id)
                 if show and show.status == "pending":
+                    mutated.append((show, show.status))
                     show.status = "rejected"
                     self._add_to_history(show, "rejected")
                     del self._pending[tvdb_id]
                     rejected.append(show)
             if rejected:
-                self._save()
+                try:
+                    self._save()
+                except OSError:
+                    for show, original_status in mutated:
+                        show.status = original_status
+                    self._pending = pending_snapshot
+                    self._history = history_snapshot
+                    rejected.clear()
+                    raise
                 log.info("Bulk rejected %d shows from pending queue", len(rejected))
         return rejected
 
@@ -218,6 +269,13 @@ class PendingQueue:
         """Clear all pending shows (for testing). Returns count cleared."""
         with self._lock:
             count = len(self._pending)
+            pending_snapshot = self._pending.copy()
+            history_snapshot = list(self._history)
             self._pending.clear()
-            self._save()
+            try:
+                self._save()
+            except OSError:
+                self._pending = pending_snapshot
+                self._history = history_snapshot
+                raise
             return count

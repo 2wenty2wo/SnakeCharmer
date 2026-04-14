@@ -7,6 +7,7 @@
 </div>
 
 <form class="form-config" hx-post="/config/notify" hx-target="#result-banner" hx-swap="innerHTML" id="notify-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-grid">
     <fieldset>
         <legend>Notification Settings</legend>
@@ -62,7 +63,7 @@
                 hx-post="/test/notify"
                 hx-target="#result-banner"
                 hx-swap="innerHTML"
-                hx-include="[name='urls']"
+                hx-include="[name='csrf_token'],[name='urls']"
                 {% if not config.notify.urls %}disabled title="Add notification URLs first"{% endif %}>
             <i data-lucide="send" style="width:14px;height:14px"></i>
             Send Test

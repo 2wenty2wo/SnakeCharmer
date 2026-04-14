@@ -51,6 +51,17 @@ class TestGetExistingTvdbIds:
         assert ids == {123}
         assert 0 not in ids
 
+    def test_skips_malformed_tvdb_ids(self, client):
+        series = [
+            {"id": {"tvdb": 123}},
+            {"id": {"tvdb": "bad-id"}},
+            {"id": {"tvdb": 456}},
+        ]
+        with patch.object(client, "_request", return_value=_mock_response(series)):
+            ids = client.get_existing_tvdb_ids()
+
+        assert ids == {123, 456}
+
     def test_invalid_json_response_propagates(self, client):
         """If the API returns non-JSON, the ValueError from .json() should propagate."""
         bad_resp = MagicMock(spec=requests.Response)
@@ -104,6 +115,18 @@ class TestGetSeriesList:
         years = [show["year"] for show in shows]
         assert "2024" in years
         assert 2023 in years
+
+    def test_skips_malformed_tvdb_ids(self, client):
+        series = [
+            {"title": "Good Show", "id": {"tvdb": 1}},
+            {"title": "Bad Show", "id": {"tvdb": "nope"}},
+            {"title": "Another Good", "id": {"tvdb": 2}},
+        ]
+        with patch.object(client, "_request", return_value=_mock_response(series)):
+            shows = client.get_series_list()
+
+        assert len(shows) == 2
+        assert {s["tvdb_id"] for s in shows} == {1, 2}
 
 
 class TestAddShow:

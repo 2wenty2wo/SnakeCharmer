@@ -47,6 +47,37 @@ def _make_config(**overrides) -> AppConfig:
     return AppConfig(**defaults)
 
 
+def _wrap_client_with_csrf(client):
+    """Prime CSRF cookie and monkey-patch post/delete to auto-inject tokens."""
+    client.get("/config/trakt")
+    csrf_token = client.cookies.get("csrftoken")
+
+    original_post = client.post
+
+    def _post(url, data=None, headers=None, **kwargs):
+        headers = dict(headers or {})
+        headers.setdefault("X-CSRF-Token", csrf_token)
+        if data is None:
+            data = {"csrf_token": csrf_token}
+        elif isinstance(data, dict):
+            data = dict(data)
+            data.setdefault("csrf_token", csrf_token)
+        return original_post(url, data=data, headers=headers, **kwargs)
+
+    client.post = _post
+
+    original_delete = client.delete
+
+    def _delete(url, headers=None, **kwargs):
+        headers = dict(headers or {})
+        headers.setdefault("X-CSRF-Token", csrf_token)
+        return original_delete(url, headers=headers, **kwargs)
+
+    client.delete = _delete
+
+    return client
+
+
 def _create_client(tmp_path, config=None, with_sync=False, pending_queue=None):
     config = config or _make_config()
     config_path = str(tmp_path / "config.yaml")
@@ -69,7 +100,8 @@ def _create_client(tmp_path, config=None, with_sync=False, pending_queue=None):
         sync_manager=sync_manager,
         pending_queue=pending_queue,
     )
-    return TestClient(app), holder, config_path
+    client = _wrap_client_with_csrf(TestClient(app))
+    return client, holder, config_path
 
 
 class TestDashboard:
@@ -102,7 +134,7 @@ class TestDashboard:
             )
         )
         app = create_app(holder, sync_status=sync_status)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/")
         assert response.status_code == 200
@@ -119,7 +151,7 @@ class TestDashboard:
         sync_status = SyncStatus()
         sync_status.update(SyncResult(success=True, duration_seconds=2.5))
         app = create_app(holder, sync_status=sync_status)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/dashboard/stats")
         assert response.status_code == 200
@@ -141,7 +173,7 @@ class TestDashboard:
         sync_status = SyncStatus()
         sync_status.update(SyncResult(success=True, duration_seconds=3.5, added=2))
         app = create_app(holder, sync_status=sync_status, pending_queue=pending_queue)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/")
         assert response.status_code == 200
@@ -294,6 +326,85 @@ class TestTraktConfig:
         assert response.status_code == 422
         assert "error" in response.text.lower()
 
+    def test_save_trakt_validation_error_escapes_xss(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "<script>alert(1)</script>",
+            },
+        )
+        assert response.status_code == 422
+        assert "error" in response.text.lower()
+        assert "<script>alert(1)</script>" not in response.text
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
+
+    def test_save_trakt_invalid_limit_returns_validation_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "abc",
+                "source_0_type": "trending",
+            },
+        )
+        assert response.status_code == 422
+        assert "limit must be a valid integer" in response.text.lower()
+
+    def test_save_trakt_rejects_missing_csrf_token(self, tmp_path):
+        from fastapi.testclient import TestClient
+
+        from app.webui import ConfigHolder, create_app
+        from app.webui.config_io import save_app_config
+
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        app = create_app(holder)
+        raw_client = TestClient(app)
+        response = raw_client.post(
+            "/config/trakt",
+            data={"client_id": "x", "client_secret": "x", "username": "x", "limit": "50"},
+        )
+        assert response.status_code == 403
+        assert "csrf" in response.text.lower()
+
+    def test_save_trakt_rejects_invalid_csrf_token(self, tmp_path):
+        from fastapi.testclient import TestClient
+
+        from app.webui import ConfigHolder, create_app
+        from app.webui.config_io import save_app_config
+
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        app = create_app(holder)
+        raw_client = TestClient(app)
+        raw_client.get("/config/trakt")
+        response = raw_client.post(
+            "/config/trakt",
+            data={
+                "client_id": "x",
+                "client_secret": "x",
+                "username": "x",
+                "limit": "50",
+                "csrf_token": "bad-token",
+            },
+        )
+        assert response.status_code == 403
+        assert "csrf" in response.text.lower()
+
     def test_invalid_trakt_save_does_not_overwrite_yaml(self, tmp_path):
         client, _, config_path = _create_client(tmp_path)
         with open(config_path) as f:
@@ -390,6 +501,20 @@ class TestSyncConfig:
         updated = holder.get()
         assert updated.sync.dry_run is False
 
+    def test_save_sync_invalid_interval_returns_validation_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/sync",
+            data={
+                "interval": "abc",
+                "max_retries": "3",
+                "retry_backoff": "2.0",
+                "log_format": "text",
+            },
+        )
+        assert response.status_code == 422
+        assert "sync settings must be valid numbers" in response.text.lower()
+
 
 class TestHealthConfig:
     def test_get_health_page(self, tmp_path):
@@ -408,6 +533,15 @@ class TestHealthConfig:
         updated = holder.get()
         assert updated.health.enabled is True
         assert updated.health.port == 9999
+
+    def test_save_health_invalid_port_returns_validation_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/health",
+            data={"enabled": "on", "port": "abc"},
+        )
+        assert response.status_code == 422
+        assert "port must be a valid integer" in response.text.lower()
 
 
 class TestNotifyConfig:
@@ -521,6 +655,40 @@ class TestSourceWithMedusaOptions:
         updated = holder.get()
         assert updated.trakt.sources[0].medusa.quality == "hd720p"
 
+    def test_save_trakt_with_invalid_quality_string(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_quality": "bogus",
+            },
+        )
+        assert response.status_code == 422
+        assert "bogus" in response.text
+        assert "valid values" in response.text.lower()
+
+    def test_save_trakt_with_invalid_quality_list_item(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_quality": "hdtv, notreal",
+            },
+        )
+        assert response.status_code == 422
+        assert "notreal" in response.text
+        assert "valid values" in response.text.lower()
+
 
 class TestSaveAndRespondErrors:
     def test_unexpected_exception_returns_error_banner(self, tmp_path):
@@ -558,7 +726,7 @@ class TestHealthEndpoint:
         holder = ConfigHolder(config=config, config_path=config_path)
         sync_status = SyncStatus()
         app = create_app(holder, sync_status=sync_status)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/health")
         assert response.status_code == 200
@@ -654,27 +822,29 @@ class TestConfigHolderThreadSafety:
 
 
 class TestWebuiFormEdgeCases:
-    def test_save_sync_non_numeric_interval_raises(self, tmp_path):
-        """Non-numeric values in numeric fields cause an unhandled ValueError."""
+    def test_save_sync_non_numeric_interval_returns_banner(self, tmp_path):
+        """Non-numeric values in numeric fields return a friendly error banner."""
         client, _, _ = _create_client(tmp_path)
-        with pytest.raises(ValueError):
-            client.post(
-                "/config/sync",
-                data={
-                    "interval": "abc",
-                    "max_retries": "3",
-                    "retry_backoff": "2.0",
-                    "log_format": "text",
-                },
-            )
+        response = client.post(
+            "/config/sync",
+            data={
+                "interval": "abc",
+                "max_retries": "3",
+                "retry_backoff": "2.0",
+                "log_format": "text",
+            },
+        )
+        assert response.status_code == 422
+        assert "sync settings must be valid numbers" in response.text.lower()
 
-    def test_save_health_non_numeric_port_raises(self, tmp_path):
+    def test_save_health_non_numeric_port_returns_banner(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
-        with pytest.raises(ValueError):
-            client.post(
-                "/config/health",
-                data={"port": "not_a_port"},
-            )
+        response = client.post(
+            "/config/health",
+            data={"port": "not_a_port"},
+        )
+        assert response.status_code == 422
+        assert "port must be a valid integer" in response.text.lower()
 
     def test_save_trakt_no_sources_returns_validation_error(self, tmp_path):
         """Submitting a Trakt form with no sources should trigger validation."""
@@ -732,7 +902,7 @@ class TestDashboardStatus:
         sync_status.update(SyncResult(added=3, skipped=1, failed=0, success=True))
         sync_manager = SyncManager(config_holder=holder, sync_status=sync_status)
         app = create_app(holder, sync_status=sync_status, sync_manager=sync_manager)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/dashboard/status")
         assert response.status_code == 200
@@ -786,7 +956,7 @@ class TestSyncHistory:
         sync_status = SyncStatus()
         sync_status.update(SyncResult(added=5, failed=0, success=True, unique_shows=10))
         app = create_app(holder, sync_status=sync_status)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/sync/history")
         assert response.status_code == 200
@@ -815,7 +985,7 @@ class TestSyncHistory:
         sync_status = SyncStatus()
         sync_status.update(SyncResult(added=2, success=True))
         app = create_app(holder, sync_status=sync_status)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/sync/history?page=999")
         assert response.status_code == 200
@@ -1071,7 +1241,7 @@ def _create_incomplete_client(tmp_path, with_sync=False):
         sync_status = SyncStatus()
         sync_manager = SyncManager(config_holder=holder, sync_status=sync_status)
     app = create_app(holder, sync_status=sync_status, sync_manager=sync_manager)
-    return TestClient(app), holder, config_path
+    return _wrap_client_with_csrf(TestClient(app)), holder, config_path
 
 
 class TestOnboardingBanner:
@@ -1619,6 +1789,7 @@ class TestPendingApprove:
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.__enter__.return_value = mock_cls.return_value
             mock_cls.return_value.add_show.return_value = True
             response = client.post("/pending/approve/12345")
 
@@ -1641,6 +1812,7 @@ class TestPendingApprove:
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
             mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
             mock_medusa.add_show.return_value = True
             response = client.post("/pending/approve/12345")
 
@@ -1668,6 +1840,7 @@ class TestPendingApprove:
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.__enter__.return_value = mock_cls.return_value
             mock_cls.return_value.add_show.side_effect = requests.ConnectionError("timeout")
             response = client.post("/pending/approve/12345")
 
@@ -1713,6 +1886,7 @@ class TestPendingBulkApprove:
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.__enter__.return_value = mock_cls.return_value
             mock_cls.return_value.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-approve",
@@ -1732,6 +1906,7 @@ class TestPendingBulkApprove:
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.__enter__.return_value = mock_cls.return_value
             mock_cls.return_value.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-approve",
@@ -1763,6 +1938,7 @@ class TestPendingBulkApprove:
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
             mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
             mock_medusa.add_show.side_effect = [True, Exception("Medusa error")]
             response = client.post(
                 "/pending/bulk-approve",
@@ -1795,6 +1971,7 @@ class TestPendingBulkApprove:
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
             mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
             mock_medusa.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-approve",
@@ -1814,6 +1991,7 @@ class TestPendingBulkApprove:
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
             mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
             mock_medusa.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-approve",
@@ -1835,6 +2013,7 @@ class TestPendingBulkApprove:
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
             mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
             mock_medusa.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-approve",
@@ -1882,6 +2061,7 @@ class TestPendingBulkAction:
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.__enter__.return_value = mock_cls.return_value
             mock_cls.return_value.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-action",
@@ -2292,3 +2472,126 @@ class TestResponsiveMetaTags:
 
         assert response.status_code == 200
         assert 'name="description"' in response.text
+
+
+# --- CSRF guard coverage for every mutating endpoint ---
+
+
+def _raw_client_with_sync_and_queue(tmp_path):
+    """Build an app with sync manager and pending queue and return a raw TestClient."""
+    config = _make_config()
+    config_path = str(tmp_path / "config.yaml")
+    save_app_config(config, config_path)
+    config.config_dir = str(tmp_path)
+    holder = ConfigHolder(config=config, config_path=config_path)
+    sync_status = SyncStatus()
+    pq = PendingQueue(config_dir=str(tmp_path))
+    sync_manager = SyncManager(
+        config_holder=holder,
+        sync_status=sync_status,
+        pending_queue=pq,
+    )
+    app = create_app(
+        holder,
+        sync_status=sync_status,
+        sync_manager=sync_manager,
+        pending_queue=pq,
+    )
+    return TestClient(app)
+
+
+class TestCSRFGuards:
+    """Every mutating endpoint should return 403 when no CSRF credentials are sent."""
+
+    @pytest.mark.parametrize(
+        "method,path,payload",
+        [
+            ("POST", "/config/trakt/sources/add", {}),
+            ("DELETE", "/config/trakt/sources/0", None),
+            ("POST", "/config/medusa", {}),
+            ("POST", "/config/sync", {}),
+            ("POST", "/config/health", {}),
+            ("POST", "/config/notify", {}),
+            ("POST", "/sync/run", {}),
+            ("POST", "/config/trakt/sources/preview", {}),
+            ("POST", "/pending/approve/123", {}),
+            ("POST", "/pending/reject/123", {}),
+            ("POST", "/pending/bulk-approve", {}),
+            ("POST", "/pending/bulk-reject", {}),
+            ("POST", "/pending/bulk-action", {"action": "approve"}),
+            ("POST", "/oauth/trakt/start", {"client_id": "x", "client_secret": "y"}),
+            (
+                "POST",
+                "/oauth/trakt/poll",
+                {
+                    "device_code": "abc",
+                    "client_id": "x",
+                    "client_secret": "y",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            ),
+            ("POST", "/test/trakt", {"client_id": "x"}),
+            ("POST", "/test/medusa", {"url": "http://x", "api_key": "y"}),
+            ("POST", "/test/notify", {"urls": "json://localhost"}),
+        ],
+    )
+    def test_csrf_required_for_mutating_endpoint(self, tmp_path, method, path, payload):
+        client = _raw_client_with_sync_and_queue(tmp_path)
+        if method == "POST":
+            response = client.post(path, data=payload or {})
+        elif method == "DELETE":
+            response = client.delete(path)
+        else:  # pragma: no cover - only POST/DELETE parameterized
+            raise AssertionError(f"unexpected method {method}")
+        assert response.status_code == 403, (
+            f"{method} {path} should return 403 without CSRF, got {response.status_code}: "
+            f"{response.text[:200]}"
+        )
+        assert "csrf" in response.text.lower()
+
+
+# --- ValueError paths for bulk approve/reject and oauth poll ---
+
+
+class TestMalformedInputs:
+    def test_bulk_approve_non_integer_tvdb_id_returns_422(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.post(
+            "/pending/bulk-approve",
+            data={"tvdb_ids": ["not-a-number"]},
+        )
+
+        assert response.status_code == 422
+        assert "Invalid selection" in response.text
+
+    def test_bulk_reject_non_integer_tvdb_id_returns_422(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        response = client.post(
+            "/pending/bulk-reject",
+            data={"tvdb_ids": ["not-a-number"]},
+        )
+
+        assert response.status_code == 422
+        assert "Invalid selection" in response.text
+
+    def test_oauth_poll_invalid_interval_returns_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/oauth/trakt/poll",
+            data={
+                "device_code": "abc",
+                "client_id": "test_id",
+                "client_secret": "secret",
+                "interval": "not-a-number",
+                "expires_in": "600",
+            },
+        )
+        assert response.status_code == 200
+        assert "Invalid OAuth polling parameters" in response.text
