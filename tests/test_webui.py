@@ -54,6 +54,8 @@ def _wrap_client_with_csrf(client):
 
     original_post = client.post
     def _post(url, data=None, headers=None, **kwargs):
+        headers = dict(headers or {})
+        headers.setdefault("X-CSRF-Token", csrf_token)
         if data is None:
             data = {"csrf_token": csrf_token}
         elif isinstance(data, dict):

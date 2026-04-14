@@ -37,6 +37,14 @@ async def verify_csrf(request: Request) -> str | None:
     """Validate the CSRF token from form/header against the cookie.
 
     Returns an error message string on failure, or None on success.
+
+    Prefer sending the token in the ``X-CSRF-Token`` header (see ``base.html`` for HTMX)
+    so validation succeeds without reading the body. If the header is absent, the token is
+    read via ``await request.form()``.
+
+    Starlette caches the parsed form on ``Request`` after the first ``await request.form()``
+    call, so a later call in the route handler returns the same ``FormData`` and does not
+    drop fields.
     """
     if request.method in ("GET", "HEAD", "OPTIONS", "TRACE"):
         return None

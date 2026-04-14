@@ -124,7 +124,10 @@ class TraktClient(RetryClient):
                 if show:
                     shows.append(show)
 
-            page_count = int(resp.headers.get("X-Pagination-Page-Count", 1))
+            try:
+                page_count = int(resp.headers.get("X-Pagination-Page-Count", 1))
+            except (ValueError, TypeError):
+                page_count = 1
             if params["page"] >= page_count:
                 break
             params["page"] += 1

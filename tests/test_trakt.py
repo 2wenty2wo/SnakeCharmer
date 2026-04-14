@@ -306,6 +306,19 @@ class TestGetShows:
         assert len(shows) == 1
         mock_request.assert_called_once()
 
+    def test_fetch_user_list_malformed_pagination_header_falls_back_to_one_page(self, client):
+        resp = MagicMock(spec=requests.Response)
+        resp.json.return_value = [{"show": {"title": "Show A", "ids": {"tvdb": 1}}}]
+        resp.status_code = 200
+        resp.headers = {"X-Pagination-Page-Count": "invalid"}
+        resp.raise_for_status.return_value = None
+        with patch.object(client, "_request", return_value=resp) as mock_request:
+            shows = client._fetch_user_list(
+                "/users/test/list/items/shows", "list", nested_key="show"
+            )
+        assert len(shows) == 1
+        mock_request.assert_called_once()
+
 
 class TestAuth:
     def test_load_token_returns_none_when_file_missing(self, client):
