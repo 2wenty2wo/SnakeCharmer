@@ -86,9 +86,6 @@
     <div class="toast-container" id="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
     
     <script>
-    // Initialize Lucide icons
-    lucide.createIcons();
-
     // Inject CSRF token into HTMX requests
     document.body.addEventListener("htmx:configRequest", function(event) {
         var meta = document.querySelector('meta[name="csrf-token"]');
@@ -97,9 +94,18 @@
         }
     });
 
+    function createLucideIcons() {
+        if (window.lucide && typeof window.lucide.createIcons === "function") {
+            window.lucide.createIcons();
+        }
+    }
+
+    // Initialize Lucide icons
+    createLucideIcons();
+
     // Re-initialize icons after HTMX swaps
     document.body.addEventListener("htmx:afterSwap", function(event) {
-        lucide.createIcons();
+        createLucideIcons();
     });
     
     // Auto-dismiss success banners
@@ -130,7 +136,7 @@
             overlay.classList.toggle('active', isOpen);
             menuToggle.setAttribute('aria-expanded', isOpen);
             menuToggle.innerHTML = isOpen ? '<i data-lucide="x" aria-hidden="true"></i>' : '<i data-lucide="menu" aria-hidden="true"></i>';
-            lucide.createIcons();
+            createLucideIcons();
             document.body.style.overflow = isOpen ? 'hidden' : '';
         }
         
@@ -139,7 +145,7 @@
             overlay.classList.remove('active');
             menuToggle.setAttribute('aria-expanded', 'false');
             menuToggle.innerHTML = '<i data-lucide="menu" aria-hidden="true"></i>';
-            lucide.createIcons();
+            createLucideIcons();
             document.body.style.overflow = '';
         }
         
@@ -351,7 +357,7 @@
         toast.innerHTML = '<i data-lucide="' + iconName + '" style="width:18px;height:18px;flex-shrink:0"></i><span>' + message + '</span><button type="button" class="toast-close" aria-label="Dismiss notification"><i data-lucide="x" style="width:14px;height:14px"></i></button>';
         
         container.appendChild(toast);
-        lucide.createIcons();
+        createLucideIcons();
         
         var closeBtn = toast.querySelector('.toast-close');
         closeBtn.addEventListener('click', function() {

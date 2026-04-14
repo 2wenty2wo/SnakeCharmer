@@ -61,12 +61,30 @@ async def verify_csrf(request: Request) -> str | None:
         except Exception:
             pass
 
-    if not submitted:
+    normalized_submitted = _normalize_token(submitted)
+    normalized_cookie = _normalize_token(cookie_token)
+
+    if not normalized_submitted:
         return "CSRF token missing. Please refresh the page and try again."
 
-    if not secrets.compare_digest(submitted, cookie_token):
+    if not normalized_cookie:
+        return "CSRF cookie missing. Please refresh the page and try again."
+
+    if not secrets.compare_digest(normalized_submitted, normalized_cookie):
         return "Invalid CSRF token. Please refresh the page and try again."
 
+    return None
+
+
+def _normalize_token(token: object) -> str | None:
+    """Normalize a CSRF token value to str for safe compare_digest usage."""
+    if isinstance(token, str):
+        return token
+    if isinstance(token, bytes):
+        try:
+            return token.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
     return None
 
 
