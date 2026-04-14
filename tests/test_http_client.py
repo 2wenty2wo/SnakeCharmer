@@ -222,3 +222,56 @@ class TestNoRetry4xx:
             client._request("GET", "/test")
 
         session.request.assert_called_once()
+
+
+class TestContextManager:
+    def test_enter_returns_self(self):
+        session = _make_session()
+        client = RetryClient(session, "http://example.com")
+
+        with client as entered:
+            assert entered is client
+
+    def test_exit_closes_session(self):
+        session = _make_session()
+        client = RetryClient(session, "http://example.com")
+
+        with client:
+            pass
+
+        session.close.assert_called_once()
+
+    def test_explicit_close_calls_session_close(self):
+        session = _make_session()
+        client = RetryClient(session, "http://example.com")
+
+        client.close()
+
+        session.close.assert_called_once()
+
+    def test_exit_close_error_without_active_exception_reraises(self):
+        session = _make_session()
+        session.close.side_effect = OSError("close failed")
+        client = RetryClient(session, "http://example.com")
+
+        with pytest.raises(OSError, match="close failed"), client:
+            pass
+
+    def test_exit_close_error_with_active_exception_suppresses_and_logs(self):
+        session = _make_session()
+        session.close.side_effect = OSError("close failed")
+
+        class CustomClient(RetryClient):
+            _service_name = "TestAPI"
+
+        client = CustomClient(session, "http://example.com")
+
+        with (
+            patch("app.http_client.log.warning") as mock_warn,
+            pytest.raises(ValueError, match="body error"),
+            client,
+        ):
+            raise ValueError("body error")
+
+        assert mock_warn.called
+        assert mock_warn.call_args[0][1] == "TestAPI"

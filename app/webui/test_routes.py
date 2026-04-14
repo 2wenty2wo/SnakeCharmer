@@ -15,10 +15,6 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _holder(request: Request):
-    return request.app.state.config_holder
-
-
 async def _require_csrf(request: Request) -> HTMLResponse | None:
     error = await verify_csrf(request)
     if error:
