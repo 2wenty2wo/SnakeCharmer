@@ -264,3 +264,110 @@ class TestPendingQueueClear:
 
         assert count == 2
         assert pq.get_count() == 0
+
+
+class TestPendingQueueRollback:
+    """Rollback on save failure prevents silent data loss."""
+
+    def test_add_show_rollback_on_save_failure(self, tmp_path):
+        pq = PendingQueue(str(tmp_path))
+        show = PendingShow(tvdb_id=1, title="Show 1")
+
+        with pq._lock:
+            pass  # ensure lock exists
+
+        from unittest.mock import patch
+
+        with patch.object(pq, "_save", side_effect=OSError("disk full")):
+            with pq._lock:
+                pass
+            try:
+                pq.add_show(show)
+            except OSError:
+                pass
+
+        assert pq.is_pending(1) is False
+        assert pq.get_count() == 0
+
+    def test_approve_show_rollback_on_save_failure(self, tmp_path):
+        pq = PendingQueue(str(tmp_path))
+        show = PendingShow(tvdb_id=1, title="Show 1")
+        pq.add_show(show)
+
+        from unittest.mock import patch
+
+        with patch.object(pq, "_save", side_effect=OSError("disk full")):
+            try:
+                pq.approve_show(1)
+            except OSError:
+                pass
+
+        assert pq.is_pending(1) is True
+        retrieved = pq.get_show(1)
+        assert retrieved.status == "pending"
+
+    def test_reject_show_rollback_on_save_failure(self, tmp_path):
+        pq = PendingQueue(str(tmp_path))
+        show = PendingShow(tvdb_id=1, title="Show 1")
+        pq.add_show(show)
+
+        from unittest.mock import patch
+
+        with patch.object(pq, "_save", side_effect=OSError("disk full")):
+            try:
+                pq.reject_show(1)
+            except OSError:
+                pass
+
+        assert pq.is_pending(1) is True
+        retrieved = pq.get_show(1)
+        assert retrieved.status == "pending"
+
+    def test_bulk_approve_rollback_on_save_failure(self, tmp_path):
+        pq = PendingQueue(str(tmp_path))
+        pq.add_show(PendingShow(tvdb_id=1, title="Show 1"))
+        pq.add_show(PendingShow(tvdb_id=2, title="Show 2"))
+
+        from unittest.mock import patch
+
+        with patch.object(pq, "_save", side_effect=OSError("disk full")):
+            try:
+                pq.bulk_approve([1, 2])
+            except OSError:
+                pass
+
+        assert pq.get_count() == 2
+        assert pq.get_show(1).status == "pending"
+        assert pq.get_show(2).status == "pending"
+
+    def test_bulk_reject_rollback_on_save_failure(self, tmp_path):
+        pq = PendingQueue(str(tmp_path))
+        pq.add_show(PendingShow(tvdb_id=1, title="Show 1"))
+        pq.add_show(PendingShow(tvdb_id=2, title="Show 2"))
+
+        from unittest.mock import patch
+
+        with patch.object(pq, "_save", side_effect=OSError("disk full")):
+            try:
+                pq.bulk_reject([1, 2])
+            except OSError:
+                pass
+
+        assert pq.get_count() == 2
+        assert pq.get_show(1).status == "pending"
+        assert pq.get_show(2).status == "pending"
+
+    def test_clear_rollback_on_save_failure(self, tmp_path):
+        pq = PendingQueue(str(tmp_path))
+        pq.add_show(PendingShow(tvdb_id=1, title="Show 1"))
+
+        from unittest.mock import patch
+
+        with patch.object(pq, "_save", side_effect=OSError("disk full")):
+            try:
+                pq.clear()
+            except OSError:
+                pass
+
+        assert pq.get_count() == 1
+        assert pq.is_pending(1) is True
