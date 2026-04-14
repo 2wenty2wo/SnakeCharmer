@@ -355,7 +355,10 @@ class TraktClient(RetryClient):
         """Handle Trakt 429 rate limiting using the Retry-After header."""
         if resp.status_code != 429:
             return None
-        retry_after = int(resp.headers.get("Retry-After", 10))
+        try:
+            retry_after = int(resp.headers.get("Retry-After", 10))
+        except TypeError:
+            retry_after = 10
         log.warning("Rate limited, waiting %ds", retry_after)
         time.sleep(retry_after)
         resp = self.session.request(method, url, **kwargs)
