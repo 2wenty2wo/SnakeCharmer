@@ -51,7 +51,8 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-- Tests live in `tests/` mirroring the `app/` structure (e.g., `tests/test_health.py` for `app/health.py`, `tests/test_webui.py` for `app/webui/`, `tests/test_http_client.py` for `app/http_client.py`)
+- Tests live in `tests/` broadly mirroring the `app/` structure (e.g., `tests/test_health.py` for `app/health.py`, `tests/test_webui.py` for `app/webui/`, `tests/test_http_client.py` for `app/http_client.py`)
+- Additional integration and focused tests: `test_main.py`, `test_config_io.py`, `test_csrf.py`, `test_sync_integration.py`, `test_timestamp_filters.py`, `test_webui_a11y.py`, `test_webui_visual.py`
 - All HTTP calls are mocked (requests.Session) — never hit real APIs in tests
 - Web UI tests use `httpx.AsyncClient` with FastAPI's `TestClient` pattern
 - Use `tmp_path` for config file tests, `monkeypatch` for env var tests
@@ -99,10 +100,11 @@ app/pending_queue.py       PendingQueue: thread-safe JSON file storage for manua
 app/webui/__init__.py      FastAPI app factory (create_app), ConfigHolder thread-safe wrapper, includes all route modules
 app/webui/routes.py        HTMX-driven routes: dashboard, config sections, sync control, source preview, library, /health JSON
 app/webui/oauth.py         Trakt OAuth device code flow: oauth_trakt_start, oauth_trakt_poll, _get_trakt_token_status
+app/webui/csrf.py        CSRF middleware: secure token generation, cookie handling, and verification for state-changing routes
 app/webui/test_routes.py   Test connection routes: test_trakt, test_medusa, test_notify
 app/webui/config_io.py     Config serialization: AppConfig ↔ dict ↔ YAML file, atomic writes, validation
 app/webui/sync_manager.py  SyncManager: thread-safe manual sync trigger from web UI, background execution
-app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, dashboard_status.html, library.html, pending.html, config/*.html, sync/history.html)
+app/webui/templates/       Jinja2 HTML templates (base.html, dashboard.html, dashboard_stats.html, dashboard_status.html, library.html, pending.html, config/*.html, sync/history.html)
 app/webui/static/          Green Deck design system: style.css (custom CSS with design tokens, sidebar layout, DM Sans typography), logo.webp
 DESIGN.md                  Green Deck design system spec: colors, typography, components, spacing, elevation rules
 ```
@@ -183,6 +185,7 @@ Key classes:
 - `ConfigHolder` (`app/webui/__init__.py`): thread-safe mutable holder for the active `AppConfig`, shared between web UI and sync loop
 - `SyncManager` (`app/webui/sync_manager.py`): thread-safe manager for triggering manual syncs from the web UI, runs sync in a background thread, passes `PendingQueue` to `run_sync()`
 - `config_to_dict()` / `save_config()` / `load_config_dict()` (`app/webui/config_io.py`): round-trip serialization between `AppConfig` dataclasses and YAML files
+- `CSRFMiddleware` (`app/webui/csrf.py`): Starlette middleware that generates secure tokens, sets `csrftoken` cookies, and validates the `x-csrf-token` header (or form field) on mutating requests
 
 ### Web UI Design (`DESIGN.md` — Green Deck)
 
