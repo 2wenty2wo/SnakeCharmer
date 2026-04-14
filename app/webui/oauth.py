@@ -164,6 +164,7 @@ async def oauth_trakt_poll(request: Request):
     if resp.status_code == 200:
         # Success — save token
         token = resp.json()
+        token.setdefault("created_at", int(time.time()))
         config = _holder(request).get()
         token_path = os.path.join(config.config_dir, "trakt_token.json")
         try:

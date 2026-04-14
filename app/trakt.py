@@ -343,6 +343,7 @@ class TraktClient(RetryClient):
 
     def _save_token(self, token: dict) -> None:
         """Persist OAuth token to disk."""
+        token.setdefault("created_at", int(time.time()))
         with open(self.token_path, "w") as f:
             json.dump(token, f, indent=2)
         log.debug("Token saved to %s", self.token_path)
