@@ -77,7 +77,7 @@ def save_config(config_dict: dict, path: str) -> None:
     target_dir = os.path.dirname(os.path.abspath(path))
     fd, tmp_path = tempfile.mkstemp(dir=target_dir, suffix=".yaml", prefix=".config_")
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
         os.replace(tmp_path, path)
         log.info("Config saved to %s", path)
@@ -96,7 +96,7 @@ def save_app_config(config: AppConfig, path: str) -> None:
 def reload_config(path: str) -> AppConfig:
     """Load and validate config from file. Raises ConfigError on validation failure."""
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
     except FileNotFoundError as e:
         raise ConfigError([f"Config file not found: {path}"]) from e

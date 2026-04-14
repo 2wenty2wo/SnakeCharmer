@@ -220,7 +220,7 @@ class TraktClient(RetryClient):
             return None
 
         try:
-            with open(self.token_path) as f:
+            with open(self.token_path, encoding="utf-8") as f:
                 token = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             log.warning("Failed to read token file: %s", e)
@@ -344,7 +344,7 @@ class TraktClient(RetryClient):
     def _save_token(self, token: dict) -> None:
         """Persist OAuth token to disk."""
         token.setdefault("created_at", int(time.time()))
-        with open(self.token_path, "w") as f:
+        with open(self.token_path, "w", encoding="utf-8") as f:
             json.dump(token, f, indent=2)
         log.debug("Token saved to %s", self.token_path)
 

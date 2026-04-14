@@ -41,7 +41,7 @@ def _get_trakt_token_status(config) -> str:
     if not os.path.exists(token_path):
         return "none"
     try:
-        with open(token_path) as f:
+        with open(token_path, encoding="utf-8") as f:
             token = json.load(f)
         created_at = token.get("created_at", 0)
         expires_in = token.get("expires_in", 0)
@@ -168,7 +168,7 @@ async def oauth_trakt_poll(request: Request):
         config = _holder(request).get()
         token_path = os.path.join(config.config_dir, "trakt_token.json")
         try:
-            with open(token_path, "w") as f:
+            with open(token_path, "w", encoding="utf-8") as f:
                 json.dump(token, f, indent=2)
         except OSError:
             log.exception("Failed to save Trakt OAuth token to %s", token_path)

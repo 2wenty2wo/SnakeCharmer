@@ -83,7 +83,7 @@ def load_config(path: str, skip_validate: bool = False) -> AppConfig:
     """Load configuration from YAML file with environment variable overrides."""
     raw = {}
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
     except FileNotFoundError:
         log.warning("Config file %s not found, using environment variables only", path)
