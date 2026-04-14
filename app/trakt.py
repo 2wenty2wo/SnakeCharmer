@@ -159,6 +159,12 @@ class TraktClient(RetryClient):
             log.warning("Skipping '%s' - no TVDB ID available", title)
             return None
 
+        try:
+            tvdb_id_int = int(tvdb_id)
+        except (ValueError, TypeError):
+            log.warning("Skipping '%s' - malformed TVDB ID: %r", title, tvdb_id)
+            return None
+
         # Extract poster URL from images
         poster_url = None
         images = data.get("images", {})
@@ -188,7 +194,7 @@ class TraktClient(RetryClient):
 
         return TraktShow(
             title=title,
-            tvdb_id=int(tvdb_id),
+            tvdb_id=tvdb_id_int,
             imdb_id=ids.get("imdb"),
             year=data.get("year"),
             poster_url=poster_url,

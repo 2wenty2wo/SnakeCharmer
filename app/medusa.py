@@ -68,7 +68,10 @@ class MedusaClient(RetryClient):
         for series in series_list:
             tvdb_id = series.get("id", {}).get("tvdb")
             if tvdb_id:
-                tvdb_ids.add(int(tvdb_id))
+                try:
+                    tvdb_ids.add(int(tvdb_id))
+                except (ValueError, TypeError):
+                    log.warning("Skipping series with malformed TVDB ID: %r", tvdb_id)
 
         log.info("Found %d existing shows in Medusa", len(tvdb_ids))
         return tvdb_ids
@@ -83,13 +86,18 @@ class MedusaClient(RetryClient):
             tvdb_id = series.get("id", {}).get("tvdb")
             if not tvdb_id:
                 continue
+            try:
+                tvdb_id_int = int(tvdb_id)
+            except (ValueError, TypeError):
+                log.warning("Skipping series with malformed TVDB ID: %r", tvdb_id)
+                continue
             year = series.get("year")
             if isinstance(year, dict):
                 year = year.get("start") or year.get("end")
             shows.append(
                 {
                     "title": series.get("title", "Unknown"),
-                    "tvdb_id": int(tvdb_id),
+                    "tvdb_id": tvdb_id_int,
                     "imdb_id": series.get("id", {}).get("imdb"),
                     "year": year,
                     "status": series.get("status"),

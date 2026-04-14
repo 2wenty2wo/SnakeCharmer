@@ -180,6 +180,17 @@ class TestGetShows:
         assert len(shows) == 1
         assert shows[0].tvdb_id == 7
 
+    def test_fetch_trending_skips_malformed_tvdb_id(self, client):
+        items = [
+            {"show": {"title": "Good Show", "ids": {"tvdb": 1}}},
+            {"show": {"title": "Bad Show", "ids": {"tvdb": "not-a-number"}}},
+        ]
+        with patch.object(client, "_request", return_value=_mock_response(items)):
+            shows = client.get_shows("trending")
+
+        assert len(shows) == 1
+        assert shows[0].title == "Good Show"
+
     def test_fetch_public_user_list_without_oauth(self, client):
         items = [{"show": {"title": "List Show", "ids": {"tvdb": 50}}}]
         source = TraktSource(type="user_list", owner="otheruser", list_slug="public-list")
