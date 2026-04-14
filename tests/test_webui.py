@@ -356,6 +356,7 @@ class TestTraktConfig:
 
     def test_save_trakt_rejects_missing_csrf_token(self, tmp_path):
         from fastapi.testclient import TestClient
+
         from app.webui import ConfigHolder, create_app
         from app.webui.config_io import save_app_config
 
@@ -375,6 +376,7 @@ class TestTraktConfig:
 
     def test_save_trakt_rejects_invalid_csrf_token(self, tmp_path):
         from fastapi.testclient import TestClient
+
         from app.webui import ConfigHolder, create_app
         from app.webui.config_io import save_app_config
 

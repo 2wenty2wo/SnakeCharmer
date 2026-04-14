@@ -3,9 +3,9 @@ import logging
 import requests
 
 from app.config import (
-    MedusaConfig,
     _QUALITY_BY_NAME,
     _QUALITY_VALUES,
+    MedusaConfig,
 )
 from app.http_client import REQUEST_TIMEOUT, RetryClient
 
