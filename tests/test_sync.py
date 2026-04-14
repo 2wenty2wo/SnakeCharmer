@@ -359,8 +359,8 @@ class TestRunSync:
 
         result = run_sync(config, pending_queue=pending_queue)
 
-        assert result.skipped == 1
-        assert result.success is True
+        assert result.success is False
+        assert result.failed == 1
         mock_medusa.add_show.assert_not_called()
 
     def test_pending_queue_add_show_raises_oserror(self, config, mock_trakt, mock_medusa):
@@ -373,8 +373,8 @@ class TestRunSync:
 
         result = run_sync(config, pending_queue=pending_queue)
 
-        assert result.skipped == 1
-        assert result.success is True
+        assert result.success is False
+        assert result.failed == 1
         mock_medusa.add_show.assert_not_called()
         assert result.queued == 0
 

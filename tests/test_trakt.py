@@ -139,7 +139,7 @@ class TestGetShows:
         assert source.type == "user_list"
         assert source.owner == client.config.username
         assert source.list_slug == "my custom"
-        assert source.requires_auth is False
+        assert source.requires_auth is True
 
     def test_fetch_trending(self, client):
         items = [
@@ -466,7 +466,7 @@ class TestAuth:
             patch("app.trakt.time.sleep"),
             patch("app.trakt.time.time", return_value=1),
             patch("app.trakt.log.error"),
-            pytest.raises(RuntimeError),
+            pytest.raises(SystemExit),
         ):
             client._authenticate()
 
@@ -490,7 +490,7 @@ class TestAuth:
             patch("app.trakt.time.time", return_value=1),
         ):
             with patch("app.trakt.log.error") as mock_log_error:
-                with pytest.raises(RuntimeError):
+                with pytest.raises(SystemExit):
                     client._authenticate()
 
         assert mock_log_error.call_count >= 1
@@ -514,7 +514,7 @@ class TestAuth:
             patch("app.trakt.time.sleep"),
             patch("app.trakt.time.time", side_effect=[0, 0.5, 2, 2]),
             patch("app.trakt.log.error"),
-            pytest.raises(RuntimeError),
+            pytest.raises(SystemExit),
         ):
             client._authenticate()
 

@@ -116,7 +116,9 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
             selected_source_label = selected_source.label if selected_source else "unknown"
             option_keys = sorted(selected_options.keys()) if selected_options else []
 
-            requires_manual_approval = selected_source is not None and not selected_source.auto_approve
+            requires_manual_approval = (
+                selected_source is not None and not selected_source.auto_approve
+            )
 
             # Respect manual approval even when no pending queue is available
             if requires_manual_approval and pending_queue is None:
@@ -136,17 +138,19 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                 try:
                     already_pending = pending_queue.is_pending(show.tvdb_id)
                 except (OSError, json.JSONDecodeError) as e:
-                    log.warning(
+                    log.error(
                         "Pending queue check failed for '%s' (tvdb:%d): %s",
                         show.title,
                         show.tvdb_id,
                         e,
                     )
-                    result.skipped += 1
                     _track_action(
-                        result, show, selected_source_label, "skipped", "pending_queue_error"
+                        result, show, selected_source_label, "failed", "pending_queue_error"
                     )
-                    continue
+                    result.failed += 1
+                    result.success = False
+                    result.duration_seconds = _elapsed_seconds(start_time_ns)
+                    return result
 
                 if already_pending:
                     log.debug("Already in pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
@@ -183,17 +187,19 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                 try:
                     added = pending_queue.add_show(pending_show)
                 except (OSError, json.JSONDecodeError) as e:
-                    log.warning(
+                    log.error(
                         "Pending queue add failed for '%s' (tvdb:%d): %s",
                         show.title,
                         show.tvdb_id,
                         e,
                     )
-                    result.skipped += 1
                     _track_action(
-                        result, show, selected_source_label, "skipped", "pending_queue_error"
+                        result, show, selected_source_label, "failed", "pending_queue_error"
                     )
-                    continue
+                    result.failed += 1
+                    result.success = False
+                    result.duration_seconds = _elapsed_seconds(start_time_ns)
+                    return result
 
                 if added:
                     log.info(
@@ -237,7 +243,8 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                 if medusa_client.add_show(show.tvdb_id, show.title, add_options=selected_options):
                     log.info(
                         "Added: %s "
-                        "(tvdb:%d, source:%s, options_policy:%s, selected_source:%s, option_keys:%s)",
+                        "(tvdb:%d, source:%s, options_policy:%s, selected_source:%s, "
+                        "option_keys:%s)",
                         show.title,
                         show.tvdb_id,
                         ",".join(source_lists.get(show.tvdb_id, [])),

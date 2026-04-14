@@ -92,7 +92,9 @@ class TraktClient(RetryClient):
             type="user_list",
             owner=self.config.username,
             list_slug=list_name,
-            auth=None,
+            # When a bare string is provided we treat it as a user list owned by the
+            # configured user. Default to requiring auth so private lists work.
+            auth=True,
         )
 
     def _fetch_shows(
@@ -337,7 +339,7 @@ class TraktClient(RetryClient):
                 continue
 
         log.error("Authentication failed or timed out")
-        raise RuntimeError("Trakt authentication failed or timed out")
+        raise SystemExit(1)
 
     def _save_token(self, token: dict) -> None:
         """Persist OAuth token to disk."""
