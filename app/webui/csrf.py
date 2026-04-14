@@ -29,7 +29,7 @@ def template_context(request: Request, **kwargs) -> dict:
         log.warning(
             "request.state.csrf_token missing; ensure CSRFMiddleware is installed before routes"
         )
-        token = ""
+        token = generate_csrf_token()
     return {"csrf_token": token, **kwargs}
 
 
@@ -58,8 +58,9 @@ async def verify_csrf(request: Request) -> str | None:
         try:
             form_data = await request.form()
             submitted = form_data.get("csrf_token")
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("Failed to read CSRF token from form data: %s", exc)
+            submitted = None
 
     normalized_submitted = _normalize_token(submitted)
     normalized_cookie = _normalize_token(cookie_token)
