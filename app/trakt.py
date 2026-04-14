@@ -92,7 +92,7 @@ class TraktClient(RetryClient):
             type="user_list",
             owner=self.config.username,
             list_slug=list_name,
-            auth=True,
+            auth=None,
         )
 
     def _fetch_shows(

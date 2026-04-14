@@ -139,7 +139,7 @@ class TestGetShows:
         assert source.type == "user_list"
         assert source.owner == client.config.username
         assert source.list_slug == "my custom"
-        assert source.requires_auth is True
+        assert source.requires_auth is False
 
     def test_fetch_trending(self, client):
         items = [
