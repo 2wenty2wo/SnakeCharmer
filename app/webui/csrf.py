@@ -52,7 +52,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         response.set_cookie(
             CSRF_COOKIE_NAME,
             token,
-            httponly=False,
+            httponly=True,
             samesite="lax",
             secure=False,
             path="/",

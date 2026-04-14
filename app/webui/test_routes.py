@@ -47,8 +47,8 @@ async def test_trakt(request: Request):
             sources=[TraktSource(type="trending")],
             limit=1,
         )
-        client = TraktClient(trakt_config, max_retries=1, retry_backoff=1.0)
-        shows = client.get_shows(TraktSource(type="trending"))
+        with TraktClient(trakt_config, max_retries=1, retry_backoff=1.0) as client:
+            shows = client.get_shows(TraktSource(type="trending"))
         return HTMLResponse(
             '<div class="banner success" role="alert">'
             f"Trakt connection successful! Fetched {len(shows)} trending show(s).</div>"
@@ -87,8 +87,8 @@ async def test_medusa(request: Request):
         )
     try:
         medusa_config = MedusaConfig(url=url.rstrip("/"), api_key=api_key)
-        client = MedusaClient(medusa_config, max_retries=1, retry_backoff=1.0)
-        tvdb_ids = client.get_existing_tvdb_ids()
+        with MedusaClient(medusa_config, max_retries=1, retry_backoff=1.0) as client:
+            tvdb_ids = client.get_existing_tvdb_ids()
         return HTMLResponse(
             '<div class="banner success" role="alert">'
             f"Medusa connection successful! Found {len(tvdb_ids)} show(s) in library.</div>"
