@@ -609,6 +609,40 @@ class TestSourceWithMedusaOptions:
         updated = holder.get()
         assert updated.trakt.sources[0].medusa.quality == "hd720p"
 
+    def test_save_trakt_with_invalid_quality_string(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_quality": "bogus",
+            },
+        )
+        assert response.status_code == 422
+        assert "bogus" in response.text
+        assert "valid values" in response.text.lower()
+
+    def test_save_trakt_with_invalid_quality_list_item(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_quality": "hdtv, notreal",
+            },
+        )
+        assert response.status_code == 422
+        assert "notreal" in response.text
+        assert "valid values" in response.text.lower()
+
 
 class TestSaveAndRespondErrors:
     def test_unexpected_exception_returns_error_banner(self, tmp_path):
