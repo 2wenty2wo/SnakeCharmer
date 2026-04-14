@@ -319,12 +319,45 @@ def get_config_errors(config: AppConfig) -> list[str]:
                     "trakt.sources[].medusa.required_words must be a list of non-empty strings"
                 )
 
-    if config.sync.interval < 0:
-        errors.append("sync.interval must be >= 0")
-    if config.sync.max_retries < 0:
-        errors.append("sync.max_retries must be >= 0")
-    if config.sync.retry_backoff <= 0:
-        errors.append("sync.retry_backoff must be > 0")
+    try:
+        interval = int(config.sync.interval)
+    except (TypeError, ValueError):
+        errors.append("sync.interval must be an integer >= 0")
+    else:
+        if interval < 0:
+            errors.append("sync.interval must be >= 0")
+
+    try:
+        max_retries = int(config.sync.max_retries)
+    except (TypeError, ValueError):
+        errors.append("sync.max_retries must be an integer >= 0")
+    else:
+        if max_retries < 0:
+            errors.append("sync.max_retries must be >= 0")
+
+    try:
+        retry_backoff = float(config.sync.retry_backoff)
+    except (TypeError, ValueError):
+        errors.append("sync.retry_backoff must be a number > 0")
+    else:
+        if retry_backoff <= 0:
+            errors.append("sync.retry_backoff must be > 0")
+
+    try:
+        health_port = int(config.health.port)
+    except (TypeError, ValueError):
+        errors.append("health.port must be an integer between 0 and 65535")
+    else:
+        if not (0 <= health_port <= 65535):
+            errors.append("health.port must be between 0 and 65535")
+
+    try:
+        webui_port = int(config.webui.port)
+    except (TypeError, ValueError):
+        errors.append("webui.port must be an integer between 0 and 65535")
+    else:
+        if not (0 <= webui_port <= 65535):
+            errors.append("webui.port must be between 0 and 65535")
 
     return errors
 

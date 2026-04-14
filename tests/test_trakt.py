@@ -447,6 +447,32 @@ class TestAuth:
         assert client.session.headers["Authorization"] == "Bearer token-123"
         mock_save.assert_called_once_with({"access_token": "token-123"})
 
+    def test_authenticate_non_positive_expires_in_still_polls(self, client):
+        device_resp = _mock_response(
+            {
+                "user_code": "AAAA",
+                "verification_url": "https://trakt.tv/activate",
+                "expires_in": -10,
+                "interval": 1,
+                "device_code": "device-1",
+            }
+        )
+        poll_success = _mock_response({"access_token": "token-123"}, status_code=200)
+
+        mock_time = MagicMock(side_effect=[0, 1, 100])
+        with (
+            patch.object(client, "_request", return_value=device_resp),
+            patch.object(client.session, "post", return_value=poll_success) as mock_post,
+            patch.object(client, "_save_token") as mock_save,
+            patch("app.trakt.time.sleep"),
+            patch("app.trakt.time.time", mock_time),
+        ):
+            client._authenticate()
+
+        mock_post.assert_called_once()
+        assert client.session.headers["Authorization"] == "Bearer token-123"
+        mock_save.assert_called_once_with({"access_token": "token-123"})
+
     @pytest.mark.parametrize("status_code", [404, 409, 410, 418])
     def test_authenticate_terminal_poll_status_exits(self, client, status_code):
         device_resp = _mock_response(

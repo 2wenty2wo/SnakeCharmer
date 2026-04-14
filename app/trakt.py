@@ -277,6 +277,12 @@ class TraktClient(RetryClient):
         verification_url = device["verification_url"]
         expires_in = int(float(device["expires_in"]))
         interval = int(float(device["interval"]))
+        if interval < 1:
+            log.warning("Invalid device poll interval %s; using 1s", interval)
+            interval = 1
+        if expires_in < 1:
+            log.warning("Invalid device code expires_in %s; using 600s", expires_in)
+            expires_in = 600
 
         print()
         print("=" * 50)

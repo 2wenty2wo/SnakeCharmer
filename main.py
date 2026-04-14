@@ -206,8 +206,13 @@ def _run_webui_wait_loop(config_holder, sync_manager, webui_thread, webui_port, 
             result = sync_manager.run_sync_blocking()
             if result is None:
                 log.info("Skipping scheduled sync because another sync is already running")
-            log.info("Sleeping %ds until next sync...", run_config.sync.interval)
-            time.sleep(run_config.sync.interval)
+            try:
+                interval_seconds = int(run_config.sync.interval)
+            except (TypeError, ValueError):
+                interval_seconds = 0
+            sleep_seconds = max(interval_seconds, 1)
+            log.info("Sleeping %ds until next sync...", sleep_seconds)
+            time.sleep(sleep_seconds)
             continue
 
         webui_thread.join(timeout=30)
