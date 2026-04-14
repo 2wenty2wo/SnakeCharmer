@@ -7,6 +7,7 @@
 </div>
 
 <form class="form-config" hx-post="/config/medusa" hx-target="#result-banner" hx-swap="innerHTML" id="medusa-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-grid">
     <fieldset>
         <legend>Connection Settings</legend>
@@ -45,7 +46,7 @@
                 hx-post="/test/medusa"
                 hx-target="#result-banner"
                 hx-swap="innerHTML"
-                hx-include="[name='url'],[name='api_key']">
+                hx-include="[name='csrf_token'],[name='url'],[name='api_key']">
             <i data-lucide="plug" style="width:14px;height:14px"></i>
             Test Connection
         </button>

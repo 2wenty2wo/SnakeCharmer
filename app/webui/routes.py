@@ -9,11 +9,22 @@ from app.config import ConfigError, TraktConfig, TraktSource, get_config_errors,
 from app.medusa import MedusaClient
 from app.trakt import TraktClient
 from app.webui.config_io import config_to_dict, load_config_dict, save_config
+from app.webui.csrf import verify_csrf
 from app.webui.oauth import _get_trakt_token_status
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _require_csrf(request: Request) -> HTMLResponse | None:
+    error = await verify_csrf(request)
+    if error:
+        return HTMLResponse(
+            f'<div class="banner error" role="alert">{escape(error)}</div>',
+            status_code=403,
+        )
+    return None
 
 
 def _templates(request: Request):
@@ -190,6 +201,9 @@ async def config_trakt(request: Request):
 
 @router.post("/config/trakt", response_class=HTMLResponse)
 async def save_trakt(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     holder = _holder(request)
     form = await request.form()
     config = holder.get()
@@ -209,6 +223,9 @@ async def save_trakt(request: Request):
 
 @router.post("/config/trakt/sources/add", response_class=HTMLResponse)
 async def add_source(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     config = _holder(request).get()
     index = len(config.trakt.sources)
     source = TraktSource(type="trending")
@@ -221,6 +238,9 @@ async def add_source(request: Request):
 
 @router.delete("/config/trakt/sources/{index}", response_class=HTMLResponse)
 async def delete_source(request: Request, index: int):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     return HTMLResponse("")
 
 
@@ -239,6 +259,9 @@ async def config_medusa(request: Request):
 
 @router.post("/config/medusa", response_class=HTMLResponse)
 async def save_medusa(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     holder = _holder(request)
     form = await request.form()
     config = holder.get()
@@ -265,6 +288,9 @@ async def config_sync(request: Request):
 
 @router.post("/config/sync", response_class=HTMLResponse)
 async def save_sync(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     holder = _holder(request)
     form = await request.form()
     config = holder.get()
@@ -294,6 +320,9 @@ async def config_health(request: Request):
 
 @router.post("/config/health", response_class=HTMLResponse)
 async def save_health(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     holder = _holder(request)
     form = await request.form()
     config = holder.get()
@@ -320,6 +349,9 @@ async def config_notify(request: Request):
 
 @router.post("/config/notify", response_class=HTMLResponse)
 async def save_notify(request: Request):
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     holder = _holder(request)
     form = await request.form()
     config = holder.get()
@@ -354,6 +386,9 @@ async def health_json(request: Request):
 @router.post("/sync/run", response_class=HTMLResponse)
 async def sync_run(request: Request):
     """Trigger a manual sync from the web UI."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     sync_manager = _sync_manager(request)
     if sync_manager is None:
         return HTMLResponse(
@@ -412,6 +447,9 @@ async def sync_history(request: Request):
 @router.post("/config/trakt/sources/preview", response_class=HTMLResponse)
 async def source_preview(request: Request):
     """Preview shows from a Trakt source."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     form = await request.form()
     client_id = form.get("client_id", "").strip()
     if not client_id:
@@ -498,6 +536,9 @@ async def pending_page(request: Request):
 @router.post("/pending/approve/{tvdb_id}", response_class=HTMLResponse)
 async def approve_single(request: Request, tvdb_id: int):
     """Approve a single pending show and add it to Medusa."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     pending_queue = _get_pending_queue(request)
     if pending_queue is None:
         return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
@@ -537,6 +578,9 @@ async def approve_single(request: Request, tvdb_id: int):
 @router.post("/pending/reject/{tvdb_id}", response_class=HTMLResponse)
 async def reject_single(request: Request, tvdb_id: int):
     """Reject a single pending show."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     pending_queue = _get_pending_queue(request)
     if pending_queue is None:
         return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
@@ -556,6 +600,9 @@ async def reject_single(request: Request, tvdb_id: int):
 @router.post("/pending/bulk-approve", response_class=HTMLResponse)
 async def bulk_approve(request: Request):
     """Approve multiple pending shows."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     pending_queue = _get_pending_queue(request)
     if pending_queue is None:
         return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
@@ -620,6 +667,9 @@ async def bulk_approve(request: Request):
 @router.post("/pending/bulk-reject", response_class=HTMLResponse)
 async def bulk_reject(request: Request):
     """Reject multiple pending shows."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     pending_queue = _get_pending_queue(request)
     if pending_queue is None:
         return HTMLResponse('<div class="banner error">Pending queue not available.</div>')
@@ -643,6 +693,9 @@ async def bulk_reject(request: Request):
 @router.post("/pending/bulk-action", response_class=HTMLResponse)
 async def bulk_action(request: Request):
     """Handle bulk action form submission."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     form = await request.form()
     action = form.get("action")
 

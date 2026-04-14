@@ -7,7 +7,7 @@
                     hx-post="/config/trakt/sources/preview"
                     hx-target="#preview-{{ i }}"
                     hx-swap="innerHTML"
-                    hx-include="[name='client_id'],[name='client_secret'],[name='username'],[name='limit'],[name='source_{{ i }}_type'],[name='source_{{ i }}_owner'],[name='source_{{ i }}_list_slug'],[name='source_{{ i }}_auth'],[name='source_{{ i }}_auto_approve']"
+                    hx-include="[name='csrf_token'],[name='client_id'],[name='client_secret'],[name='username'],[name='limit'],[name='source_{{ i }}_type'],[name='source_{{ i }}_owner'],[name='source_{{ i }}_list_slug'],[name='source_{{ i }}_auth'],[name='source_{{ i }}_auto_approve']"
                     hx-vals='{"source_index": "{{ i }}"}'
                     title="Preview shows from this source">
                 <i data-lucide="eye" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"></i>

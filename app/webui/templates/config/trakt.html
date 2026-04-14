@@ -7,6 +7,7 @@
 </div>
 
 <form class="form-config" hx-post="/config/trakt" hx-target="#result-banner" hx-swap="innerHTML" id="trakt-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-grid">
     <fieldset>
         <legend>API Credentials</legend>
@@ -58,7 +59,7 @@
                     hx-post="/test/trakt"
                     hx-target="#result-banner"
                     hx-swap="innerHTML"
-                    hx-include="[name='client_id'],[name='client_secret'],[name='username']">
+                    hx-include="[name='csrf_token'],[name='client_id'],[name='client_secret'],[name='username']">
                 <i data-lucide="plug" style="width:14px;height:14px"></i>
                 Test Connection
             </button>
@@ -94,7 +95,7 @@
                 hx-post="/oauth/trakt/start"
                 hx-target="#oauth-flow"
                 hx-swap="innerHTML"
-                hx-include="[name='client_id'],[name='client_secret']">
+                hx-include="[name='csrf_token'],[name='client_id'],[name='client_secret']">
             <i data-lucide="key" style="width:14px;height:14px"></i>
             Authenticate with Trakt
         </button>

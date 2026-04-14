@@ -8,6 +8,8 @@ import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from app.webui.csrf import verify_csrf
+
 log = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -21,6 +23,16 @@ def _holder(request: Request):
 
 def _templates(request: Request):
     return request.app.state.templates
+
+
+async def _require_csrf(request: Request) -> HTMLResponse | None:
+    error = await verify_csrf(request)
+    if error:
+        return HTMLResponse(
+            f'<div class="banner error" role="alert">{escape(error)}</div>',
+            status_code=403,
+        )
+    return None
 
 
 def _get_trakt_token_status(config) -> str:
@@ -43,6 +55,9 @@ def _get_trakt_token_status(config) -> str:
 @router.post("/oauth/trakt/start", response_class=HTMLResponse)
 async def oauth_trakt_start(request: Request):
     """Initiate Trakt OAuth device code flow."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     form = await request.form()
     client_id = form.get("client_id", "").strip()
     client_secret = form.get("client_secret", "").strip()
@@ -104,6 +119,9 @@ async def oauth_trakt_start(request: Request):
 @router.post("/oauth/trakt/poll", response_class=HTMLResponse)
 async def oauth_trakt_poll(request: Request):
     """Poll Trakt for OAuth device token."""
+    csrf_resp = await _require_csrf(request)
+    if csrf_resp:
+        return csrf_resp
     form = await request.form()
     device_code = form.get("device_code", "").strip()
     client_id = form.get("client_id", "").strip()

@@ -47,6 +47,31 @@ def _make_config(**overrides) -> AppConfig:
     return AppConfig(**defaults)
 
 
+def _wrap_client_with_csrf(client):
+    """Prime CSRF cookie and monkey-patch post/delete to auto-inject tokens."""
+    client.get("/config/trakt")
+    csrf_token = client.cookies.get("csrftoken")
+
+    original_post = client.post
+    def _post(url, data=None, headers=None, **kwargs):
+        if data is None:
+            data = {"csrf_token": csrf_token}
+        elif isinstance(data, dict):
+            data = dict(data)
+            data.setdefault("csrf_token", csrf_token)
+        return original_post(url, data=data, headers=headers, **kwargs)
+    client.post = _post
+
+    original_delete = client.delete
+    def _delete(url, headers=None, **kwargs):
+        headers = dict(headers or {})
+        headers.setdefault("X-CSRF-Token", csrf_token)
+        return original_delete(url, headers=headers, **kwargs)
+    client.delete = _delete
+
+    return client
+
+
 def _create_client(tmp_path, config=None, with_sync=False, pending_queue=None):
     config = config or _make_config()
     config_path = str(tmp_path / "config.yaml")
@@ -69,7 +94,8 @@ def _create_client(tmp_path, config=None, with_sync=False, pending_queue=None):
         sync_manager=sync_manager,
         pending_queue=pending_queue,
     )
-    return TestClient(app), holder, config_path
+    client = _wrap_client_with_csrf(TestClient(app))
+    return client, holder, config_path
 
 
 class TestDashboard:
@@ -102,7 +128,7 @@ class TestDashboard:
             )
         )
         app = create_app(holder, sync_status=sync_status)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/")
         assert response.status_code == 200
@@ -119,7 +145,7 @@ class TestDashboard:
         sync_status = SyncStatus()
         sync_status.update(SyncResult(success=True, duration_seconds=2.5))
         app = create_app(holder, sync_status=sync_status)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/dashboard/stats")
         assert response.status_code == 200
@@ -141,7 +167,7 @@ class TestDashboard:
         sync_status = SyncStatus()
         sync_status.update(SyncResult(success=True, duration_seconds=3.5, added=2))
         app = create_app(holder, sync_status=sync_status, pending_queue=pending_queue)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/")
         assert response.status_code == 200
@@ -310,6 +336,51 @@ class TestTraktConfig:
         assert "error" in response.text.lower()
         assert "<script>alert(1)</script>" not in response.text
         assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
+
+    def test_save_trakt_rejects_missing_csrf_token(self, tmp_path):
+        from fastapi.testclient import TestClient
+        from app.webui import ConfigHolder, create_app
+        from app.webui.config_io import save_app_config
+
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        app = create_app(holder)
+        raw_client = TestClient(app)
+        response = raw_client.post(
+            "/config/trakt",
+            data={"client_id": "x", "client_secret": "x", "username": "x", "limit": "50"},
+        )
+        assert response.status_code == 403
+        assert "csrf" in response.text.lower()
+
+    def test_save_trakt_rejects_invalid_csrf_token(self, tmp_path):
+        from fastapi.testclient import TestClient
+        from app.webui import ConfigHolder, create_app
+        from app.webui.config_io import save_app_config
+
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+        holder = ConfigHolder(config=config, config_path=config_path)
+        app = create_app(holder)
+        raw_client = TestClient(app)
+        raw_client.get("/config/trakt")
+        response = raw_client.post(
+            "/config/trakt",
+            data={
+                "client_id": "x",
+                "client_secret": "x",
+                "username": "x",
+                "limit": "50",
+                "csrf_token": "bad-token",
+            },
+        )
+        assert response.status_code == 403
+        assert "csrf" in response.text.lower()
 
     def test_invalid_trakt_save_does_not_overwrite_yaml(self, tmp_path):
         client, _, config_path = _create_client(tmp_path)
@@ -575,7 +646,7 @@ class TestHealthEndpoint:
         holder = ConfigHolder(config=config, config_path=config_path)
         sync_status = SyncStatus()
         app = create_app(holder, sync_status=sync_status)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/health")
         assert response.status_code == 200
@@ -749,7 +820,7 @@ class TestDashboardStatus:
         sync_status.update(SyncResult(added=3, skipped=1, failed=0, success=True))
         sync_manager = SyncManager(config_holder=holder, sync_status=sync_status)
         app = create_app(holder, sync_status=sync_status, sync_manager=sync_manager)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/dashboard/status")
         assert response.status_code == 200
@@ -803,7 +874,7 @@ class TestSyncHistory:
         sync_status = SyncStatus()
         sync_status.update(SyncResult(added=5, failed=0, success=True, unique_shows=10))
         app = create_app(holder, sync_status=sync_status)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/sync/history")
         assert response.status_code == 200
@@ -832,7 +903,7 @@ class TestSyncHistory:
         sync_status = SyncStatus()
         sync_status.update(SyncResult(added=2, success=True))
         app = create_app(holder, sync_status=sync_status)
-        client = TestClient(app)
+        client = _wrap_client_with_csrf(TestClient(app))
 
         response = client.get("/sync/history?page=999")
         assert response.status_code == 200
@@ -1088,7 +1159,7 @@ def _create_incomplete_client(tmp_path, with_sync=False):
         sync_status = SyncStatus()
         sync_manager = SyncManager(config_holder=holder, sync_status=sync_status)
     app = create_app(holder, sync_status=sync_status, sync_manager=sync_manager)
-    return TestClient(app), holder, config_path
+    return _wrap_client_with_csrf(TestClient(app)), holder, config_path
 
 
 class TestOnboardingBanner:
