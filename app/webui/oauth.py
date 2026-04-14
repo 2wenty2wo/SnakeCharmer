@@ -93,8 +93,8 @@ async def oauth_trakt_start(request: Request):
     user_code = escape(device["user_code"])
     verification_url = escape(device["verification_url"])
     device_code = escape(device["device_code"])
-    interval = int(device.get("interval", 5))
-    expires_in = int(device.get("expires_in", 600))
+    interval = int(float(device.get("interval", 5)))
+    expires_in = int(float(device.get("expires_in", 600)))
 
     return HTMLResponse(
         f'<div class="oauth-card">'

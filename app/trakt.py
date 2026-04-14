@@ -275,8 +275,8 @@ class TraktClient(RetryClient):
 
         user_code = device["user_code"]
         verification_url = device["verification_url"]
-        expires_in = int(device["expires_in"])
-        interval = int(device["interval"])
+        expires_in = int(float(device["expires_in"]))
+        interval = int(float(device["interval"]))
 
         print()
         print("=" * 50)
@@ -358,7 +358,7 @@ class TraktClient(RetryClient):
             return None
         try:
             retry_after = int(resp.headers.get("Retry-After", 10))
-        except TypeError:
+        except (TypeError, ValueError):
             retry_after = 10
         log.warning("Rate limited, waiting %ds", retry_after)
         time.sleep(retry_after)

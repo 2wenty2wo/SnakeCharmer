@@ -615,9 +615,10 @@ class TestRequest:
 
         with (
             patch.object(client.session, "request", return_value=rate_limited),
-            pytest.raises(ValueError),
+            patch("app.trakt.time.sleep") as mock_sleep,
         ):
             client._request("GET", "/test")
+        mock_sleep.assert_called_once_with(10)
 
 
 class TestRetry:
