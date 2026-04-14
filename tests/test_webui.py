@@ -53,6 +53,7 @@ def _wrap_client_with_csrf(client):
     csrf_token = client.cookies.get("csrftoken")
 
     original_post = client.post
+
     def _post(url, data=None, headers=None, **kwargs):
         headers = dict(headers or {})
         headers.setdefault("X-CSRF-Token", csrf_token)
@@ -62,13 +63,16 @@ def _wrap_client_with_csrf(client):
             data = dict(data)
             data.setdefault("csrf_token", csrf_token)
         return original_post(url, data=data, headers=headers, **kwargs)
+
     client.post = _post
 
     original_delete = client.delete
+
     def _delete(url, headers=None, **kwargs):
         headers = dict(headers or {})
         headers.setdefault("X-CSRF-Token", csrf_token)
         return original_delete(url, headers=headers, **kwargs)
+
     client.delete = _delete
 
     return client

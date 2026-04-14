@@ -32,16 +32,19 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
     start_time_ns = time.perf_counter_ns()
     result = SyncResult()
 
-    with TraktClient(
-        config.trakt,
-        config_dir=config.config_dir,
-        max_retries=config.sync.max_retries,
-        retry_backoff=config.sync.retry_backoff,
-    ) as trakt_client, MedusaClient(
-        config.medusa,
-        max_retries=config.sync.max_retries,
-        retry_backoff=config.sync.retry_backoff,
-    ) as medusa_client:
+    with (
+        TraktClient(
+            config.trakt,
+            config_dir=config.config_dir,
+            max_retries=config.sync.max_retries,
+            retry_backoff=config.sync.retry_backoff,
+        ) as trakt_client,
+        MedusaClient(
+            config.medusa,
+            max_retries=config.sync.max_retries,
+            retry_backoff=config.sync.retry_backoff,
+        ) as medusa_client,
+    ):
         trakt_shows_by_tvdb = {}
         source_lists: dict[int, list[str]] = {}
         source_objs: dict[int, list] = {}

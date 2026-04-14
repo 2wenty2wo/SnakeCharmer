@@ -313,8 +313,7 @@ async def save_sync(request: Request):
         config_dict["sync"]["retry_backoff"] = float(form.get("retry_backoff", 2.0))
     except ValueError:
         return HTMLResponse(
-            '<div class="banner error" role="alert">'
-            "Sync settings must be valid numbers.</div>",
+            '<div class="banner error" role="alert">Sync settings must be valid numbers.</div>',
             status_code=422,
         )
     config_dict["sync"]["log_format"] = form.get("log_format", "text")
