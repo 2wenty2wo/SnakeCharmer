@@ -294,6 +294,23 @@ class TestTraktConfig:
         assert response.status_code == 422
         assert "error" in response.text.lower()
 
+    def test_save_trakt_validation_error_escapes_xss(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "<script>alert(1)</script>",
+            },
+        )
+        assert response.status_code == 422
+        assert "error" in response.text.lower()
+        assert "<script>alert(1)</script>" not in response.text
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
+
     def test_invalid_trakt_save_does_not_overwrite_yaml(self, tmp_path):
         client, _, config_path = _create_client(tmp_path)
         with open(config_path) as f:

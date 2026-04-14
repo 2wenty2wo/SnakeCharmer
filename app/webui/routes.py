@@ -734,7 +734,7 @@ def _save_and_respond(request: Request, config_dict: dict, holder, section: str)
             '<div class="banner error" role="alert"><strong>Validation errors:</strong><ul>'
         )
         for err in e.errors:
-            error_html += f"<li>{err}</li>"
+            error_html += f"<li>{escape(err)}</li>"
         error_html += "</ul></div>"
         return HTMLResponse(error_html, status_code=422)
     except Exception:
