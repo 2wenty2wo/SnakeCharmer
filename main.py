@@ -174,13 +174,13 @@ def _run_interval_loop(config, config_holder, sync_manager, sync_status, webui_e
             result, run_config = outcome
             if result is None:
                 log.info("Sleeping %ds until next sync...", run_config.sync.interval)
-                time.sleep(run_config.sync.interval)
+                time.sleep(max(run_config.sync.interval, 1))
                 continue
         else:
             run_config = config
             _run_once(config, sync_status, log)
         log.info("Sleeping %ds until next sync...", run_config.sync.interval)
-        time.sleep(run_config.sync.interval)
+        time.sleep(max(run_config.sync.interval, 1))
 
 
 def _run_webui_wait_loop(config_holder, sync_manager, webui_thread, webui_port, log):
