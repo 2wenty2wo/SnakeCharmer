@@ -9,7 +9,7 @@ from app.config import ConfigError, TraktConfig, TraktSource, get_config_errors,
 from app.medusa import MedusaClient
 from app.trakt import TraktClient
 from app.webui.config_io import config_to_dict, load_config_dict, save_config
-from app.webui.csrf import verify_csrf
+from app.webui.csrf import template_context, verify_csrf
 from app.webui.oauth import _get_trakt_token_status
 
 log = logging.getLogger(__name__)
@@ -120,15 +120,16 @@ async def dashboard(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "dashboard.html",
-        context={
-            "config": config,
-            "config_errors": config_errors,
-            "health": health_snapshot,
-            "sync_running": sync_running,
-            "stats": stats,
-            "next_sync": next_sync,
-            "active_page": "dashboard",
-        },
+        context=template_context(
+            request,
+            config=config,
+            config_errors=config_errors,
+            health=health_snapshot,
+            sync_running=sync_running,
+            stats=stats,
+            next_sync=next_sync,
+            active_page="dashboard",
+        ),
     )
 
 
@@ -156,11 +157,12 @@ async def dashboard_stats(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "dashboard_stats.html",
-        context={
-            "stats": stats,
-            "config": config,
-            "next_sync": next_sync,
-        },
+        context=template_context(
+            request,
+            stats=stats,
+            config=config,
+            next_sync=next_sync,
+        ),
     )
 
 
@@ -175,10 +177,11 @@ async def dashboard_status(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "dashboard_status.html",
-        context={
-            "health": health_snapshot,
-            "sync_running": sync_running,
-        },
+        context=template_context(
+            request,
+            health=health_snapshot,
+            sync_running=sync_running,
+        ),
     )
 
 
@@ -191,11 +194,12 @@ async def config_trakt(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/trakt.html",
-        context={
-            "config": config,
-            "active_page": "trakt",
-            "trakt_token_status": _get_trakt_token_status(config),
-        },
+        context=template_context(
+            request,
+            config=config,
+            active_page="trakt",
+            trakt_token_status=_get_trakt_token_status(config),
+        ),
     )
 
 
@@ -232,7 +236,7 @@ async def add_source(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/source_row.html",
-        context={"source": source, "index": index},
+        context=template_context(request, source=source, index=index),
     )
 
 
@@ -253,7 +257,7 @@ async def config_medusa(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/medusa.html",
-        context={"config": config, "active_page": "medusa"},
+        context=template_context(request, config=config, active_page="medusa"),
     )
 
 
@@ -282,7 +286,7 @@ async def config_sync(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/sync.html",
-        context={"config": config, "active_page": "sync"},
+        context=template_context(request, config=config, active_page="sync"),
     )
 
 
@@ -314,7 +318,7 @@ async def config_health(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/health.html",
-        context={"config": config, "active_page": "health"},
+        context=template_context(request, config=config, active_page="health"),
     )
 
 
@@ -343,7 +347,7 @@ async def config_notify(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "config/notify.html",
-        context={"config": config, "active_page": "notify"},
+        context=template_context(request, config=config, active_page="notify"),
     )
 
 
@@ -431,13 +435,14 @@ async def sync_history(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "sync/history.html",
-        context={
-            "history": history,
-            "active_page": "history",
-            "page": page,
-            "total_pages": total_pages,
-            "total_runs": total,
-        },
+        context=template_context(
+            request,
+            history=history,
+            active_page="history",
+            page=page,
+            total_pages=total_pages,
+            total_runs=total,
+        ),
     )
 
 
@@ -490,7 +495,7 @@ async def source_preview(request: Request):
         return _templates(request).TemplateResponse(
             request,
             "config/source_preview.html",
-            context={"shows": shows},
+            context=template_context(request, shows=shows),
         )
     except Exception:
         log.exception("Source preview failed")
@@ -525,11 +530,12 @@ async def pending_page(request: Request):
     return _templates(request).TemplateResponse(
         request,
         "pending.html",
-        context={
-            "pending_shows": pending_shows,
-            "pending_count": pending_count,
-            "active_page": "pending",
-        },
+        context=template_context(
+            request,
+            pending_shows=pending_shows,
+            pending_count=pending_count,
+            active_page="pending",
+        ),
     )
 
 
@@ -638,7 +644,9 @@ async def bulk_approve(request: Request):
                     add_options["required_words"] = show.required_words
 
                 try:
-                    medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
+                    medusa_client.add_show(
+                        show.tvdb_id, show.title, add_options=add_options or None
+                    )
                     pending_queue.approve_show(tvdb_id)
                     approved.append(show.title)
                 except Exception:

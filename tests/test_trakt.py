@@ -446,6 +446,32 @@ class TestAuth:
         ):
             client._authenticate()
 
+    @pytest.mark.parametrize("status_code", [500, 503])
+    def test_authenticate_unexpected_poll_status_exits(self, client, status_code):
+        device_resp = _mock_response(
+            {
+                "user_code": "AAAA",
+                "verification_url": "https://trakt.tv/activate",
+                "expires_in": 60,
+                "interval": 1,
+                "device_code": "device-1",
+            }
+        )
+        poll_resp = _mock_response({}, status_code=status_code)
+
+        with (  # noqa: SIM117
+            patch.object(client, "_request", return_value=device_resp),
+            patch.object(client.session, "post", return_value=poll_resp),
+            patch("app.trakt.time.sleep"),
+            patch("app.trakt.time.time", return_value=1),
+        ):
+            with patch("app.trakt.log.error") as mock_log_error:
+                with pytest.raises(RuntimeError):
+                    client._authenticate()
+
+        assert mock_log_error.call_count >= 1
+        assert str(status_code) in str(mock_log_error.call_args_list[0])
+
     def test_authenticate_timeout_exits(self, client):
         device_resp = _mock_response(
             {

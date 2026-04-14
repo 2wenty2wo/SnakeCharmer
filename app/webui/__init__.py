@@ -100,12 +100,9 @@ def create_app(
     templates.env.filters["format_timestamp"] = format_timestamp
     templates.env.filters["format_timestamp_short"] = format_timestamp_short
 
-    from app.webui.csrf import CSRFMiddleware, generate_csrf_token
+    from app.webui.csrf import CSRFMiddleware
 
     app.add_middleware(CSRFMiddleware)
-    # Generate a process-scoped CSRF token and expose it to all templates
-    app.state.csrf_token = generate_csrf_token()
-    templates.env.globals["csrf_token"] = app.state.csrf_token
 
     static_dir = WEBUI_DIR / "static"
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")

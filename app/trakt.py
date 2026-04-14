@@ -316,6 +316,13 @@ class TraktClient(RetryClient):
                     # Slow down
                     time.sleep(interval)
                     continue
+                else:
+                    log.error(
+                        "Unexpected poll response %d: %s",
+                        poll_resp.status_code,
+                        poll_resp.text,
+                    )
+                    break
             except requests.RequestException as e:
                 log.warning("Poll request failed: %s", e)
                 continue
