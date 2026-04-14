@@ -338,10 +338,10 @@ def get_config_errors(config: AppConfig) -> list[str]:
     try:
         retry_backoff = float(config.sync.retry_backoff)
     except (TypeError, ValueError):
-        errors.append("sync.retry_backoff must be a number > 0")
+        errors.append("sync.retry_backoff must be a number >= 0")
     else:
-        if retry_backoff <= 0:
-            errors.append("sync.retry_backoff must be > 0")
+        if retry_backoff < 0:
+            errors.append("sync.retry_backoff must be >= 0")
 
     try:
         health_port = int(config.health.port)

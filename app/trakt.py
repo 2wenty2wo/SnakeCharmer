@@ -8,6 +8,7 @@ import requests
 
 from app.config import TraktConfig, TraktSource
 from app.http_client import REQUEST_TIMEOUT, RetryClient
+from app.oauth_device import parse_oauth_device_timing
 
 log = logging.getLogger(__name__)
 
@@ -275,14 +276,17 @@ class TraktClient(RetryClient):
 
         user_code = device["user_code"]
         verification_url = device["verification_url"]
-        expires_in = int(float(device["expires_in"]))
-        interval = int(float(device["interval"]))
-        if interval < 1:
-            log.warning("Invalid device poll interval %s; using 1s", interval)
-            interval = 1
-        if expires_in < 1:
-            log.warning("Invalid device code expires_in %s; using 600s", expires_in)
-            expires_in = 600
+        parsed = parse_oauth_device_timing(
+            device.get("interval", 5),
+            device.get("expires_in", 600),
+        )
+        if parsed is None:
+            log.warning(
+                "Invalid device OAuth timing from API; using interval=5s, expires_in=600s"
+            )
+            interval, expires_in = 5, 600
+        else:
+            interval, expires_in = parsed
 
         print()
         print("=" * 50)

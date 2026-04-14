@@ -8,6 +8,7 @@ import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from app.oauth_device import parse_oauth_device_timing as _parse_oauth_device_timing
 from app.webui.csrf import verify_csrf
 
 log = logging.getLogger(__name__)
@@ -15,36 +16,6 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 TRAKT_API_URL = "https://api.trakt.tv"
-
-
-def _parse_oauth_device_timing(interval: object, expires_in: object) -> tuple[int, int] | None:
-    """Parse Trakt device OAuth timing for polling (matches CLI safeguards).
-
-    Returns ``(interval_seconds, expires_in_seconds)`` with a minimum interval of 1
-    and a minimum expiry window of 600 seconds (same default as Trakt's typical response).
-
-    Returns ``None`` if either value is not a finite number string (caller should treat
-    as invalid user input).
-    """
-    try:
-        interval_f = float(interval)
-        expires_f = float(expires_in)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    if interval_f != interval_f or expires_f != expires_f:  # NaN
-        return None
-    try:
-        interval_i = int(interval_f)
-        expires_i = int(expires_f)
-    except (ValueError, OverflowError):
-        return None
-    if interval_i < 1:
-        log.warning("Invalid OAuth poll interval %r; using 1s", interval)
-        interval_i = 1
-    if expires_i < 1:
-        log.warning("Invalid OAuth device expires_in %r; using 600s", expires_in)
-        expires_i = 600
-    return interval_i, expires_i
 
 
 def _holder(request: Request):
