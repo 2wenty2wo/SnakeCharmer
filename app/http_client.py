@@ -29,6 +29,16 @@ class RetryClient:
         self.max_retries = max_retries
         self.retry_backoff = retry_backoff
 
+    def close(self) -> None:
+        """Close the underlying requests session."""
+        self.session.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     def _handle_rate_limit(
         self, resp: requests.Response, method: str, url: str, **kwargs
     ) -> requests.Response | None:

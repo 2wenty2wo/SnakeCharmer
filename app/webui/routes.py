@@ -442,13 +442,13 @@ async def source_preview(request: Request):
             auth=source_auth if source_auth else None,
         )
         config = _holder(request).get()
-        client = TraktClient(
+        with TraktClient(
             trakt_config,
             config_dir=config.config_dir,
             max_retries=1,
             retry_backoff=1.0,
-        )
-        shows = client.get_shows(source)
+        ) as client:
+            shows = client.get_shows(source)
         return _templates(request).TemplateResponse(
             request,
             "config/source_preview.html",
@@ -508,14 +508,14 @@ async def approve_single(request: Request, tvdb_id: int):
 
     # Add to Medusa
     try:
-        medusa_client = _get_medusa_client(request)
-        add_options = {}
-        if show.quality:
-            add_options["quality"] = show.quality
-        if show.required_words:
-            add_options["required_words"] = show.required_words
+        with _get_medusa_client(request) as medusa_client:
+            add_options = {}
+            if show.quality:
+                add_options["quality"] = show.quality
+            if show.required_words:
+                add_options["required_words"] = show.required_words
 
-        medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
+            medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
 
         # Remove from pending queue
         pending_queue.approve_show(tvdb_id)
@@ -578,25 +578,25 @@ async def bulk_approve(request: Request):
     failed = []
 
     try:
-        medusa_client = _get_medusa_client(request)
-        for tvdb_id in tvdb_ids:
-            show = pending_queue.get_show(tvdb_id)
-            if show is None:
-                continue
+        with _get_medusa_client(request) as medusa_client:
+            for tvdb_id in tvdb_ids:
+                show = pending_queue.get_show(tvdb_id)
+                if show is None:
+                    continue
 
-            add_options = {}
-            if show.quality:
-                add_options["quality"] = show.quality
-            if show.required_words:
-                add_options["required_words"] = show.required_words
+                add_options = {}
+                if show.quality:
+                    add_options["quality"] = show.quality
+                if show.required_words:
+                    add_options["required_words"] = show.required_words
 
-            try:
-                medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
-                pending_queue.approve_show(tvdb_id)
-                approved.append(show.title)
-            except Exception:
-                log.exception("Failed to add show '%s' (tvdb:%d)", show.title, show.tvdb_id)
-                failed.append(show.title)
+                try:
+                    medusa_client.add_show(show.tvdb_id, show.title, add_options=add_options or None)
+                    pending_queue.approve_show(tvdb_id)
+                    approved.append(show.title)
+                except Exception:
+                    log.exception("Failed to add show '%s' (tvdb:%d)", show.title, show.tvdb_id)
+                    failed.append(show.title)
     except Exception:
         log.exception("Failed to connect to Medusa during bulk approve")
         return HTMLResponse(

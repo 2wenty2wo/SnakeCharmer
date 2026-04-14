@@ -1619,6 +1619,7 @@ class TestPendingApprove:
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.__enter__.return_value = mock_cls.return_value
             mock_cls.return_value.add_show.return_value = True
             response = client.post("/pending/approve/12345")
 
@@ -1641,6 +1642,7 @@ class TestPendingApprove:
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
             mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
             mock_medusa.add_show.return_value = True
             response = client.post("/pending/approve/12345")
 
@@ -1668,6 +1670,7 @@ class TestPendingApprove:
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.__enter__.return_value = mock_cls.return_value
             mock_cls.return_value.add_show.side_effect = requests.ConnectionError("timeout")
             response = client.post("/pending/approve/12345")
 
@@ -1713,6 +1716,7 @@ class TestPendingBulkApprove:
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.__enter__.return_value = mock_cls.return_value
             mock_cls.return_value.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-approve",
@@ -1732,6 +1736,7 @@ class TestPendingBulkApprove:
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.__enter__.return_value = mock_cls.return_value
             mock_cls.return_value.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-approve",
@@ -1763,6 +1768,7 @@ class TestPendingBulkApprove:
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
             mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
             mock_medusa.add_show.side_effect = [True, Exception("Medusa error")]
             response = client.post(
                 "/pending/bulk-approve",
@@ -1795,6 +1801,7 @@ class TestPendingBulkApprove:
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
             mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
             mock_medusa.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-approve",
@@ -1814,6 +1821,7 @@ class TestPendingBulkApprove:
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
             mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
             mock_medusa.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-approve",
@@ -1835,6 +1843,7 @@ class TestPendingBulkApprove:
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
             mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
             mock_medusa.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-approve",
@@ -1882,6 +1891,7 @@ class TestPendingBulkAction:
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
 
         with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_cls.return_value.__enter__.return_value = mock_cls.return_value
             mock_cls.return_value.add_show.return_value = True
             response = client.post(
                 "/pending/bulk-action",

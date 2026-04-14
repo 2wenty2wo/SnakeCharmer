@@ -20,13 +20,17 @@ def config():
 @pytest.fixture
 def mock_trakt():
     with patch("app.sync.TraktClient") as mock:
-        yield mock.return_value
+        instance = mock.return_value
+        instance.__enter__.return_value = instance
+        yield instance
 
 
 @pytest.fixture
 def mock_medusa():
     with patch("app.sync.MedusaClient") as mock:
-        yield mock.return_value
+        instance = mock.return_value
+        instance.__enter__.return_value = instance
+        yield instance
 
 
 class TestRunSync:
