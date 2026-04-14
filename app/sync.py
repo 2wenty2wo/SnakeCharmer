@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -132,8 +133,22 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
 
             # Check if this show should go to pending queue
             if requires_manual_approval:
-                # Check if already pending
-                if pending_queue.is_pending(show.tvdb_id):
+                try:
+                    already_pending = pending_queue.is_pending(show.tvdb_id)
+                except (OSError, json.JSONDecodeError) as e:
+                    log.warning(
+                        "Pending queue check failed for '%s' (tvdb:%d): %s",
+                        show.title,
+                        show.tvdb_id,
+                        e,
+                    )
+                    result.skipped += 1
+                    _track_action(
+                        result, show, selected_source_label, "skipped", "pending_queue_error"
+                    )
+                    continue
+
+                if already_pending:
                     log.debug("Already in pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
                     result.skipped += 1
                     _track_action(result, show, selected_source_label, "skipped", "already_pending")
@@ -165,7 +180,22 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     _track_action(result, show, selected_source_label, "queued")
                     continue
 
-                if pending_queue.add_show(pending_show):
+                try:
+                    added = pending_queue.add_show(pending_show)
+                except (OSError, json.JSONDecodeError) as e:
+                    log.warning(
+                        "Pending queue add failed for '%s' (tvdb:%d): %s",
+                        show.title,
+                        show.tvdb_id,
+                        e,
+                    )
+                    result.skipped += 1
+                    _track_action(
+                        result, show, selected_source_label, "skipped", "pending_queue_error"
+                    )
+                    continue
+
+                if added:
                     log.info(
                         "Queued for approval: %s (tvdb:%d, source:%s)",
                         show.title,

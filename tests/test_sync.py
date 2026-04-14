@@ -349,6 +349,33 @@ class TestRunSync:
         pending_queue.add_show.assert_called_once()
         mock_medusa.add_show.assert_not_called()
         assert result.skipped == 1
+
+    def test_pending_queue_is_pending_raises_oserror(self, config, mock_trakt, mock_medusa):
+        config.trakt.sources = [TraktSource(type="trending", auto_approve=False)]
+        mock_trakt.get_shows.return_value = [TraktShow(title="Broken Queue", tvdb_id=11)]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        pending_queue = Mock()
+        pending_queue.is_pending.side_effect = OSError("permission denied")
+
+        result = run_sync(config, pending_queue=pending_queue)
+
+        assert result.skipped == 1
+        assert result.success is True
+        mock_medusa.add_show.assert_not_called()
+
+    def test_pending_queue_add_show_raises_oserror(self, config, mock_trakt, mock_medusa):
+        config.trakt.sources = [TraktSource(type="trending", auto_approve=False)]
+        mock_trakt.get_shows.return_value = [TraktShow(title="Broken Queue", tvdb_id=22)]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        pending_queue = Mock()
+        pending_queue.is_pending.return_value = False
+        pending_queue.add_show.side_effect = OSError("disk full")
+
+        result = run_sync(config, pending_queue=pending_queue)
+
+        assert result.skipped == 1
+        assert result.success is True
+        mock_medusa.add_show.assert_not_called()
         assert result.queued == 0
 
 
