@@ -394,9 +394,7 @@ def get_config_errors(config: AppConfig) -> list[str]:
 
         if source.type == "user_list":
             if not source.owner:
-                errors.append(
-                    "trakt.sources[].owner is required for source type 'user_list'"
-                )
+                errors.append("trakt.sources[].owner is required for source type 'user_list'")
             if not source.list_slug:
                 errors.append("trakt.sources[].list_slug is required for source type 'user_list'")
             if source.requires_auth:

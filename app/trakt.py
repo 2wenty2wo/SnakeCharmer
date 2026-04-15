@@ -281,9 +281,7 @@ class TraktClient(RetryClient):
             device.get("expires_in", 600),
         )
         if parsed is None:
-            log.warning(
-                "Invalid device OAuth timing from API; using interval=5s, expires_in=600s"
-            )
+            log.warning("Invalid device OAuth timing from API; using interval=5s, expires_in=600s")
             interval, expires_in = 5, 600
         else:
             interval, expires_in = parsed

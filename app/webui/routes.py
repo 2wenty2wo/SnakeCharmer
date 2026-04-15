@@ -611,11 +611,7 @@ async def approve_single(request: Request, tvdb_id: int):
             show.title,
             show.tvdb_id,
         )
-        medusa_msg = (
-            "was added to Medusa"
-            if added
-            else "already exists in Medusa"
-        )
+        medusa_msg = "was added to Medusa" if added else "already exists in Medusa"
         return HTMLResponse(
             f'<div class="banner warning">{escape(show.title)} {medusa_msg}, '
             "but could not be removed from the pending queue.</div>"
