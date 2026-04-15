@@ -9,6 +9,7 @@ __pycache__/
 dist/
 build/
 .coverage
+coverage.xml
 pending_queue.json
 sync_history.db
 sync_history.db-shm
