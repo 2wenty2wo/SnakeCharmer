@@ -21,3 +21,17 @@ class TestParseOauthDeviceTiming:
     @pytest.mark.parametrize("expires", [600, 700, 3600])
     def test_preserves_expires_at_or_above_minimum(self, expires):
         assert parse_oauth_device_timing(5, expires) == (5, expires)
+
+    def test_returns_none_for_nan_interval(self):
+        # NaN passes float() but must be rejected via self-equality check.
+        assert parse_oauth_device_timing(float("nan"), 600) is None
+
+    def test_returns_none_for_nan_expires(self):
+        assert parse_oauth_device_timing(5, float("nan")) is None
+
+    def test_returns_none_for_infinite_interval(self):
+        # float('inf') passes NaN check but int(inf) raises OverflowError.
+        assert parse_oauth_device_timing(float("inf"), 600) is None
+
+    def test_returns_none_for_infinite_expires(self):
+        assert parse_oauth_device_timing(5, float("inf")) is None
