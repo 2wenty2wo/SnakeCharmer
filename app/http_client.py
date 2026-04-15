@@ -26,7 +26,7 @@ class RetryClient:
     ):
         self.session = session
         self.base_url = base_url
-        self.max_retries = max_retries
+        self.max_retries = max(0, max_retries)
         self.retry_backoff = retry_backoff
 
     def close(self) -> None:

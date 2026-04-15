@@ -8,6 +8,7 @@ import requests
 
 from app.config import TraktConfig, TraktSource
 from app.http_client import REQUEST_TIMEOUT, RetryClient
+from app.oauth_device import parse_oauth_device_timing
 
 log = logging.getLogger(__name__)
 
@@ -220,7 +221,7 @@ class TraktClient(RetryClient):
             return None
 
         try:
-            with open(self.token_path) as f:
+            with open(self.token_path, encoding="utf-8") as f:
                 token = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             log.warning("Failed to read token file: %s", e)
@@ -275,8 +276,15 @@ class TraktClient(RetryClient):
 
         user_code = device["user_code"]
         verification_url = device["verification_url"]
-        expires_in = device["expires_in"]
-        interval = device["interval"]
+        parsed = parse_oauth_device_timing(
+            device.get("interval", 5),
+            device.get("expires_in", 600),
+        )
+        if parsed is None:
+            log.warning("Invalid device OAuth timing from API; using interval=5s, expires_in=600s")
+            interval, expires_in = 5, 600
+        else:
+            interval, expires_in = parsed
 
         print()
         print("=" * 50)
@@ -343,7 +351,8 @@ class TraktClient(RetryClient):
 
     def _save_token(self, token: dict) -> None:
         """Persist OAuth token to disk."""
-        with open(self.token_path, "w") as f:
+        token.setdefault("created_at", int(time.time()))
+        with open(self.token_path, "w", encoding="utf-8") as f:
             json.dump(token, f, indent=2)
         log.debug("Token saved to %s", self.token_path)
 
@@ -355,7 +364,10 @@ class TraktClient(RetryClient):
         """Handle Trakt 429 rate limiting using the Retry-After header."""
         if resp.status_code != 429:
             return None
-        retry_after = int(resp.headers.get("Retry-After", 10))
+        try:
+            retry_after = int(resp.headers.get("Retry-After", 10))
+        except (TypeError, ValueError):
+            retry_after = 10
         log.warning("Rate limited, waiting %ds", retry_after)
         time.sleep(retry_after)
         resp = self.session.request(method, url, **kwargs)

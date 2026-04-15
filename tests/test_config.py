@@ -4,14 +4,24 @@ import yaml
 from app.config import (
     PUBLIC_LISTS,
     AppConfig,
+    HealthConfig,
     MedusaConfig,
+    SyncConfig,
     TraktConfig,
     TraktSource,
+    WebUIConfig,
+    _normalize_notify_urls,
     _normalize_trakt_sources,
+    _safe_float,
+    _safe_float_non_negative,
+    _safe_int,
+    _safe_int_non_negative,
+    _safe_int_port,
     _to_bool,
     get_config_errors,
     get_section_errors,
     load_config,
+    validate_raw_numeric_fields,
 )
 
 
@@ -355,6 +365,31 @@ class TestGetConfigErrors:
         errors = get_config_errors(config)
         assert any("sources" in e for e in errors)
 
+    def test_negative_trakt_limit_in_config_errors(self):
+        config = AppConfig(
+            trakt=TraktConfig(
+                client_id="id",
+                limit=-1,
+                sources=[TraktSource(type="trending")],
+            ),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
+        )
+        errors = get_config_errors(config)
+        assert "trakt.limit must be >= 0" in errors
+
+    def test_user_list_without_owner_reports_error(self):
+        config = AppConfig(
+            trakt=TraktConfig(
+                client_id="id",
+                sources=[
+                    TraktSource(type="user_list", owner="", list_slug="my-list"),
+                ],
+            ),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
+        )
+        errors = get_config_errors(config)
+        assert any("owner is required" in e and "user_list" in e for e in errors)
+
     def test_empty_config_returns_all_errors(self):
         config = AppConfig()
         errors = get_config_errors(config)
@@ -450,6 +485,13 @@ class TestNormalizeHelpers:
         assert len(parsed) == 1
         assert parsed[0].type == "user_list"
         assert parsed[0].list_slug == "my-custom-list"
+        assert parsed[0].owner == ""
+
+    def test_normalize_trakt_sources_shorthand_does_not_infer_owner_from_username(self):
+        parsed = _normalize_trakt_sources(
+            {"username": "alice", "sources": ["my-custom-list"]},
+        )
+        assert parsed[0].owner == ""
 
     def test_normalize_trakt_sources_string_known_type(self):
         parsed = _normalize_trakt_sources({"sources": ["popular"]})
@@ -618,12 +660,304 @@ class TestBoundaryValues:
         config = load_config(path)
         assert config.trakt.client_id == "id"
 
-    def test_negative_limit_loads(self, tmp_path):
-        """Negative limit is not explicitly validated — it loads but produces 0 shows."""
+    def test_negative_limit_rejected(self, tmp_path):
         data = {
             "trakt": {"client_id": "id", "limit": -1, "sources": [{"type": "trending"}]},
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
         }
         path = _write_config(tmp_path, data)
-        config = load_config(path)
-        assert config.trakt.limit == -1
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_negative_limit_skip_validate_coerces_and_warns(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "limit": -1, "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("trakt.limit" in w for w in config.load_warnings)
+        assert config.trakt.limit == 50
+
+    def test_invalid_sync_interval_string_exits(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"interval": "not-a-number"},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_invalid_sync_interval_skip_validate_records_load_warnings(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"interval": "not-a-number"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("sync.interval" in w for w in config.load_warnings)
+        assert config.sync.interval == 0
+
+    def test_retry_backoff_int_overflow_skip_validate_coerces(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"retry_backoff": 10**350},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("retry_backoff" in w for w in config.load_warnings)
+        assert config.sync.retry_backoff == 2.0
+
+    def test_retry_backoff_int_overflow_rejected(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"retry_backoff": 10**350},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_negative_sync_interval_rejected(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"interval": -5},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_negative_sync_interval_skip_validate_coerces(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"interval": -5},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("sync.interval" in w for w in config.load_warnings)
+        assert config.sync.interval == 0
+
+    def test_negative_max_retries_skip_validate_coerces(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"max_retries": -1},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("max_retries" in w for w in config.load_warnings)
+        assert config.sync.max_retries == 3
+
+    def test_negative_retry_backoff_skip_validate_coerces(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"retry_backoff": -2.5},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("retry_backoff" in w for w in config.load_warnings)
+        assert config.sync.retry_backoff == 2.0
+
+    def test_invalid_health_port_skip_validate_coerces(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "health": {"enabled": True, "port": 70000},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("health.port" in w for w in config.load_warnings)
+        assert config.health.port == 8095
+
+
+class TestSafeNumericCoercion:
+    def test_safe_float_overflow_returns_default(self):
+        assert _safe_float(10**350, 2.0) == 2.0
+
+    def test_safe_int_overflow_returns_default(self):
+        assert _safe_int(float("inf"), 0) == 0
+
+    def test_safe_int_non_negative_overflow_returns_default(self):
+        assert _safe_int_non_negative(float("inf"), 50) == 50
+
+    def test_safe_float_non_negative_negative_returns_default(self):
+        assert _safe_float_non_negative(-1.0, 2.0) == 2.0
+
+    def test_safe_int_port_out_of_range_returns_default(self):
+        assert _safe_int_port(-1, 8095) == 8095
+        assert _safe_int_port(70000, 8095) == 8095
+
+    def test_safe_int_port_valid_returns_value(self):
+        assert _safe_int_port(0, 8095) == 0
+        assert _safe_int_port(65535, 8095) == 65535
+        assert _safe_int_port(9000, 8095) == 9000
+
+    def test_safe_int_port_invalid_type_returns_default(self):
+        # Exercises lines 64-66 (TypeError/ValueError/OverflowError) in _safe_int_port.
+        assert _safe_int_port("not-a-number", 8095) == 8095
+        assert _safe_int_port(None, 8095) == 8095
+        assert _safe_int_port(float("inf"), 8095) == 8095
+
+
+class TestValidateRawNumericFields:
+    """Direct tests for validate_raw_numeric_fields to cover TypeError/ValueError branches."""
+
+    def test_trakt_limit_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({"limit": "not-a-number"}, {}, {}, {})
+        assert "trakt.limit must be an integer >= 0" in errors
+
+    def test_trakt_limit_negative_reports_error(self):
+        errors = validate_raw_numeric_fields({"limit": -1}, {}, {}, {})
+        assert "trakt.limit must be >= 0" in errors
+
+    def test_sync_interval_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {"interval": "not-a-number"}, {}, {})
+        assert "sync.interval must be an integer >= 0" in errors
+
+    def test_sync_max_retries_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {"max_retries": "not-a-number"}, {}, {})
+        assert "sync.max_retries must be an integer >= 0" in errors
+
+    def test_sync_max_retries_negative_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {"max_retries": -1}, {}, {})
+        assert "sync.max_retries must be >= 0" in errors
+
+    def test_sync_retry_backoff_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {"retry_backoff": "not-a-number"}, {}, {})
+        assert "sync.retry_backoff must be a number >= 0" in errors
+
+    def test_health_port_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {}, {"port": "not-a-number"}, {})
+        assert "health.port must be an integer between 0 and 65535" in errors
+
+    def test_health_port_out_of_range_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {}, {"port": 70000}, {})
+        assert "health.port must be between 0 and 65535" in errors
+
+    def test_webui_port_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {}, {}, {"port": "not-a-number"})
+        assert "webui.port must be an integer between 0 and 65535" in errors
+
+    def test_webui_port_out_of_range_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {}, {}, {"port": -1})
+        assert "webui.port must be between 0 and 65535" in errors
+
+    def test_all_valid_numeric_fields_returns_empty(self):
+        errors = validate_raw_numeric_fields(
+            {"limit": 50},
+            {"interval": 0, "max_retries": 3, "retry_backoff": 2.0},
+            {"port": 8095},
+            {"port": 8089},
+        )
+        assert errors == []
+
+
+class TestNormalizeNotifyUrlsDirect:
+    def test_non_list_non_string_returns_empty(self):
+        # Covers line 301: return [] when urls is not a list or string (e.g., int/dict).
+        assert _normalize_notify_urls({"urls": 42}) == []
+        assert _normalize_notify_urls({"urls": {"not": "a list"}}) == []
+        assert _normalize_notify_urls({"urls": None}) == []
+
+    def test_missing_urls_returns_empty(self):
+        # Defaults to [] which is a list and produces an empty list.
+        assert _normalize_notify_urls({}) == []
+
+
+class TestGetConfigErrorsNumeric:
+    """Cover numeric-type TypeError/ValueError and negative branches in get_config_errors."""
+
+    def _valid_base_kwargs(self) -> dict:
+        return {
+            "trakt": TraktConfig(client_id="id", sources=[TraktSource(type="trending")]),
+            "medusa": MedusaConfig(url="http://localhost:8081", api_key="key"),
+        }
+
+    def test_trakt_limit_typeerror_reports_integer_error(self):
+        config = AppConfig(
+            trakt=TraktConfig(
+                client_id="id",
+                # None is invalid type: int(None) raises TypeError.
+                limit=None,  # type: ignore[arg-type]
+                sources=[TraktSource(type="trending")],
+            ),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
+        )
+        errors = get_config_errors(config)
+        assert "trakt.limit must be an integer >= 0" in errors
+
+    def test_sync_interval_typeerror_reports_integer_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(interval="not-a-number")  # type: ignore[arg-type]
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.interval must be an integer >= 0" in errors
+
+    def test_sync_interval_negative_reports_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(interval=-5)
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.interval must be >= 0" in errors
+
+    def test_sync_max_retries_typeerror_reports_integer_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(max_retries="oops")  # type: ignore[arg-type]
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.max_retries must be an integer >= 0" in errors
+
+    def test_sync_max_retries_negative_reports_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(max_retries=-1)
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.max_retries must be >= 0" in errors
+
+    def test_sync_retry_backoff_typeerror_reports_number_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(retry_backoff="fast")  # type: ignore[arg-type]
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.retry_backoff must be a number >= 0" in errors
+
+    def test_sync_retry_backoff_negative_reports_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(retry_backoff=-0.5)
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.retry_backoff must be >= 0" in errors
+
+    def test_health_port_typeerror_reports_integer_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["health"] = HealthConfig(port="port")  # type: ignore[arg-type]
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "health.port must be an integer between 0 and 65535" in errors
+
+    def test_health_port_out_of_range_reports_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["health"] = HealthConfig(port=99999)
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "health.port must be between 0 and 65535" in errors
+
+    def test_webui_port_typeerror_reports_integer_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["webui"] = WebUIConfig(port="port")  # type: ignore[arg-type]
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "webui.port must be an integer between 0 and 65535" in errors
+
+    def test_webui_port_out_of_range_reports_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["webui"] = WebUIConfig(port=-1)
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "webui.port must be between 0 and 65535" in errors

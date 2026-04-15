@@ -254,3 +254,74 @@ class TestSaveConfigFailure:
         # No temp files should remain
         files = os.listdir(tmp_path)
         assert all(not f.startswith(".config_") for f in files)
+
+
+class TestConfigToDictAutoApprove:
+    """Covers the ``auto_approve=False`` serialization branch in config_to_dict."""
+
+    def test_auto_approve_false_is_serialized(self):
+        config = _make_config(
+            trakt=TraktConfig(
+                client_id="id",
+                client_secret="secret",
+                username="user",
+                sources=[TraktSource(type="trending", auto_approve=False)],
+            )
+        )
+        result = config_to_dict(config)
+        source = result["trakt"]["sources"][0]
+        assert source["auto_approve"] is False
+
+    def test_auto_approve_true_is_omitted(self):
+        # Default auto_approve=True should be omitted from serialized form.
+        config = _make_config(
+            trakt=TraktConfig(
+                client_id="id",
+                sources=[TraktSource(type="trending", auto_approve=True)],
+            )
+        )
+        result = config_to_dict(config)
+        source = result["trakt"]["sources"][0]
+        assert "auto_approve" not in source
+
+
+class TestLoadConfigDictNumericErrors:
+    """Covers the ``raise ConfigError(raw_numeric_errors)`` branch in load_config_dict."""
+
+    def test_validate_true_raises_on_numeric_errors(self, tmp_path):
+        import pytest
+
+        from app.config import ConfigError
+        from app.webui.config_io import load_config_dict
+
+        raw = {
+            "trakt": {
+                "client_id": "id",
+                "limit": "not-a-number",
+                "sources": [{"type": "trending"}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = str(tmp_path / "config.yaml")
+
+        with pytest.raises(ConfigError) as excinfo:
+            load_config_dict(raw, path, validate=True)
+        assert any("trakt.limit" in e for e in excinfo.value.errors)
+
+    def test_validate_false_records_warnings_instead_of_raising(self, tmp_path):
+        from app.webui.config_io import load_config_dict
+
+        raw = {
+            "trakt": {
+                "client_id": "id",
+                "limit": "not-a-number",
+                "sources": [{"type": "trending"}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = str(tmp_path / "config.yaml")
+
+        config = load_config_dict(raw, path, validate=False)
+        assert any("trakt.limit" in w for w in config.load_warnings)
+        # load_warnings are non-fatal and a fallback default is used.
+        assert config.trakt.limit == 50

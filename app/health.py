@@ -5,6 +5,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
 BIND_ALL_INTERFACES = str(ipaddress.IPv4Address(0))
@@ -116,7 +117,7 @@ class _HealthHandler(BaseHTTPRequestHandler):
     sync_status: SyncStatus
 
     def do_GET(self) -> None:
-        if self.path not in ("/", "/health"):
+        if urlparse(self.path).path not in ("/", "/health"):
             self.send_response(404)
             self.end_headers()
             return

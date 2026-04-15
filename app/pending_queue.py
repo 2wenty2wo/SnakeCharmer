@@ -30,7 +30,7 @@ class PendingQueue:
         if not self._path.exists():
             return
         try:
-            with open(self._path) as f:
+            with open(self._path, encoding="utf-8") as f:
                 data = json.load(f)
             for item in data.get("pending", []):
                 show = self._dict_to_show(item)
@@ -48,7 +48,7 @@ class PendingQueue:
         }
         try:
             tmp_path = self._path.with_suffix(".tmp")
-            with open(tmp_path, "w") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
             os.replace(tmp_path, self._path)
         except OSError as e:

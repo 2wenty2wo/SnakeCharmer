@@ -8,6 +8,7 @@ import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from app.oauth_device import parse_oauth_device_timing as _parse_oauth_device_timing
 from app.webui.csrf import verify_csrf
 
 log = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ def _get_trakt_token_status(config) -> str:
     if not os.path.exists(token_path):
         return "none"
     try:
-        with open(token_path) as f:
+        with open(token_path, encoding="utf-8") as f:
             token = json.load(f)
         created_at = token.get("created_at", 0)
         expires_in = token.get("expires_in", 0)
@@ -93,8 +94,12 @@ async def oauth_trakt_start(request: Request):
     user_code = escape(device["user_code"])
     verification_url = escape(device["verification_url"])
     device_code = escape(device["device_code"])
-    interval = int(device.get("interval", 5))
-    expires_in = int(device.get("expires_in", 600))
+    parsed = _parse_oauth_device_timing(device.get("interval", 5), device.get("expires_in", 600))
+    if parsed is None:
+        log.warning("Non-numeric interval/expires_in from Trakt device response; using defaults")
+        interval, expires_in = 5, 600
+    else:
+        interval, expires_in = parsed
 
     return HTMLResponse(
         f'<div class="oauth-card">'
@@ -126,13 +131,12 @@ async def oauth_trakt_poll(request: Request):
     device_code = form.get("device_code", "").strip()
     client_id = form.get("client_id", "").strip()
     client_secret = form.get("client_secret", "").strip()
-    try:
-        interval = int(form.get("interval", 5))
-        expires_in = int(form.get("expires_in", 600))
-    except ValueError:
+    parsed = _parse_oauth_device_timing(form.get("interval", 5), form.get("expires_in", 600))
+    if parsed is None:
         return HTMLResponse(
             '<div class="banner error" role="alert">Invalid OAuth polling parameters.</div>'
         )
+    interval, expires_in = parsed
 
     if not device_code or not client_id or not client_secret:
         return HTMLResponse(
@@ -164,10 +168,11 @@ async def oauth_trakt_poll(request: Request):
     if resp.status_code == 200:
         # Success — save token
         token = resp.json()
+        token.setdefault("created_at", int(time.time()))
         config = _holder(request).get()
         token_path = os.path.join(config.config_dir, "trakt_token.json")
         try:
-            with open(token_path, "w") as f:
+            with open(token_path, "w", encoding="utf-8") as f:
                 json.dump(token, f, indent=2)
         except OSError:
             log.exception("Failed to save Trakt OAuth token to %s", token_path)

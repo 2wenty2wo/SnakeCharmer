@@ -1215,6 +1215,32 @@ class TestSourcePreview:
         assert "Show Two" in response.text
         assert "tvdb:100" in response.text
 
+    def test_preview_auth_required_without_token_file(self, tmp_path):
+        """Auth sources without a trakt_token.json file should short-circuit
+        with an 'Authentication required' message."""
+        import os
+
+        client, _, _ = _create_client(tmp_path)
+        # Ensure no token file exists in the config dir.
+        token_path = os.path.join(str(tmp_path), "trakt_token.json")
+        assert not os.path.exists(token_path)
+
+        response = client.post(
+            "/config/trakt/sources/preview",
+            data={
+                "client_id": "test_id",
+                "client_secret": "secret",
+                "username": "user",
+                "source_index": "0",
+                "source_0_type": "user_list",
+                "source_0_owner": "alice",
+                "source_0_list_slug": "private-list",
+                "source_0_auth": "on",
+            },
+        )
+        assert response.status_code == 200
+        assert "Authentication required" in response.text
+
 
 def _make_incomplete_config(**overrides) -> AppConfig:
     """Create a config with missing required fields (no client_id, no medusa)."""
@@ -1390,6 +1416,70 @@ class TestTraktOAuth:
         assert "oauth-code" in response.text
         _, kwargs = mock_post.call_args
         assert kwargs["headers"]["trakt-api-key"] == "test_id"
+
+    def test_oauth_start_clamps_non_positive_interval_and_expires_in(self, tmp_path):
+        """HTMX poll delay and expiry must stay valid when Trakt sends bogus numbers."""
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "device_code": "abc123",
+            "user_code": "ABCD1234",
+            "verification_url": "https://trakt.tv/activate",
+            "expires_in": -10,
+            "interval": -2,
+        }
+        mock_resp.raise_for_status = MagicMock()
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert 'hx-trigger="load delay:1s"' in response.text
+        assert '"interval": "1"' in response.text
+        assert '"expires_in": "600"' in response.text
+
+    def test_oauth_start_non_numeric_interval_from_trakt_uses_defaults(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "device_code": "abc123",
+            "user_code": "ABCD1234",
+            "verification_url": "https://trakt.tv/activate",
+            "expires_in": 600,
+            "interval": "not-a-number",
+        }
+        mock_resp.raise_for_status = MagicMock()
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert 'hx-trigger="load delay:5s"' in response.text
+        assert '"expires_in": "600"' in response.text
+
+    def test_oauth_start_clamps_expires_in_below_600(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "device_code": "abc123",
+            "user_code": "ABCD1234",
+            "verification_url": "https://trakt.tv/activate",
+            "expires_in": 300,
+            "interval": 5,
+        }
+        mock_resp.raise_for_status = MagicMock()
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert '"expires_in": "600"' in response.text
 
     def test_oauth_poll_success_saves_token(self, tmp_path):
         client, holder, _ = _create_client(tmp_path)
@@ -1849,6 +1939,38 @@ class TestPendingApprove:
         # Show should remain in queue since add failed
         assert pq.get_show(12345) is not None
 
+    def test_approve_single_queue_oserror_after_add_reflects_added(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(12345, "Queue Fail Show"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
+            mock_medusa.add_show.return_value = True
+            with patch.object(pq, "approve_show", side_effect=OSError("disk full")):
+                response = client.post("/pending/approve/12345")
+
+        assert response.status_code == 200
+        assert "was added to Medusa" in response.text
+        assert "already exists in Medusa" not in response.text
+
+    def test_approve_single_queue_oserror_when_already_in_medusa_reflects_duplicate(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(12345, "Dup Show"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
+            mock_medusa.add_show.return_value = False
+            with patch.object(pq, "approve_show", side_effect=OSError("disk full")):
+                response = client.post("/pending/approve/12345")
+
+        assert response.status_code == 200
+        assert "already exists in Medusa" in response.text
+        assert "was added to Medusa" not in response.text
+
 
 class TestPendingReject:
     def test_reject_single_success(self, tmp_path):
@@ -1948,6 +2070,34 @@ class TestPendingBulkApprove:
         assert response.status_code == 200
         assert "Approved 1" in response.text
         assert "Failed: 1" in response.text
+
+    def test_bulk_approve_queue_oserror_after_medusa_counts_as_failed(self, tmp_path):
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Show A"))
+        pq.add_show(_make_pending_show(222, "Show B"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+        real_approve = pq.approve_show
+
+        def approve_side_effect(tvdb_id: int):
+            if tvdb_id == 222:
+                raise OSError("save failed")
+            return real_approve(tvdb_id)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
+            mock_medusa.add_show.return_value = True
+            with patch.object(pq, "approve_show", side_effect=approve_side_effect):
+                response = client.post(
+                    "/pending/bulk-approve",
+                    data={"tvdb_ids": ["111", "222"]},
+                )
+
+        assert response.status_code == 200
+        assert "Approved 1" in response.text
+        assert "Failed: 1" in response.text
+        assert pq.get_show(111) is None
+        assert pq.get_show(222) is not None
 
     def test_bulk_approve_medusa_connection_failure(self, tmp_path):
         pq = PendingQueue(config_dir=str(tmp_path))

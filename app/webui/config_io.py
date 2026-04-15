@@ -77,7 +77,7 @@ def save_config(config_dict: dict, path: str) -> None:
     target_dir = os.path.dirname(os.path.abspath(path))
     fd, tmp_path = tempfile.mkstemp(dir=target_dir, suffix=".yaml", prefix=".config_")
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
         os.replace(tmp_path, path)
         log.info("Config saved to %s", path)
@@ -96,7 +96,7 @@ def save_app_config(config: AppConfig, path: str) -> None:
 def reload_config(path: str) -> AppConfig:
     """Load and validate config from file. Raises ConfigError on validation failure."""
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
     except FileNotFoundError as e:
         raise ConfigError([f"Config file not found: {path}"]) from e
@@ -117,8 +117,12 @@ def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfi
         WebUIConfig,
         _normalize_notify_urls,
         _normalize_trakt_sources,
+        _safe_float_non_negative,
+        _safe_int_non_negative,
+        _safe_int_port,
         _to_bool,
         _validate,
+        validate_raw_numeric_fields,
     )
 
     trakt_raw = raw.get("trakt", {})
@@ -128,12 +132,17 @@ def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfi
     webui_raw = raw.get("webui", {})
     notify_raw = raw.get("notify", {})
 
+    raw_numeric_errors = validate_raw_numeric_fields(trakt_raw, sync_raw, health_raw, webui_raw)
+    if validate and raw_numeric_errors:
+        raise ConfigError(raw_numeric_errors)
+    load_warnings = list(raw_numeric_errors) if (not validate and raw_numeric_errors) else []
+
     trakt = TraktConfig(
         client_id=str(trakt_raw.get("client_id", "")),
         client_secret=str(trakt_raw.get("client_secret", "")),
         username=str(trakt_raw.get("username", "")),
         sources=_normalize_trakt_sources(trakt_raw),
-        limit=int(trakt_raw.get("limit", 50)),
+        limit=_safe_int_non_negative(trakt_raw.get("limit", 50), 50),
     )
 
     medusa = MedusaConfig(
@@ -143,20 +152,20 @@ def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfi
 
     sync = SyncConfig(
         dry_run=_to_bool(sync_raw.get("dry_run", False)),
-        interval=int(sync_raw.get("interval", 0)),
-        max_retries=int(sync_raw.get("max_retries", 3)),
-        retry_backoff=float(sync_raw.get("retry_backoff", 2.0)),
+        interval=_safe_int_non_negative(sync_raw.get("interval", 0), 0),
+        max_retries=_safe_int_non_negative(sync_raw.get("max_retries", 3), 3),
+        retry_backoff=_safe_float_non_negative(sync_raw.get("retry_backoff", 2.0), 2.0),
         log_format=str(sync_raw.get("log_format", "text")).strip().lower(),
     )
 
     health = HealthConfig(
         enabled=_to_bool(health_raw.get("enabled", False)),
-        port=int(health_raw.get("port", 8095)),
+        port=_safe_int_port(health_raw.get("port", 8095), 8095),
     )
 
     webui = WebUIConfig(
         enabled=_to_bool(webui_raw.get("enabled", False)),
-        port=int(webui_raw.get("port", 8089)),
+        port=_safe_int_port(webui_raw.get("port", 8089), 8089),
     )
 
     notify = NotifyConfig(
@@ -175,6 +184,7 @@ def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfi
         webui=webui,
         notify=notify,
         config_dir=os.path.dirname(os.path.abspath(path)),
+        load_warnings=load_warnings,
     )
 
     if validate:
