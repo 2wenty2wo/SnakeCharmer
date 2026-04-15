@@ -182,6 +182,40 @@ class TestPendingQueuePersistence:
         pq = PendingQueue(str(tmp_path))
         assert pq.get_count() == 0
 
+    def test_handles_null_pending_and_history(self, tmp_path, caplog):
+        """Null top-level lists are tolerated and treated as empty."""
+        pq_path = tmp_path / "pending_queue.json"
+        pq_path.write_text('{"pending": null, "history": null}', encoding="utf-8")
+
+        with caplog.at_level("WARNING"):
+            pq = PendingQueue(str(tmp_path))
+
+        assert pq.get_count() == 0
+        assert pq.get_history() == []
+        assert "pending must be a list" in caplog.text
+        assert "history must be a list" in caplog.text
+
+    def test_skips_malformed_pending_items_and_keeps_valid_ones(self, tmp_path, caplog):
+        """Individual malformed pending entries are skipped but valid ones load."""
+        pq_path = tmp_path / "pending_queue.json"
+        data = {
+            "pending": [
+                {"tvdb_id": 1, "title": "Valid Show"},
+                {"title": "Missing tvdb_id"},  # KeyError in _dict_to_show
+                {"tvdb_id": "not-an-int", "title": "Bad tvdb_id"},  # ValueError
+                None,  # TypeError: argument of type 'NoneType' is not subscriptable
+            ],
+            "history": [],
+        }
+        pq_path.write_text(json.dumps(data), encoding="utf-8")
+
+        with caplog.at_level("WARNING"):
+            pq = PendingQueue(str(tmp_path))
+
+        assert pq.is_pending(1) is True
+        assert pq.get_count() == 1
+        assert "Skipping malformed pending show item" in caplog.text
+
 
 class TestPendingQueueHistory:
     """History tracking."""
@@ -371,3 +405,21 @@ class TestPendingQueueRollback:
 
         assert pq.get_count() == 1
         assert pq.is_pending(1) is True
+
+    def test_save_logs_and_reraises_os_error(self, tmp_path, caplog):
+        """_save() logs the error and re-raises so callers can roll back."""
+        import pytest
+
+        pq = PendingQueue(str(tmp_path))
+        pq._pending[1] = PendingShow(tvdb_id=1, title="Show 1")
+
+        from unittest.mock import patch
+
+        with (
+            patch("app.pending_queue.open", side_effect=OSError("disk full")),
+            caplog.at_level("ERROR"),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            pq._save()
+
+        assert "Failed to save pending queue" in caplog.text

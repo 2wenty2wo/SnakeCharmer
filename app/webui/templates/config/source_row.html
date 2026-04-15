@@ -75,17 +75,12 @@
         
         <label class="field-label">
             Quality Preset
-            <select name="source_{{ i }}_quality" aria-describedby="quality-help-{{ i }}">
-                <option value="">-- Default --</option>
-                <option value="any" {{ "selected" if source.medusa.quality == "any" }}>Any</option>
-                <option value="sd" {{ "selected" if source.medusa.quality == "sd" }}>SD</option>
-                <option value="hd" {{ "selected" if source.medusa.quality == "hd" }}>HD</option>
-                <option value="hd720p" {{ "selected" if source.medusa.quality == "hd720p" }}>HD 720p</option>
-                <option value="hd1080p" {{ "selected" if source.medusa.quality == "hd1080p" }}>HD 1080p</option>
-                <option value="uhd4k" {{ "selected" if source.medusa.quality == "uhd4k" }}>UHD 4K</option>
-                <option value="uhd8k" {{ "selected" if source.medusa.quality == "uhd8k" }}>UHD 8K</option>
-            </select>
-            <small id="quality-help-{{ i }}">Quality preset for shows added from this source</small>
+            <input type="text"
+                   name="source_{{ i }}_quality"
+                   value="{{ source.medusa.quality | join(', ') if source.medusa.quality is iterable and source.medusa.quality is not string else source.medusa.quality or '' }}"
+                   placeholder="e.g. hd1080p, uhd4k"
+                   aria-describedby="quality-help-{{ i }}">
+            <small id="quality-help-{{ i }}">Quality preset or comma-separated values (any, sd, hd, hd720p, hd1080p, uhd4k, uhd8k)</small>
         </label>
         
         <label class="field-label">

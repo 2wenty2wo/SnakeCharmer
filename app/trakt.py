@@ -27,6 +27,10 @@ class TraktShow:
     genres: list[str] = field(default_factory=list)
 
 
+class MalformedTokenError(RuntimeError):
+    """Raised when trakt_token.json exists but is structurally invalid."""
+
+
 class TraktClient(RetryClient):
     _service_name = "Trakt"
 
@@ -227,6 +231,10 @@ class TraktClient(RetryClient):
             log.warning("Failed to read token file: %s", e)
             return None
 
+        if not isinstance(token, dict):
+            log.warning("Token file is malformed (not a JSON object)")
+            raise MalformedTokenError("trakt_token.json must contain a JSON object")
+
         # Check if token is expired (with 1 hour buffer)
         created_at = token.get("created_at", 0)
         expires_in = token.get("expires_in", 0)
@@ -256,7 +264,7 @@ class TraktClient(RetryClient):
             self._save_token(new_token)
             log.info("Token refreshed successfully")
             return new_token
-        except requests.RequestException as e:
+        except (requests.RequestException, ValueError) as e:
             log.warning("Token refresh failed: %s", e)
             return None
 

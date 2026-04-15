@@ -102,11 +102,17 @@ def reload_config(path: str) -> AppConfig:
         raise ConfigError([f"Config file not found: {path}"]) from e
     except yaml.YAMLError as e:
         raise ConfigError([f"Failed to parse {path}: {e}"]) from e
+    if not isinstance(raw, dict):
+        raise ConfigError(
+            [f"Config file must contain a YAML mapping (key/value pairs), got {type(raw).__name__}"]
+        )
     return load_config_dict(raw, path)
 
 
 def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfig:
     """Build and optionally validate AppConfig from an in-memory dict."""
+    if not isinstance(raw, dict):
+        raise ConfigError([f"Config must be a dict, got {type(raw).__name__}"])
     # Re-use load_config internals but we need to avoid sys.exit.
     from app.config import (
         HealthConfig,

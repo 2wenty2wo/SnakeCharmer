@@ -4,7 +4,7 @@ import pytest
 import requests
 
 from app.config import TraktConfig, TraktSource
-from app.trakt import REQUEST_TIMEOUT, TraktClient, TraktShow
+from app.trakt import REQUEST_TIMEOUT, MalformedTokenError, TraktClient, TraktShow
 
 
 @pytest.fixture
@@ -342,6 +342,14 @@ class TestAuth:
 
         assert client._load_token() is None
 
+    def test_load_token_non_object_json_raises_malformed_error(self, client, tmp_path):
+        token_file = tmp_path / "trakt_token.json"
+        token_file.write_text("[]")
+        client.token_path = str(token_file)
+
+        with pytest.raises(MalformedTokenError):
+            client._load_token()
+
     def test_load_token_oserror_returns_none(self, client, tmp_path):
         token_file = tmp_path / "trakt_token.json"
         token_file.write_text('{"access_token":"abc"}')
@@ -389,6 +397,16 @@ class TestAuth:
         assert client.session.headers["Authorization"] == "Bearer abc"
         mock_auth.assert_not_called()
 
+    def test_ensure_auth_raises_on_malformed_token_file(self, client):
+        with (
+            patch.object(client, "_load_token", side_effect=MalformedTokenError("bad token")),
+            patch.object(client, "_authenticate") as mock_auth,
+            pytest.raises(MalformedTokenError),
+        ):
+            client._ensure_auth()
+
+        mock_auth.assert_not_called()
+
     def test_ensure_auth_authenticates_when_no_token(self, client):
         with (
             patch.object(client, "_load_token", return_value=None),
@@ -418,6 +436,14 @@ class TestAuth:
 
     def test_refresh_token_request_error_returns_none(self, client):
         with patch.object(client.session, "post", side_effect=requests.RequestException("boom")):
+            token = client._refresh_token({"refresh_token": "old-refresh"})
+
+        assert token is None
+
+    def test_refresh_token_invalid_json_returns_none(self, client):
+        bad_resp = _mock_response({})
+        bad_resp.json.side_effect = ValueError("No JSON object could be decoded")
+        with patch.object(client.session, "post", return_value=bad_resp):
             token = client._refresh_token({"refresh_token": "old-refresh"})
 
         assert token is None

@@ -229,6 +229,13 @@ class TestLoadConfig:
         with pytest.raises(SystemExit):
             load_config(str(path))
 
+    def test_non_dict_yaml_exits(self, tmp_path):
+        path = tmp_path / "config.yaml"
+        path.write_text("just a string")
+
+        with pytest.raises(SystemExit):
+            load_config(str(path))
+
     def test_source_medusa_options_parse(self, tmp_path):
         data = {
             "trakt": {

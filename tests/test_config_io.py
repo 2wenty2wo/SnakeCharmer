@@ -236,6 +236,19 @@ class TestReloadConfig:
         with pytest.raises(ConfigError, match="Failed to parse"):
             reload_config(path)
 
+    def test_reload_non_dict_yaml_raises(self, tmp_path):
+        import pytest
+
+        from app.config import ConfigError
+        from app.webui.config_io import reload_config
+
+        path = str(tmp_path / "config.yaml")
+        with open(path, "w") as f:
+            f.write("just a string")
+
+        with pytest.raises(ConfigError, match="YAML mapping"):
+            reload_config(path)
+
 
 class TestSaveConfigFailure:
     def test_temp_file_cleaned_up_on_write_error(self, tmp_path):
@@ -283,6 +296,23 @@ class TestConfigToDictAutoApprove:
         result = config_to_dict(config)
         source = result["trakt"]["sources"][0]
         assert "auto_approve" not in source
+
+
+class TestLoadConfigDictNonDictInput:
+    """Covers the defensive ``isinstance(raw, dict)`` check in load_config_dict."""
+
+    def test_non_dict_raw_raises_config_error(self, tmp_path):
+        import pytest
+
+        from app.config import ConfigError
+        from app.webui.config_io import load_config_dict
+
+        path = str(tmp_path / "config.yaml")
+
+        with pytest.raises(ConfigError) as excinfo:
+            load_config_dict("not-a-dict", path)
+        assert any("must be a dict" in e for e in excinfo.value.errors)
+        assert any("str" in e for e in excinfo.value.errors)
 
 
 class TestLoadConfigDictNumericErrors:

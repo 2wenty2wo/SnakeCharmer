@@ -332,9 +332,14 @@ def live_server_url(tmp_path):
     holder = ConfigHolder(config=config, config_path=config_path)
     app = create_app(holder)
 
-    import random
+    import socket
 
-    port = random.randint(10000, 65000)
+    def _find_free_port():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    port = _find_free_port()
 
     def run_server():
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
