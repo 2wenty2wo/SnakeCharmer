@@ -4,7 +4,7 @@ import pytest
 import requests
 
 from app.config import TraktConfig, TraktSource
-from app.trakt import REQUEST_TIMEOUT, TraktClient, TraktShow
+from app.trakt import REQUEST_TIMEOUT, MalformedTokenError, TraktClient, TraktShow
 
 
 @pytest.fixture
@@ -342,6 +342,15 @@ class TestAuth:
 
         assert client._load_token() is None
 
+
+    def test_load_token_non_object_json_raises_malformed_error(self, client, tmp_path):
+        token_file = tmp_path / "trakt_token.json"
+        token_file.write_text("[]")
+        client.token_path = str(token_file)
+
+        with pytest.raises(MalformedTokenError):
+            client._load_token()
+
     def test_load_token_oserror_returns_none(self, client, tmp_path):
         token_file = tmp_path / "trakt_token.json"
         token_file.write_text('{"access_token":"abc"}')
@@ -387,6 +396,17 @@ class TestAuth:
             client._ensure_auth()
 
         assert client.session.headers["Authorization"] == "Bearer abc"
+        mock_auth.assert_not_called()
+
+
+    def test_ensure_auth_raises_on_malformed_token_file(self, client):
+        with (
+            patch.object(client, "_load_token", side_effect=MalformedTokenError("bad token")),
+            patch.object(client, "_authenticate") as mock_auth,
+        ):
+            with pytest.raises(MalformedTokenError):
+                client._ensure_auth()
+
         mock_auth.assert_not_called()
 
     def test_ensure_auth_authenticates_when_no_token(self, client):

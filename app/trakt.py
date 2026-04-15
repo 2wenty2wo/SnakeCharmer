@@ -27,6 +27,10 @@ class TraktShow:
     genres: list[str] = field(default_factory=list)
 
 
+class MalformedTokenError(RuntimeError):
+    """Raised when trakt_token.json exists but is structurally invalid."""
+
+
 class TraktClient(RetryClient):
     _service_name = "Trakt"
 
@@ -229,7 +233,7 @@ class TraktClient(RetryClient):
 
         if not isinstance(token, dict):
             log.warning("Token file is malformed (not a JSON object)")
-            return None
+            raise MalformedTokenError("trakt_token.json must contain a JSON object")
 
         # Check if token is expired (with 1 hour buffer)
         created_at = token.get("created_at", 0)
