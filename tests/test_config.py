@@ -8,6 +8,9 @@ from app.config import (
     TraktConfig,
     TraktSource,
     _normalize_trakt_sources,
+    _safe_float,
+    _safe_int,
+    _safe_int_non_negative,
     _to_bool,
     get_config_errors,
     get_section_errors,
@@ -689,3 +692,35 @@ class TestBoundaryValues:
         config = load_config(path, skip_validate=True)
         assert any("sync.interval" in w for w in config.load_warnings)
         assert config.sync.interval == 0
+
+    def test_retry_backoff_int_overflow_skip_validate_coerces(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"retry_backoff": 10**350},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("retry_backoff" in w for w in config.load_warnings)
+        assert config.sync.retry_backoff == 2.0
+
+    def test_retry_backoff_int_overflow_rejected(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"retry_backoff": 10**350},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+
+class TestSafeNumericCoercion:
+    def test_safe_float_overflow_returns_default(self):
+        assert _safe_float(10**350, 2.0) == 2.0
+
+    def test_safe_int_overflow_returns_default(self):
+        assert _safe_int(float("inf"), 0) == 0
+
+    def test_safe_int_non_negative_overflow_returns_default(self):
+        assert _safe_int_non_negative(float("inf"), 50) == 50

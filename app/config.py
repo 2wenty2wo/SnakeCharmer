@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 def _safe_int(value, default: int) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -33,7 +33,7 @@ def _safe_int_non_negative(value, default: int) -> int:
     """Like ``_safe_int`` but falls back to *default* when the value is negative."""
     try:
         v = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
     if v < 0:
         return default
@@ -43,7 +43,7 @@ def _safe_int_non_negative(value, default: int) -> int:
 def _safe_float(value, default: float) -> float:
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -58,7 +58,7 @@ def validate_raw_numeric_fields(
             lim = int(trakt_raw["limit"])
             if lim < 0:
                 errors.append("trakt.limit must be >= 0")
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             errors.append("trakt.limit must be an integer >= 0")
 
     if "interval" in sync_raw:
@@ -66,7 +66,7 @@ def validate_raw_numeric_fields(
             iv = int(sync_raw["interval"])
             if iv < 0:
                 errors.append("sync.interval must be >= 0")
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             errors.append("sync.interval must be an integer >= 0")
 
     if "max_retries" in sync_raw:
@@ -74,7 +74,7 @@ def validate_raw_numeric_fields(
             mr = int(sync_raw["max_retries"])
             if mr < 0:
                 errors.append("sync.max_retries must be >= 0")
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             errors.append("sync.max_retries must be an integer >= 0")
 
     if "retry_backoff" in sync_raw:
@@ -82,7 +82,7 @@ def validate_raw_numeric_fields(
             rb = float(sync_raw["retry_backoff"])
             if rb < 0:
                 errors.append("sync.retry_backoff must be >= 0")
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             errors.append("sync.retry_backoff must be a number >= 0")
 
     if "port" in health_raw:
@@ -90,7 +90,7 @@ def validate_raw_numeric_fields(
             hp = int(health_raw["port"])
             if not (0 <= hp <= 65535):
                 errors.append("health.port must be between 0 and 65535")
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             errors.append("health.port must be an integer between 0 and 65535")
 
     if "port" in webui_raw:
@@ -98,7 +98,7 @@ def validate_raw_numeric_fields(
             wp = int(webui_raw["port"])
             if not (0 <= wp <= 65535):
                 errors.append("webui.port must be between 0 and 65535")
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             errors.append("webui.port must be an integer between 0 and 65535")
 
     return errors

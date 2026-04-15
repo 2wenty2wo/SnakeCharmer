@@ -503,6 +503,15 @@ async def source_preview(request: Request):
             auth=source_auth if source_auth else None,
         )
         config = _holder(request).get()
+        if source.requires_auth:
+            token_path = os.path.join(config.config_dir, "trakt_token.json")
+            if not os.path.exists(token_path):
+                return HTMLResponse(
+                    '<div class="source-preview">'
+                    '<div class="preview-header" style="color:var(--gd-error)">'
+                    "Authentication required. Please connect your Trakt account in the OAuth section first."
+                    "</div></div>"
+                )
         with TraktClient(
             trakt_config,
             config_dir=config.config_dir,
