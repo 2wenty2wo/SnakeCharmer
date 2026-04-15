@@ -195,6 +195,10 @@ def load_config(path: str, skip_validate: bool = False) -> AppConfig:
         log.error("Failed to parse %s: %s", path, e)
         sys.exit(1)
 
+    if not isinstance(raw, dict):
+        log.error("Config file %s must contain a YAML mapping (key/value pairs), got %s", path, type(raw).__name__)
+        sys.exit(1)
+
     # Build nested config dict from YAML
     trakt_raw = raw.get("trakt", {})
     medusa_raw = raw.get("medusa", {})

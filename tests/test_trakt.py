@@ -422,6 +422,14 @@ class TestAuth:
 
         assert token is None
 
+    def test_refresh_token_invalid_json_returns_none(self, client):
+        bad_resp = _mock_response({})
+        bad_resp.json.side_effect = ValueError("No JSON object could be decoded")
+        with patch.object(client.session, "post", return_value=bad_resp):
+            token = client._refresh_token({"refresh_token": "old-refresh"})
+
+        assert token is None
+
     def test_authenticate_success_sets_authorization(self, client):
         device_resp = _mock_response(
             {

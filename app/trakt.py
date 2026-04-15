@@ -260,7 +260,7 @@ class TraktClient(RetryClient):
             self._save_token(new_token)
             log.info("Token refreshed successfully")
             return new_token
-        except requests.RequestException as e:
+        except (requests.RequestException, ValueError) as e:
             log.warning("Token refresh failed: %s", e)
             return None
 

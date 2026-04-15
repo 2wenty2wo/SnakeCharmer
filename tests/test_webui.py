@@ -882,6 +882,32 @@ class TestWebuiFormEdgeCases:
         assert updated.trakt.sources[0].medusa.quality is None
         assert updated.trakt.sources[0].medusa.required_words == []
 
+    def test_save_trakt_with_list_quality_roundtripped(self, tmp_path):
+        """List qualities from YAML should survive a load-edit-save cycle."""
+        from app.webui.config_io import save_app_config
+
+        config_path = str(tmp_path / "config.yaml")
+        config = _make_config()
+        config.trakt.sources[0].medusa.quality = ["hd1080p", "uhd4k"]
+        save_app_config(config, config_path)
+
+        client, holder, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_quality": "hd1080p, uhd4k",
+                "source_0_required_words": "",
+            },
+        )
+        assert response.status_code == 200
+        updated = holder.get()
+        assert updated.trakt.sources[0].medusa.quality == ["hd1080p", "uhd4k"]
+
 
 class TestDashboardStatus:
     def test_dashboard_status_partial(self, tmp_path):
@@ -1236,6 +1262,28 @@ class TestSourcePreview:
                 "source_0_owner": "alice",
                 "source_0_list_slug": "private-list",
                 "source_0_auth": "on",
+            },
+        )
+        assert response.status_code == 200
+        assert "Authentication required" in response.text
+
+    def test_preview_watchlist_requires_token(self, tmp_path):
+        """Watchlist sources unconditionally require auth and should short-circuit
+        without a token file."""
+        import os
+
+        client, _, _ = _create_client(tmp_path)
+        token_path = os.path.join(str(tmp_path), "trakt_token.json")
+        assert not os.path.exists(token_path)
+
+        response = client.post(
+            "/config/trakt/sources/preview",
+            data={
+                "client_id": "test_id",
+                "client_secret": "secret",
+                "username": "user",
+                "source_index": "0",
+                "source_0_type": "watchlist",
             },
         )
         assert response.status_code == 200
@@ -1612,6 +1660,33 @@ class TestTraktOAuth:
         assert response.status_code == 200
         assert "Failed to start device auth" in response.text
 
+    def test_oauth_start_invalid_json_response(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.side_effect = ValueError("No JSON")
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert "Failed to start device auth" in response.text
+
+    def test_oauth_start_json_not_dict_returns_error(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = ["not-a-dict"]
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert "Failed to start device auth" in response.text
+
     def test_oauth_poll_missing_parameters(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
         response = client.post(
@@ -1645,6 +1720,26 @@ class TestTraktOAuth:
             )
         assert response.status_code == 200
         assert "Poll request failed" in response.text
+
+    def test_oauth_poll_success_json_not_dict_returns_error(self, tmp_path):
+        client, holder, _ = _create_client(tmp_path)
+        holder.get().config_dir = str(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = ["not-a-dict"]
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "Authenticated but Trakt returned an unexpected response" in response.text
 
     def test_oauth_poll_invalid_device_code(self, tmp_path):
         client, _, _ = _create_client(tmp_path)

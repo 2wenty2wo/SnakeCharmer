@@ -86,16 +86,30 @@ async def oauth_trakt_start(request: Request):
         )
         resp.raise_for_status()
         device = resp.json()
-    except requests.RequestException:
+    except (requests.RequestException, ValueError, TypeError):
         log.exception("Failed to start Trakt device auth")
         return HTMLResponse(
             '<div class="banner error" role="alert">'
             "Failed to start device auth. Check your Client ID and try again.</div>"
         )
 
-    user_code = escape(device["user_code"])
-    verification_url = escape(device["verification_url"])
-    device_code = escape(device["device_code"])
+    if not isinstance(device, dict):
+        log.warning("Unexpected Trakt device response type: %s", type(device).__name__)
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            "Failed to start device auth. Trakt returned an unexpected response.</div>"
+        )
+    try:
+        user_code = escape(device["user_code"])
+        verification_url = escape(device["verification_url"])
+        device_code = escape(device["device_code"])
+    except (KeyError, TypeError):
+        log.warning("Trakt device response missing expected keys")
+        return HTMLResponse(
+            '<div class="banner error" role="alert">'
+            "Failed to start device auth. Trakt returned an unexpected response.</div>"
+        )
+
     parsed = _parse_oauth_device_timing(device.get("interval", 5), device.get("expires_in", 600))
     if parsed is None:
         log.warning("Non-numeric interval/expires_in from Trakt device response; using defaults")
@@ -160,7 +174,7 @@ async def oauth_trakt_poll(request: Request):
             },
             timeout=15,
         )
-    except requests.RequestException:
+    except (requests.RequestException, ValueError, TypeError):
         log.exception("Trakt OAuth poll request failed")
         return HTMLResponse(
             '<div class="banner error" role="alert">'
@@ -169,7 +183,20 @@ async def oauth_trakt_poll(request: Request):
 
     if resp.status_code == 200:
         # Success — save token
-        token = resp.json()
+        try:
+            token = resp.json()
+        except ValueError:
+            log.exception("Trakt OAuth poll returned invalid JSON")
+            return HTMLResponse(
+                '<div class="banner error" role="alert">'
+                "Authenticated but Trakt returned an unexpected response. Try again.</div>"
+            )
+        if not isinstance(token, dict):
+            log.warning("Unexpected Trakt token response type: %s", type(token).__name__)
+            return HTMLResponse(
+                '<div class="banner error" role="alert">'
+                "Authenticated but Trakt returned an unexpected response. Try again.</div>"
+            )
         token.setdefault("created_at", int(time.time()))
         config = _holder(request).get()
         token_path = os.path.join(config.config_dir, "trakt_token.json")

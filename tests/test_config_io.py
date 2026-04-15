@@ -236,6 +236,19 @@ class TestReloadConfig:
         with pytest.raises(ConfigError, match="Failed to parse"):
             reload_config(path)
 
+    def test_reload_non_dict_yaml_raises(self, tmp_path):
+        import pytest
+
+        from app.config import ConfigError
+        from app.webui.config_io import reload_config
+
+        path = str(tmp_path / "config.yaml")
+        with open(path, "w") as f:
+            f.write("just a string")
+
+        with pytest.raises(ConfigError, match="YAML mapping"):
+            reload_config(path)
+
 
 class TestSaveConfigFailure:
     def test_temp_file_cleaned_up_on_write_error(self, tmp_path):

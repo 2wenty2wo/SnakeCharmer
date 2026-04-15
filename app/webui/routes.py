@@ -504,7 +504,8 @@ async def source_preview(request: Request):
             auth=source_auth if source_auth else None,
         )
         config = _holder(request).get()
-        if source.requires_auth:
+        needs_auth = source.requires_auth or source.type == "watchlist"
+        if needs_auth:
             token_path = os.path.join(config.config_dir, "trakt_token.json")
             if not os.path.exists(token_path):
                 return HTMLResponse(
@@ -681,6 +682,7 @@ async def bulk_approve(request: Request):
 
     approved = []
     failed = []
+    queue_warnings = []
 
     try:
         with _get_medusa_client(request) as medusa_client:
@@ -716,8 +718,15 @@ async def bulk_approve(request: Request):
                     continue
 
                 if approved_show is None:
-                    failed.append(show.title)
-                    continue
+                    # The show was successfully added (or already existed) in Medusa, but the
+                    # queue entry wasn't present at approval time. Treat as approved to avoid
+                    # reporting a false failure.
+                    log.warning(
+                        "Show '%s' (tvdb:%d) was added to Medusa but was not present in pending queue",
+                        show.title,
+                        show.tvdb_id,
+                    )
+                    queue_warnings.append(show.title)
 
                 approved.append(show.title)
     except Exception:
@@ -726,10 +735,11 @@ async def bulk_approve(request: Request):
             '<div class="banner error">Failed to connect to Medusa. Please try again later.</div>'
         )
 
-    if failed:
+    if failed or queue_warnings:
         return HTMLResponse(
             f'<div class="banner warning">Approved {len(approved)} shows. '
-            f"Failed: {len(failed)}</div>"
+            f"Failed: {len(failed)}. "
+            f"Queue warnings: {len(queue_warnings)}</div>"
         )
 
     # Trigger HTMX to refresh the page
