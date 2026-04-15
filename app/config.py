@@ -29,6 +29,17 @@ def _safe_int(value, default: int) -> int:
         return default
 
 
+def _safe_int_non_negative(value, default: int) -> int:
+    """Like ``_safe_int`` but falls back to *default* when the value is negative."""
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return default
+    if v < 0:
+        return default
+    return v
+
+
 def _safe_float(value, default: float) -> float:
     try:
         return float(value)
@@ -44,9 +55,11 @@ def validate_raw_numeric_fields(
 
     if "limit" in trakt_raw:
         try:
-            int(trakt_raw["limit"])
+            lim = int(trakt_raw["limit"])
+            if lim < 0:
+                errors.append("trakt.limit must be >= 0")
         except (TypeError, ValueError):
-            errors.append("trakt.limit must be an integer")
+            errors.append("trakt.limit must be an integer >= 0")
 
     if "interval" in sync_raw:
         try:
@@ -195,7 +208,7 @@ def load_config(path: str, skip_validate: bool = False) -> AppConfig:
         client_secret=str(trakt_raw.get("client_secret", "")),
         username=str(trakt_raw.get("username", "")),
         sources=_normalize_trakt_sources(trakt_raw),
-        limit=_safe_int(trakt_raw.get("limit", 50), 50),
+        limit=_safe_int_non_negative(trakt_raw.get("limit", 50), 50),
     )
 
     medusa = MedusaConfig(
@@ -328,6 +341,14 @@ def get_config_errors(config: AppConfig) -> list[str]:
 
     if not config.trakt.client_id:
         errors.append("trakt.client_id is required")
+
+    try:
+        lim = int(config.trakt.limit)
+    except (TypeError, ValueError):
+        errors.append("trakt.limit must be an integer >= 0")
+    else:
+        if lim < 0:
+            errors.append("trakt.limit must be >= 0")
 
     if not config.medusa.url:
         errors.append("medusa.url is required")

@@ -1435,6 +1435,26 @@ class TestTraktOAuth:
         assert 'hx-trigger="load delay:5s"' in response.text
         assert '"expires_in": "600"' in response.text
 
+    def test_oauth_start_clamps_expires_in_below_600(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "device_code": "abc123",
+            "user_code": "ABCD1234",
+            "verification_url": "https://trakt.tv/activate",
+            "expires_in": 300,
+            "interval": 5,
+        }
+        mock_resp.raise_for_status = MagicMock()
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert '"expires_in": "600"' in response.text
+
     def test_oauth_poll_success_saves_token(self, tmp_path):
         client, holder, _ = _create_client(tmp_path)
         holder.get().config_dir = str(tmp_path)

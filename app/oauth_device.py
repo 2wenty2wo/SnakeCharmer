@@ -28,7 +28,7 @@ def parse_oauth_device_timing(interval: object, expires_in: object) -> tuple[int
     if interval_i < 1:
         log.warning("Invalid OAuth poll interval %r; using 1s", interval)
         interval_i = 1
-    if expires_i < 1:
-        log.warning("Invalid OAuth device expires_in %r; using 600s", expires_in)
+    if expires_i < 600:
+        log.warning("OAuth device expires_in %r below minimum 600s; using 600s", expires_in)
         expires_i = 600
     return interval_i, expires_i

@@ -119,6 +119,7 @@ def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfi
         _normalize_trakt_sources,
         _safe_float,
         _safe_int,
+        _safe_int_non_negative,
         _to_bool,
         _validate,
         validate_raw_numeric_fields,
@@ -141,7 +142,7 @@ def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfi
         client_secret=str(trakt_raw.get("client_secret", "")),
         username=str(trakt_raw.get("username", "")),
         sources=_normalize_trakt_sources(trakt_raw),
-        limit=_safe_int(trakt_raw.get("limit", 50), 50),
+        limit=_safe_int_non_negative(trakt_raw.get("limit", 50), 50),
     )
 
     medusa = MedusaConfig(

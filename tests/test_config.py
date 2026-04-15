@@ -355,6 +355,18 @@ class TestGetConfigErrors:
         errors = get_config_errors(config)
         assert any("sources" in e for e in errors)
 
+    def test_negative_trakt_limit_in_config_errors(self):
+        config = AppConfig(
+            trakt=TraktConfig(
+                client_id="id",
+                limit=-1,
+                sources=[TraktSource(type="trending")],
+            ),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
+        )
+        errors = get_config_errors(config)
+        assert "trakt.limit must be >= 0" in errors
+
     def test_user_list_without_owner_mentions_shorthand(self):
         config = AppConfig(
             trakt=TraktConfig(
@@ -638,15 +650,24 @@ class TestBoundaryValues:
         config = load_config(path)
         assert config.trakt.client_id == "id"
 
-    def test_negative_limit_loads(self, tmp_path):
-        """Negative limit is not explicitly validated — it loads but produces 0 shows."""
+    def test_negative_limit_rejected(self, tmp_path):
         data = {
             "trakt": {"client_id": "id", "limit": -1, "sources": [{"type": "trending"}]},
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
         }
         path = _write_config(tmp_path, data)
-        config = load_config(path)
-        assert config.trakt.limit == -1
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_negative_limit_skip_validate_coerces_and_warns(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "limit": -1, "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("trakt.limit" in w for w in config.load_warnings)
+        assert config.trakt.limit == 50
 
     def test_invalid_sync_interval_string_exits(self, tmp_path):
         data = {

@@ -567,7 +567,7 @@ class TestAuth:
             patch.object(client, "_request", return_value=device_resp),
             patch.object(client.session, "post", return_value=pending_resp),
             patch("app.trakt.time.sleep"),
-            patch("app.trakt.time.time", side_effect=[0, 0.5, 2, 2]),
+            patch("app.trakt.time.time", side_effect=[0, 100, 500, 600]),
             patch("app.trakt.log.error"),
             pytest.raises(SystemExit),
         ):
