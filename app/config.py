@@ -196,7 +196,11 @@ def load_config(path: str, skip_validate: bool = False) -> AppConfig:
         sys.exit(1)
 
     if not isinstance(raw, dict):
-        log.error("Config file %s must contain a YAML mapping (key/value pairs), got %s", path, type(raw).__name__)
+        log.error(
+            "Config file %s must contain a YAML mapping (key/value pairs), got %s",
+            path,
+            type(raw).__name__,
+        )
         sys.exit(1)
 
     # Build nested config dict from YAML

@@ -403,9 +403,9 @@ class TestAuth:
         with (
             patch.object(client, "_load_token", side_effect=MalformedTokenError("bad token")),
             patch.object(client, "_authenticate") as mock_auth,
+            pytest.raises(MalformedTokenError),
         ):
-            with pytest.raises(MalformedTokenError):
-                client._ensure_auth()
+            client._ensure_auth()
 
         mock_auth.assert_not_called()
 

@@ -103,7 +103,12 @@ def reload_config(path: str) -> AppConfig:
     except yaml.YAMLError as e:
         raise ConfigError([f"Failed to parse {path}: {e}"]) from e
     if not isinstance(raw, dict):
-        raise ConfigError([f"Config file must contain a YAML mapping (key/value pairs), got {type(raw).__name__}"])
+        raise ConfigError(
+            [
+                "Config file must contain a YAML mapping "
+                f"(key/value pairs), got {type(raw).__name__}"
+            ]
+        )
     return load_config_dict(raw, path)
 
 

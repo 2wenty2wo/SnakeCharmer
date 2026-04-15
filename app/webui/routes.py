@@ -722,7 +722,8 @@ async def bulk_approve(request: Request):
                     # queue entry wasn't present at approval time. Treat as approved to avoid
                     # reporting a false failure.
                     log.warning(
-                        "Show '%s' (tvdb:%d) was added to Medusa but was not present in pending queue",
+                        "Show '%s' (tvdb:%d) was added to Medusa "
+                        "but was not present in pending queue",
                         show.title,
                         show.tvdb_id,
                     )
