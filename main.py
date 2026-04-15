@@ -8,11 +8,44 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from app.config import get_config_errors, load_config
+from app.config import AppConfig, get_config_errors, load_config
 from app.notify import send_notification
 from app.sync import run_sync
 
 BIND_ALL_INTERFACES = str(ipaddress.IPv4Address(0))
+
+# When sync.interval is missing, non-numeric, negative, or zero, avoid a tight loop and match
+# the "wait for setup" cadence elsewhere in this module.
+_INVALID_INTERVAL_SLEEP_S = 30
+
+
+def _sync_interval_is_positive(run_config: AppConfig) -> bool:
+    """True if sync.interval is a positive integer (periodic sync enabled)."""
+    try:
+        return int(run_config.sync.interval) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _seconds_until_next_sync(run_config: AppConfig, log) -> int:
+    """Sleep duration between sync iterations; does not coerce invalid or zero interval to 1."""
+    try:
+        iv = int(run_config.sync.interval)
+    except (TypeError, ValueError):
+        log.warning(
+            "sync.interval is not an integer; fix the config. Sleeping %ds",
+            _INVALID_INTERVAL_SLEEP_S,
+        )
+        return _INVALID_INTERVAL_SLEEP_S
+    if iv < 0:
+        log.warning(
+            "sync.interval is negative; fix the config. Sleeping %ds",
+            _INVALID_INTERVAL_SLEEP_S,
+        )
+        return _INVALID_INTERVAL_SLEEP_S
+    if iv == 0:
+        return _INVALID_INTERVAL_SLEEP_S
+    return iv
 
 
 class JsonFormatter(logging.Formatter):
@@ -173,22 +206,14 @@ def _run_interval_loop(config, config_holder, sync_manager, sync_status, webui_e
                 continue
             result, run_config = outcome
             if result is None:
-                try:
-                    interval_seconds = int(run_config.sync.interval)
-                except (TypeError, ValueError):
-                    interval_seconds = 0
-                sleep_seconds = max(interval_seconds, 1)
+                sleep_seconds = _seconds_until_next_sync(run_config, log)
                 log.info("Sleeping %ds until next sync...", sleep_seconds)
                 time.sleep(sleep_seconds)
                 continue
         else:
             run_config = config
             _run_once(config, sync_status, log)
-        try:
-            interval_seconds = int(run_config.sync.interval)
-        except (TypeError, ValueError):
-            interval_seconds = 0
-        sleep_seconds = max(interval_seconds, 1)
+        sleep_seconds = _seconds_until_next_sync(run_config, log)
         log.info("Sleeping %ds until next sync...", sleep_seconds)
         time.sleep(sleep_seconds)
 
@@ -202,15 +227,11 @@ def _run_webui_wait_loop(config_holder, sync_manager, webui_thread, webui_port, 
     while True:
         run_config = config_holder.get()
         config_errors = get_config_errors(run_config)
-        if not config_errors and run_config.sync.interval > 0:
+        if not config_errors and _sync_interval_is_positive(run_config):
             result = sync_manager.run_sync_blocking()
             if result is None:
                 log.info("Skipping scheduled sync because another sync is already running")
-            try:
-                interval_seconds = int(run_config.sync.interval)
-            except (TypeError, ValueError):
-                interval_seconds = 0
-            sleep_seconds = max(interval_seconds, 1)
+            sleep_seconds = _seconds_until_next_sync(run_config, log)
             log.info("Sleeping %ds until next sync...", sleep_seconds)
             time.sleep(sleep_seconds)
             continue

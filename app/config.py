@@ -22,6 +22,75 @@ from app.models import (  # noqa: F401 — re-exported as the public config API
 log = logging.getLogger(__name__)
 
 
+def _safe_int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def validate_raw_numeric_fields(
+    trakt_raw: dict, sync_raw: dict, health_raw: dict, webui_raw: dict
+) -> list[str]:
+    """Validate numeric YAML fields before ``int()``/``float()`` coercion into dataclasses."""
+    errors: list[str] = []
+
+    if "limit" in trakt_raw:
+        try:
+            int(trakt_raw["limit"])
+        except (TypeError, ValueError):
+            errors.append("trakt.limit must be an integer")
+
+    if "interval" in sync_raw:
+        try:
+            iv = int(sync_raw["interval"])
+            if iv < 0:
+                errors.append("sync.interval must be >= 0")
+        except (TypeError, ValueError):
+            errors.append("sync.interval must be an integer >= 0")
+
+    if "max_retries" in sync_raw:
+        try:
+            mr = int(sync_raw["max_retries"])
+            if mr < 0:
+                errors.append("sync.max_retries must be >= 0")
+        except (TypeError, ValueError):
+            errors.append("sync.max_retries must be an integer >= 0")
+
+    if "retry_backoff" in sync_raw:
+        try:
+            rb = float(sync_raw["retry_backoff"])
+            if rb < 0:
+                errors.append("sync.retry_backoff must be >= 0")
+        except (TypeError, ValueError):
+            errors.append("sync.retry_backoff must be a number >= 0")
+
+    if "port" in health_raw:
+        try:
+            hp = int(health_raw["port"])
+            if not (0 <= hp <= 65535):
+                errors.append("health.port must be between 0 and 65535")
+        except (TypeError, ValueError):
+            errors.append("health.port must be an integer between 0 and 65535")
+
+    if "port" in webui_raw:
+        try:
+            wp = int(webui_raw["port"])
+            if not (0 <= wp <= 65535):
+                errors.append("webui.port must be between 0 and 65535")
+        except (TypeError, ValueError):
+            errors.append("webui.port must be an integer between 0 and 65535")
+
+    return errors
+
+
 ENV_MAP = {
     "SNAKECHARMER_TRAKT_CLIENT_ID": ("trakt", "client_id"),
     "SNAKECHARMER_TRAKT_CLIENT_SECRET": ("trakt", "client_secret"),
@@ -113,13 +182,20 @@ def load_config(path: str, skip_validate: bool = False) -> AppConfig:
             }[section]
             target[key] = value
 
-    # Build config objects
+    raw_numeric_errors = validate_raw_numeric_fields(trakt_raw, sync_raw, health_raw, webui_raw)
+    if raw_numeric_errors and not skip_validate:
+        for err in raw_numeric_errors:
+            log.error("Config error: %s", err)
+        sys.exit(1)
+    load_warnings = list(raw_numeric_errors) if (skip_validate and raw_numeric_errors) else []
+
+    # Build config objects (never raises on bad numeric YAML when skip_validate coerced)
     trakt = TraktConfig(
         client_id=str(trakt_raw.get("client_id", "")),
         client_secret=str(trakt_raw.get("client_secret", "")),
         username=str(trakt_raw.get("username", "")),
         sources=_normalize_trakt_sources(trakt_raw),
-        limit=int(trakt_raw.get("limit", 50)),
+        limit=_safe_int(trakt_raw.get("limit", 50), 50),
     )
 
     medusa = MedusaConfig(
@@ -129,20 +205,20 @@ def load_config(path: str, skip_validate: bool = False) -> AppConfig:
 
     sync = SyncConfig(
         dry_run=_to_bool(sync_raw.get("dry_run", False)),
-        interval=int(sync_raw.get("interval", 0)),
-        max_retries=int(sync_raw.get("max_retries", 3)),
-        retry_backoff=float(sync_raw.get("retry_backoff", 2.0)),
+        interval=_safe_int(sync_raw.get("interval", 0), 0),
+        max_retries=_safe_int(sync_raw.get("max_retries", 3), 3),
+        retry_backoff=_safe_float(sync_raw.get("retry_backoff", 2.0), 2.0),
         log_format=str(sync_raw.get("log_format", "text")).strip().lower(),
     )
 
     health = HealthConfig(
         enabled=_to_bool(health_raw.get("enabled", False)),
-        port=int(health_raw.get("port", 8095)),
+        port=_safe_int(health_raw.get("port", 8095), 8095),
     )
 
     webui = WebUIConfig(
         enabled=_to_bool(webui_raw.get("enabled", False)),
-        port=int(webui_raw.get("port", 8089)),
+        port=_safe_int(webui_raw.get("port", 8089), 8089),
     )
 
     notify = NotifyConfig(
@@ -161,6 +237,7 @@ def load_config(path: str, skip_validate: bool = False) -> AppConfig:
         webui=webui,
         notify=notify,
         config_dir=os.path.dirname(os.path.abspath(path)),
+        load_warnings=load_warnings,
     )
 
     if not skip_validate:
@@ -202,7 +279,13 @@ def _normalize_trakt_sources(trakt_raw: dict) -> list[TraktSource]:
                 if normalized in SOURCE_TYPES:
                     sources.append(TraktSource(type=normalized))
                 else:
-                    sources.append(TraktSource(type="user_list", list_slug=normalized))
+                    sources.append(
+                        TraktSource(
+                            type="user_list",
+                            list_slug=normalized,
+                            owner=str(trakt_raw.get("username") or "").strip(),
+                        )
+                    )
             continue
         if not isinstance(item, dict):
             continue
@@ -241,7 +324,7 @@ def _parse_medusa_add_options(raw_options) -> MedusaAddOptions:
 
 def get_config_errors(config: AppConfig) -> list[str]:
     """Return validation error messages, or empty list if config is valid."""
-    errors = []
+    errors = list(config.load_warnings)
 
     if not config.trakt.client_id:
         errors.append("trakt.client_id is required")
@@ -274,7 +357,10 @@ def get_config_errors(config: AppConfig) -> list[str]:
 
         if source.type == "user_list":
             if not source.owner:
-                errors.append("trakt.sources[].owner is required for source type 'user_list'")
+                errors.append(
+                    "trakt.sources[].owner is required for source type 'user_list' "
+                    "(set trakt.username for shorthand list names, or set owner on the source)"
+                )
             if not source.list_slug:
                 errors.append("trakt.sources[].list_slug is required for source type 'user_list'")
             if source.requires_auth:

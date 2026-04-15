@@ -113,3 +113,6 @@ class AppConfig:
     webui: WebUIConfig = field(default_factory=WebUIConfig)
     notify: NotifyConfig = field(default_factory=NotifyConfig)
     config_dir: str = "."
+    #: Populated when config is loaded with ``skip_validate``/``validate=False`` and numeric
+    #: fields in YAML could not be parsed (so coerced defaults were used).
+    load_warnings: list[str] = field(default_factory=list)

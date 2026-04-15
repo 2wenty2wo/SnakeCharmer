@@ -355,6 +355,19 @@ class TestGetConfigErrors:
         errors = get_config_errors(config)
         assert any("sources" in e for e in errors)
 
+    def test_user_list_without_owner_mentions_shorthand(self):
+        config = AppConfig(
+            trakt=TraktConfig(
+                client_id="id",
+                sources=[
+                    TraktSource(type="user_list", owner="", list_slug="my-list"),
+                ],
+            ),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
+        )
+        errors = get_config_errors(config)
+        assert any("shorthand" in e for e in errors)
+
     def test_empty_config_returns_all_errors(self):
         config = AppConfig()
         errors = get_config_errors(config)
@@ -450,6 +463,13 @@ class TestNormalizeHelpers:
         assert len(parsed) == 1
         assert parsed[0].type == "user_list"
         assert parsed[0].list_slug == "my-custom-list"
+        assert parsed[0].owner == ""
+
+    def test_normalize_trakt_sources_shorthand_uses_username_as_owner(self):
+        parsed = _normalize_trakt_sources(
+            {"username": "alice", "sources": ["my-custom-list"]},
+        )
+        assert parsed[0].owner == "alice"
 
     def test_normalize_trakt_sources_string_known_type(self):
         parsed = _normalize_trakt_sources({"sources": ["popular"]})
@@ -627,3 +647,24 @@ class TestBoundaryValues:
         path = _write_config(tmp_path, data)
         config = load_config(path)
         assert config.trakt.limit == -1
+
+    def test_invalid_sync_interval_string_exits(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"interval": "not-a-number"},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_invalid_sync_interval_skip_validate_records_load_warnings(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"interval": "not-a-number"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("sync.interval" in w for w in config.load_warnings)
+        assert config.sync.interval == 0
