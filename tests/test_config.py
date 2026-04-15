@@ -4,9 +4,13 @@ import yaml
 from app.config import (
     PUBLIC_LISTS,
     AppConfig,
+    HealthConfig,
     MedusaConfig,
+    SyncConfig,
     TraktConfig,
     TraktSource,
+    WebUIConfig,
+    _normalize_notify_urls,
     _normalize_trakt_sources,
     _safe_float,
     _safe_float_non_negative,
@@ -17,6 +21,7 @@ from app.config import (
     get_config_errors,
     get_section_errors,
     load_config,
+    validate_raw_numeric_fields,
 )
 
 
@@ -792,3 +797,167 @@ class TestSafeNumericCoercion:
         assert _safe_int_port(0, 8095) == 0
         assert _safe_int_port(65535, 8095) == 65535
         assert _safe_int_port(9000, 8095) == 9000
+
+    def test_safe_int_port_invalid_type_returns_default(self):
+        # Exercises lines 64-66 (TypeError/ValueError/OverflowError) in _safe_int_port.
+        assert _safe_int_port("not-a-number", 8095) == 8095
+        assert _safe_int_port(None, 8095) == 8095
+        assert _safe_int_port(float("inf"), 8095) == 8095
+
+
+class TestValidateRawNumericFields:
+    """Direct tests for validate_raw_numeric_fields to cover TypeError/ValueError branches."""
+
+    def test_trakt_limit_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({"limit": "not-a-number"}, {}, {}, {})
+        assert "trakt.limit must be an integer >= 0" in errors
+
+    def test_trakt_limit_negative_reports_error(self):
+        errors = validate_raw_numeric_fields({"limit": -1}, {}, {}, {})
+        assert "trakt.limit must be >= 0" in errors
+
+    def test_sync_interval_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {"interval": "not-a-number"}, {}, {})
+        assert "sync.interval must be an integer >= 0" in errors
+
+    def test_sync_max_retries_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {"max_retries": "not-a-number"}, {}, {})
+        assert "sync.max_retries must be an integer >= 0" in errors
+
+    def test_sync_max_retries_negative_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {"max_retries": -1}, {}, {})
+        assert "sync.max_retries must be >= 0" in errors
+
+    def test_sync_retry_backoff_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {"retry_backoff": "not-a-number"}, {}, {})
+        assert "sync.retry_backoff must be a number >= 0" in errors
+
+    def test_health_port_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {}, {"port": "not-a-number"}, {})
+        assert "health.port must be an integer between 0 and 65535" in errors
+
+    def test_health_port_out_of_range_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {}, {"port": 70000}, {})
+        assert "health.port must be between 0 and 65535" in errors
+
+    def test_webui_port_invalid_string_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {}, {}, {"port": "not-a-number"})
+        assert "webui.port must be an integer between 0 and 65535" in errors
+
+    def test_webui_port_out_of_range_reports_error(self):
+        errors = validate_raw_numeric_fields({}, {}, {}, {"port": -1})
+        assert "webui.port must be between 0 and 65535" in errors
+
+    def test_all_valid_numeric_fields_returns_empty(self):
+        errors = validate_raw_numeric_fields(
+            {"limit": 50},
+            {"interval": 0, "max_retries": 3, "retry_backoff": 2.0},
+            {"port": 8095},
+            {"port": 8089},
+        )
+        assert errors == []
+
+
+class TestNormalizeNotifyUrlsDirect:
+    def test_non_list_non_string_returns_empty(self):
+        # Covers line 301: return [] when urls is not a list or string (e.g., int/dict).
+        assert _normalize_notify_urls({"urls": 42}) == []
+        assert _normalize_notify_urls({"urls": {"not": "a list"}}) == []
+        assert _normalize_notify_urls({"urls": None}) == []
+
+    def test_missing_urls_returns_empty(self):
+        # Defaults to [] which is a list and produces an empty list.
+        assert _normalize_notify_urls({}) == []
+
+
+class TestGetConfigErrorsNumeric:
+    """Cover numeric-type TypeError/ValueError and negative branches in get_config_errors."""
+
+    def _valid_base_kwargs(self) -> dict:
+        return {
+            "trakt": TraktConfig(client_id="id", sources=[TraktSource(type="trending")]),
+            "medusa": MedusaConfig(url="http://localhost:8081", api_key="key"),
+        }
+
+    def test_trakt_limit_typeerror_reports_integer_error(self):
+        config = AppConfig(
+            trakt=TraktConfig(
+                client_id="id",
+                # None is invalid type: int(None) raises TypeError.
+                limit=None,  # type: ignore[arg-type]
+                sources=[TraktSource(type="trending")],
+            ),
+            medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
+        )
+        errors = get_config_errors(config)
+        assert "trakt.limit must be an integer >= 0" in errors
+
+    def test_sync_interval_typeerror_reports_integer_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(interval="not-a-number")  # type: ignore[arg-type]
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.interval must be an integer >= 0" in errors
+
+    def test_sync_interval_negative_reports_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(interval=-5)
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.interval must be >= 0" in errors
+
+    def test_sync_max_retries_typeerror_reports_integer_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(max_retries="oops")  # type: ignore[arg-type]
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.max_retries must be an integer >= 0" in errors
+
+    def test_sync_max_retries_negative_reports_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(max_retries=-1)
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.max_retries must be >= 0" in errors
+
+    def test_sync_retry_backoff_typeerror_reports_number_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(retry_backoff="fast")  # type: ignore[arg-type]
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.retry_backoff must be a number >= 0" in errors
+
+    def test_sync_retry_backoff_negative_reports_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["sync"] = SyncConfig(retry_backoff=-0.5)
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "sync.retry_backoff must be >= 0" in errors
+
+    def test_health_port_typeerror_reports_integer_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["health"] = HealthConfig(port="port")  # type: ignore[arg-type]
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "health.port must be an integer between 0 and 65535" in errors
+
+    def test_health_port_out_of_range_reports_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["health"] = HealthConfig(port=99999)
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "health.port must be between 0 and 65535" in errors
+
+    def test_webui_port_typeerror_reports_integer_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["webui"] = WebUIConfig(port="port")  # type: ignore[arg-type]
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "webui.port must be an integer between 0 and 65535" in errors
+
+    def test_webui_port_out_of_range_reports_error(self):
+        kwargs = self._valid_base_kwargs()
+        kwargs["webui"] = WebUIConfig(port=-1)
+        config = AppConfig(**kwargs)
+        errors = get_config_errors(config)
+        assert "webui.port must be between 0 and 65535" in errors

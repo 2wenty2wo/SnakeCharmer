@@ -1215,6 +1215,32 @@ class TestSourcePreview:
         assert "Show Two" in response.text
         assert "tvdb:100" in response.text
 
+    def test_preview_auth_required_without_token_file(self, tmp_path):
+        """Auth sources without a trakt_token.json file should short-circuit
+        with an 'Authentication required' message."""
+        import os
+
+        client, _, _ = _create_client(tmp_path)
+        # Ensure no token file exists in the config dir.
+        token_path = os.path.join(str(tmp_path), "trakt_token.json")
+        assert not os.path.exists(token_path)
+
+        response = client.post(
+            "/config/trakt/sources/preview",
+            data={
+                "client_id": "test_id",
+                "client_secret": "secret",
+                "username": "user",
+                "source_index": "0",
+                "source_0_type": "user_list",
+                "source_0_owner": "alice",
+                "source_0_list_slug": "private-list",
+                "source_0_auth": "on",
+            },
+        )
+        assert response.status_code == 200
+        assert "Authentication required" in response.text
+
 
 def _make_incomplete_config(**overrides) -> AppConfig:
     """Create a config with missing required fields (no client_id, no medusa)."""
@@ -1929,9 +1955,7 @@ class TestPendingApprove:
         assert "was added to Medusa" in response.text
         assert "already exists in Medusa" not in response.text
 
-    def test_approve_single_queue_oserror_when_already_in_medusa_reflects_duplicate(
-        self, tmp_path
-    ):
+    def test_approve_single_queue_oserror_when_already_in_medusa_reflects_duplicate(self, tmp_path):
         pq = PendingQueue(config_dir=str(tmp_path))
         pq.add_show(_make_pending_show(12345, "Dup Show"))
         client, _, _ = _create_client(tmp_path, pending_queue=pq)
