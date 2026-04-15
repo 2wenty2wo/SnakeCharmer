@@ -342,7 +342,6 @@ class TestAuth:
 
         assert client._load_token() is None
 
-
     def test_load_token_non_object_json_raises_malformed_error(self, client, tmp_path):
         token_file = tmp_path / "trakt_token.json"
         token_file.write_text("[]")
@@ -397,7 +396,6 @@ class TestAuth:
 
         assert client.session.headers["Authorization"] == "Bearer abc"
         mock_auth.assert_not_called()
-
 
     def test_ensure_auth_raises_on_malformed_token_file(self, client):
         with (
