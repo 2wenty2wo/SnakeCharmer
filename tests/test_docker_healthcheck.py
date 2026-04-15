@@ -14,11 +14,11 @@ def test_healthcheck_skips_probe_when_health_disabled(tmp_path):
     cfg = tmp_path / "config.yaml"
     _write_config(cfg, "health:\n  enabled: false\n")
 
-    with patch("urllib.request.urlopen") as urlopen:
+    with patch("http.client.HTTPConnection") as http_conn:
         exit_code = run_healthcheck(str(cfg))
 
     assert exit_code == 0
-    urlopen.assert_not_called()
+    http_conn.assert_not_called()
 
 
 def test_healthcheck_uses_env_overrides_for_probe_target(tmp_path, monkeypatch):
@@ -30,21 +30,25 @@ def test_healthcheck_uses_env_overrides_for_probe_target(tmp_path, monkeypatch):
     monkeypatch.setenv("SNAKECHARMER_HEALTH_ENABLED", "true")
     monkeypatch.setenv("SNAKECHARMER_HEALTH_PORT", "8123")
 
-    response = Mock()
-    response.status = 200
+    connection = Mock()
+    response = Mock(status=200)
+    connection.getresponse.return_value = response
 
-    with patch("urllib.request.urlopen", return_value=response) as urlopen:
+    with patch("http.client.HTTPConnection", return_value=connection) as http_conn:
         exit_code = run_healthcheck(str(cfg))
 
     assert exit_code == 0
-    urlopen.assert_called_once_with("http://localhost:8123/health", timeout=5)
+    http_conn.assert_called_once_with("localhost", 8123, timeout=5)
+    connection.request.assert_called_once_with("GET", "/health")
 
 
 def test_healthcheck_returns_failure_when_enabled_endpoint_unreachable(tmp_path):
     cfg = tmp_path / "config.yaml"
     _write_config(cfg, "health:\n  enabled: true\n  port: 8099\n")
 
-    with patch("urllib.request.urlopen", side_effect=OSError("boom")):
+    connection = Mock()
+    connection.request.side_effect = OSError("boom")
+    with patch("http.client.HTTPConnection", return_value=connection):
         exit_code = run_healthcheck(str(cfg))
 
     assert exit_code == 1

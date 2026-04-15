@@ -6,10 +6,9 @@ Loads runtime config (including env var overrides) and probes /health when enabl
 from __future__ import annotations
 
 import argparse
+import http.client
 import logging
 import sys
-import urllib.request
-from urllib.error import HTTPError, URLError
 
 from app.config import load_config
 
@@ -29,18 +28,16 @@ def run_healthcheck(config_path: str = "/config/config.yaml") -> int:
     if not config.health.enabled:
         return 0
 
-    url = f"http://localhost:{config.health.port}/health"
+    conn = http.client.HTTPConnection("localhost", int(config.health.port), timeout=5)
     try:
-        resp = urllib.request.urlopen(url, timeout=5)
-        status = getattr(resp, "status", None) or resp.getcode()
+        conn.request("GET", "/health")
+        resp = conn.getresponse()
+        status = resp.status
         return 0 if 200 <= int(status) < 300 else 1
-    except HTTPError as e:
-        code = getattr(e, "code", 0) or 0
-        return 0 if 200 <= int(code) < 300 else 1
-    except URLError:
-        return 1
     except Exception:
         return 1
+    finally:
+        conn.close()
 
 
 def main() -> None:
