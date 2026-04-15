@@ -46,7 +46,7 @@ def _build_apprise(urls: list[str]) -> apprise.Apprise:
 def _success_message(result: SyncResult, *, dry_run: bool = False) -> tuple[str, str]:
     title = "SnakeCharmer: Sync Complete"
     added_text = "Would add" if dry_run else "Added"
-    queued_text = "would queue" if dry_run else "queued"
+    queued_text = "Would queue" if dry_run else "queued"
     body_parts = [
         f"{added_text} {result.added} show(s)",
     ]
