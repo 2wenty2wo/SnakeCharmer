@@ -182,6 +182,19 @@ class TestPendingQueuePersistence:
         pq = PendingQueue(str(tmp_path))
         assert pq.get_count() == 0
 
+    def test_handles_null_pending_and_history(self, tmp_path, caplog):
+        """Null top-level lists are tolerated and treated as empty."""
+        pq_path = tmp_path / "pending_queue.json"
+        pq_path.write_text('{"pending": null, "history": null}', encoding="utf-8")
+
+        with caplog.at_level("WARNING"):
+            pq = PendingQueue(str(tmp_path))
+
+        assert pq.get_count() == 0
+        assert pq.get_history() == []
+        assert "pending must be a list" in caplog.text
+        assert "history must be a list" in caplog.text
+
 
 class TestPendingQueueHistory:
     """History tracking."""
