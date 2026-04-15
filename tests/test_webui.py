@@ -1687,6 +1687,23 @@ class TestTraktOAuth:
         assert response.status_code == 200
         assert "Failed to start device auth" in response.text
 
+    def test_oauth_start_device_response_missing_required_keys(self, tmp_path):
+        """Dict response missing user_code/verification_url/device_code returns error."""
+        client, _, _ = _create_client(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        # Dict passes isinstance check but lacks required keys
+        mock_resp.json.return_value = {"unexpected": "shape"}
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/start",
+                data={"client_id": "test_id", "client_secret": "secret"},
+            )
+        assert response.status_code == 200
+        assert "Failed to start device auth" in response.text
+        assert "unexpected response" in response.text
+
     def test_oauth_poll_missing_parameters(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
         response = client.post(
@@ -1740,6 +1757,29 @@ class TestTraktOAuth:
             )
         assert response.status_code == 200
         assert "Authenticated but Trakt returned an unexpected response" in response.text
+
+    def test_oauth_poll_success_invalid_json_body_returns_error(self, tmp_path):
+        """HTTP 200 with a body that fails JSON parsing shows a graceful error."""
+        client, holder, _ = _create_client(tmp_path)
+        holder.get().config_dir = str(tmp_path)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.side_effect = ValueError("not JSON")
+        with patch("app.webui.oauth.requests.post", return_value=mock_resp):
+            response = client.post(
+                "/oauth/trakt/poll",
+                data={
+                    "device_code": "abc123",
+                    "client_id": "test_id",
+                    "client_secret": "secret",
+                    "interval": "5",
+                    "expires_in": "600",
+                },
+            )
+        assert response.status_code == 200
+        assert "Authenticated but Trakt returned an unexpected response" in response.text
+        # No token file should have been written since parsing failed.
+        assert not (tmp_path / "trakt_token.json").exists()
 
     def test_oauth_poll_invalid_device_code(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
@@ -1874,6 +1914,28 @@ class TestRouteHelpers:
 
         (tmp_path / "trakt_token.json").write_text("{not valid json")
         assert webui_routes._get_trakt_token_status(config) == "none"
+
+    def test_get_trakt_token_status_non_dict_json_returns_none(self, tmp_path):
+        """Valid JSON but not a dict (e.g. a list) is treated as no token."""
+        from app.webui import oauth as oauth_module
+
+        config = _make_config(config_dir=str(tmp_path))
+        (tmp_path / "trakt_token.json").write_text(json.dumps(["not", "a", "dict"]))
+        assert oauth_module._get_trakt_token_status(config) == "none"
+
+    def test_oauth_templates_helper_returns_app_state_templates(self, tmp_path):
+        """The unused ``_templates`` helper returns the FastAPI app's template env."""
+        from app.webui import oauth as oauth_module
+
+        client, _, _ = _create_client(tmp_path)
+        app = client.app
+
+        class _FakeRequest:
+            def __init__(self, app):
+                self.app = app
+
+        request = _FakeRequest(app)
+        assert oauth_module._templates(request) is app.state.templates
 
     def test_parse_sources_from_form_skips_missing_type(self):
         form = {
@@ -2268,6 +2330,42 @@ class TestPendingBulkApprove:
         assert response.status_code == 200
         assert "Approved 1" in response.text
         assert mock_medusa.add_show.call_count == 1
+
+    def test_bulk_approve_medusa_add_succeeds_but_queue_entry_gone(self, tmp_path):
+        """Medusa add succeeds, but queue entry disappears before approve_show.
+
+        This exercises the ``approved_show is None`` branch that flags the run
+        with a queue warning instead of reporting it as a hard failure.
+        """
+        pq = PendingQueue(config_dir=str(tmp_path))
+        pq.add_show(_make_pending_show(111, "Ghost Show"))
+        pq.add_show(_make_pending_show(222, "Good Show"))
+        client, _, _ = _create_client(tmp_path, pending_queue=pq)
+
+        real_approve = pq.approve_show
+
+        def approve_side_effect(tvdb_id: int):
+            if tvdb_id == 111:
+                # Simulate the queue entry being removed/approved elsewhere
+                # between get_show() and approve_show().
+                return None
+            return real_approve(tvdb_id)
+
+        with patch("app.webui.routes.MedusaClient") as mock_cls:
+            mock_medusa = mock_cls.return_value
+            mock_medusa.__enter__.return_value = mock_medusa
+            mock_medusa.add_show.return_value = True
+            with patch.object(pq, "approve_show", side_effect=approve_side_effect):
+                response = client.post(
+                    "/pending/bulk-approve",
+                    data={"tvdb_ids": ["111", "222"]},
+                )
+
+        assert response.status_code == 200
+        # Approved count includes the ghost show (since Medusa add succeeded).
+        assert "Approved 2" in response.text
+        assert "Queue warnings: 1" in response.text
+        assert mock_medusa.add_show.call_count == 2
 
 
 class TestPendingBulkReject:

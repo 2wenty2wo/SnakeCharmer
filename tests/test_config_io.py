@@ -298,6 +298,23 @@ class TestConfigToDictAutoApprove:
         assert "auto_approve" not in source
 
 
+class TestLoadConfigDictNonDictInput:
+    """Covers the defensive ``isinstance(raw, dict)`` check in load_config_dict."""
+
+    def test_non_dict_raw_raises_config_error(self, tmp_path):
+        import pytest
+
+        from app.config import ConfigError
+        from app.webui.config_io import load_config_dict
+
+        path = str(tmp_path / "config.yaml")
+
+        with pytest.raises(ConfigError) as excinfo:
+            load_config_dict("not-a-dict", path)
+        assert any("must be a dict" in e for e in excinfo.value.errors)
+        assert any("str" in e for e in excinfo.value.errors)
+
+
 class TestLoadConfigDictNumericErrors:
     """Covers the ``raise ConfigError(raw_numeric_errors)`` branch in load_config_dict."""
 
