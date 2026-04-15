@@ -47,6 +47,28 @@ def _safe_float(value, default: float) -> float:
         return default
 
 
+def _safe_float_non_negative(value, default: float) -> float:
+    """Like ``_safe_float`` but falls back to *default* when the value is negative."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    if v < 0:
+        return default
+    return v
+
+
+def _safe_int_port(value, default: int) -> int:
+    """Coerce to an int TCP/UDP port in ``0..65535``, else *default*."""
+    try:
+        v = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    if not (0 <= v <= 65535):
+        return default
+    return v
+
+
 def validate_raw_numeric_fields(
     trakt_raw: dict, sync_raw: dict, health_raw: dict, webui_raw: dict
 ) -> list[str]:
@@ -218,20 +240,20 @@ def load_config(path: str, skip_validate: bool = False) -> AppConfig:
 
     sync = SyncConfig(
         dry_run=_to_bool(sync_raw.get("dry_run", False)),
-        interval=_safe_int(sync_raw.get("interval", 0), 0),
-        max_retries=_safe_int(sync_raw.get("max_retries", 3), 3),
-        retry_backoff=_safe_float(sync_raw.get("retry_backoff", 2.0), 2.0),
+        interval=_safe_int_non_negative(sync_raw.get("interval", 0), 0),
+        max_retries=_safe_int_non_negative(sync_raw.get("max_retries", 3), 3),
+        retry_backoff=_safe_float_non_negative(sync_raw.get("retry_backoff", 2.0), 2.0),
         log_format=str(sync_raw.get("log_format", "text")).strip().lower(),
     )
 
     health = HealthConfig(
         enabled=_to_bool(health_raw.get("enabled", False)),
-        port=_safe_int(health_raw.get("port", 8095), 8095),
+        port=_safe_int_port(health_raw.get("port", 8095), 8095),
     )
 
     webui = WebUIConfig(
         enabled=_to_bool(webui_raw.get("enabled", False)),
-        port=_safe_int(webui_raw.get("port", 8089), 8089),
+        port=_safe_int_port(webui_raw.get("port", 8089), 8089),
     )
 
     notify = NotifyConfig(
@@ -292,13 +314,7 @@ def _normalize_trakt_sources(trakt_raw: dict) -> list[TraktSource]:
                 if normalized in SOURCE_TYPES:
                     sources.append(TraktSource(type=normalized))
                 else:
-                    sources.append(
-                        TraktSource(
-                            type="user_list",
-                            list_slug=normalized,
-                            owner=str(trakt_raw.get("username") or "").strip(),
-                        )
-                    )
+                    sources.append(TraktSource(type="user_list", list_slug=normalized))
             continue
         if not isinstance(item, dict):
             continue
@@ -379,8 +395,7 @@ def get_config_errors(config: AppConfig) -> list[str]:
         if source.type == "user_list":
             if not source.owner:
                 errors.append(
-                    "trakt.sources[].owner is required for source type 'user_list' "
-                    "(set trakt.username for shorthand list names, or set owner on the source)"
+                    "trakt.sources[].owner is required for source type 'user_list'"
                 )
             if not source.list_slug:
                 errors.append("trakt.sources[].list_slug is required for source type 'user_list'")

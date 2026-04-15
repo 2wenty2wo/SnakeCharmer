@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 from html import escape
 
@@ -509,7 +510,8 @@ async def source_preview(request: Request):
                 return HTMLResponse(
                     '<div class="source-preview">'
                     '<div class="preview-header" style="color:var(--gd-error)">'
-                    "Authentication required. Please connect your Trakt account in the OAuth section first."
+                    "Authentication required. Please connect your Trakt account in the OAuth "
+                    "section first."
                     "</div></div>"
                 )
         with TraktClient(
@@ -580,6 +582,7 @@ async def approve_single(request: Request, tvdb_id: int):
     if show is None:
         return HTMLResponse('<div class="banner error">Show not found in pending queue.</div>')
 
+    added = False
     # Add to Medusa
     try:
         with _get_medusa_client(request) as medusa_client:
@@ -592,23 +595,39 @@ async def approve_single(request: Request, tvdb_id: int):
             added = medusa_client.add_show(
                 show.tvdb_id, show.title, add_options=add_options or None
             )
-
-        # Remove from pending queue
-        pending_queue.approve_show(tvdb_id)
-
-        safe_id = escape(str(tvdb_id))
-        meta = "Approved and added to Medusa" if added else "Already exists in Medusa"
-        return HTMLResponse(
-            f'<div class="pending-row pending-row-approved" id="pending-row-{safe_id}">'
-            f'<div class="pending-info"><div class="pending-title">{escape(show.title)}</div>'
-            f'<div class="pending-meta">{meta}</div></div></div>'
-        )
     except Exception:
         log.exception("Failed to add show '%s' (tvdb:%d)", show.title, show.tvdb_id)
         return HTMLResponse(
             f'<div class="banner error">Failed to add "{escape(show.title)}". '
-            f"Please try again later.</div>"
+            "Please try again later.</div>"
         )
+
+    # Remove from pending queue
+    try:
+        pending_queue.approve_show(tvdb_id)
+    except OSError:
+        log.exception(
+            "Failed to approve show '%s' (tvdb:%d) in pending queue",
+            show.title,
+            show.tvdb_id,
+        )
+        medusa_msg = (
+            "was added to Medusa"
+            if added
+            else "already exists in Medusa"
+        )
+        return HTMLResponse(
+            f'<div class="banner warning">{escape(show.title)} {medusa_msg}, '
+            "but could not be removed from the pending queue.</div>"
+        )
+
+    safe_id = escape(str(tvdb_id))
+    meta = "Approved and added to Medusa" if added else "Already exists in Medusa"
+    return HTMLResponse(
+        f'<div class="pending-row pending-row-approved" id="pending-row-{safe_id}">'
+        f'<div class="pending-info"><div class="pending-title">{escape(show.title)}</div>'
+        f'<div class="pending-meta">{meta}</div></div></div>'
+    )
 
 
 @router.post("/pending/reject/{tvdb_id}", response_class=HTMLResponse)
@@ -684,11 +703,23 @@ async def bulk_approve(request: Request):
                     medusa_client.add_show(
                         show.tvdb_id, show.title, add_options=add_options or None
                     )
-                    pending_queue.approve_show(tvdb_id)
-                    approved.append(show.title)
                 except Exception:
                     log.exception("Failed to add show '%s' (tvdb:%d)", show.title, show.tvdb_id)
                     failed.append(show.title)
+                    continue
+
+                try:
+                    pending_queue.approve_show(tvdb_id)
+                except OSError:
+                    log.exception(
+                        "Failed to approve show '%s' (tvdb:%d) in pending queue",
+                        show.title,
+                        show.tvdb_id,
+                    )
+                    failed.append(show.title)
+                    continue
+
+                approved.append(show.title)
     except Exception:
         log.exception("Failed to connect to Medusa during bulk approve")
         return HTMLResponse(

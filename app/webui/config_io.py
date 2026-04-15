@@ -117,9 +117,9 @@ def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfi
         WebUIConfig,
         _normalize_notify_urls,
         _normalize_trakt_sources,
-        _safe_float,
-        _safe_int,
+        _safe_float_non_negative,
         _safe_int_non_negative,
+        _safe_int_port,
         _to_bool,
         _validate,
         validate_raw_numeric_fields,
@@ -152,20 +152,20 @@ def load_config_dict(raw: dict, path: str, *, validate: bool = True) -> AppConfi
 
     sync = SyncConfig(
         dry_run=_to_bool(sync_raw.get("dry_run", False)),
-        interval=_safe_int(sync_raw.get("interval", 0), 0),
-        max_retries=_safe_int(sync_raw.get("max_retries", 3), 3),
-        retry_backoff=_safe_float(sync_raw.get("retry_backoff", 2.0), 2.0),
+        interval=_safe_int_non_negative(sync_raw.get("interval", 0), 0),
+        max_retries=_safe_int_non_negative(sync_raw.get("max_retries", 3), 3),
+        retry_backoff=_safe_float_non_negative(sync_raw.get("retry_backoff", 2.0), 2.0),
         log_format=str(sync_raw.get("log_format", "text")).strip().lower(),
     )
 
     health = HealthConfig(
         enabled=_to_bool(health_raw.get("enabled", False)),
-        port=_safe_int(health_raw.get("port", 8095), 8095),
+        port=_safe_int_port(health_raw.get("port", 8095), 8095),
     )
 
     webui = WebUIConfig(
         enabled=_to_bool(webui_raw.get("enabled", False)),
-        port=_safe_int(webui_raw.get("port", 8089), 8089),
+        port=_safe_int_port(webui_raw.get("port", 8089), 8089),
     )
 
     notify = NotifyConfig(

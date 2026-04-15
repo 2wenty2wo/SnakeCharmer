@@ -9,8 +9,10 @@ from app.config import (
     TraktSource,
     _normalize_trakt_sources,
     _safe_float,
+    _safe_float_non_negative,
     _safe_int,
     _safe_int_non_negative,
+    _safe_int_port,
     _to_bool,
     get_config_errors,
     get_section_errors,
@@ -370,7 +372,7 @@ class TestGetConfigErrors:
         errors = get_config_errors(config)
         assert "trakt.limit must be >= 0" in errors
 
-    def test_user_list_without_owner_mentions_shorthand(self):
+    def test_user_list_without_owner_reports_error(self):
         config = AppConfig(
             trakt=TraktConfig(
                 client_id="id",
@@ -381,7 +383,7 @@ class TestGetConfigErrors:
             medusa=MedusaConfig(url="http://localhost:8081", api_key="key"),
         )
         errors = get_config_errors(config)
-        assert any("shorthand" in e for e in errors)
+        assert any("owner is required" in e and "user_list" in e for e in errors)
 
     def test_empty_config_returns_all_errors(self):
         config = AppConfig()
@@ -480,11 +482,11 @@ class TestNormalizeHelpers:
         assert parsed[0].list_slug == "my-custom-list"
         assert parsed[0].owner == ""
 
-    def test_normalize_trakt_sources_shorthand_uses_username_as_owner(self):
+    def test_normalize_trakt_sources_shorthand_does_not_infer_owner_from_username(self):
         parsed = _normalize_trakt_sources(
             {"username": "alice", "sources": ["my-custom-list"]},
         )
-        assert parsed[0].owner == "alice"
+        assert parsed[0].owner == ""
 
     def test_normalize_trakt_sources_string_known_type(self):
         parsed = _normalize_trakt_sources({"sources": ["popular"]})
@@ -714,6 +716,60 @@ class TestBoundaryValues:
         with pytest.raises(SystemExit):
             load_config(path)
 
+    def test_negative_sync_interval_rejected(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"interval": -5},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_negative_sync_interval_skip_validate_coerces(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"interval": -5},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("sync.interval" in w for w in config.load_warnings)
+        assert config.sync.interval == 0
+
+    def test_negative_max_retries_skip_validate_coerces(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"max_retries": -1},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("max_retries" in w for w in config.load_warnings)
+        assert config.sync.max_retries == 3
+
+    def test_negative_retry_backoff_skip_validate_coerces(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "sync": {"retry_backoff": -2.5},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("retry_backoff" in w for w in config.load_warnings)
+        assert config.sync.retry_backoff == 2.0
+
+    def test_invalid_health_port_skip_validate_coerces(self, tmp_path):
+        data = {
+            "trakt": {"client_id": "id", "sources": [{"type": "trending"}]},
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+            "health": {"enabled": True, "port": 70000},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path, skip_validate=True)
+        assert any("health.port" in w for w in config.load_warnings)
+        assert config.health.port == 8095
+
 
 class TestSafeNumericCoercion:
     def test_safe_float_overflow_returns_default(self):
@@ -724,3 +780,15 @@ class TestSafeNumericCoercion:
 
     def test_safe_int_non_negative_overflow_returns_default(self):
         assert _safe_int_non_negative(float("inf"), 50) == 50
+
+    def test_safe_float_non_negative_negative_returns_default(self):
+        assert _safe_float_non_negative(-1.0, 2.0) == 2.0
+
+    def test_safe_int_port_out_of_range_returns_default(self):
+        assert _safe_int_port(-1, 8095) == 8095
+        assert _safe_int_port(70000, 8095) == 8095
+
+    def test_safe_int_port_valid_returns_value(self):
+        assert _safe_int_port(0, 8095) == 0
+        assert _safe_int_port(65535, 8095) == 65535
+        assert _safe_int_port(9000, 8095) == 9000
