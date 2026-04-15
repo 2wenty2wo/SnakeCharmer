@@ -33,11 +33,14 @@ class PendingQueue:
             with open(self._path, encoding="utf-8") as f:
                 data = json.load(f)
             for item in data.get("pending", []):
-                show = self._dict_to_show(item)
-                self._pending[show.tvdb_id] = show
+                try:
+                    show = self._dict_to_show(item)
+                    self._pending[show.tvdb_id] = show
+                except (KeyError, TypeError, ValueError) as e:
+                    log.warning("Skipping malformed pending show item: %s", e)
             self._history = data.get("history", [])[:MAX_HISTORY]
             log.debug("Loaded %d pending shows from %s", len(self._pending), self._path)
-        except (json.JSONDecodeError, OSError, KeyError, TypeError) as e:
+        except (json.JSONDecodeError, OSError) as e:
             log.warning("Failed to load pending queue: %s", e)
 
     def _save(self) -> None:

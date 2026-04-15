@@ -227,6 +227,10 @@ class TraktClient(RetryClient):
             log.warning("Failed to read token file: %s", e)
             return None
 
+        if not isinstance(token, dict):
+            log.warning("Token file is malformed (not a JSON object)")
+            return None
+
         # Check if token is expired (with 1 hour buffer)
         created_at = token.get("created_at", 0)
         expires_in = token.get("expires_in", 0)

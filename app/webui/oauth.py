@@ -44,6 +44,8 @@ def _get_trakt_token_status(config) -> str:
     try:
         with open(token_path, encoding="utf-8") as f:
             token = json.load(f)
+        if not isinstance(token, dict):
+            return "none"
         created_at = token.get("created_at", 0)
         expires_in = token.get("expires_in", 0)
         if time.time() > created_at + expires_in - 3600:

@@ -705,13 +705,17 @@ async def bulk_approve(request: Request):
                     continue
 
                 try:
-                    pending_queue.approve_show(tvdb_id)
+                    approved_show = pending_queue.approve_show(tvdb_id)
                 except OSError:
                     log.exception(
                         "Failed to approve show '%s' (tvdb:%d) in pending queue",
                         show.title,
                         show.tvdb_id,
                     )
+                    failed.append(show.title)
+                    continue
+
+                if approved_show is None:
                     failed.append(show.title)
                     continue
 
