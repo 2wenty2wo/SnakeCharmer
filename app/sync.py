@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass, field
 
 from app.config import AppConfig
+from app.filters import apply_filters
 from app.medusa import MedusaClient
 from app.models import PendingShow
 from app.trakt import TraktClient
@@ -62,12 +63,33 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                 result.duration_seconds = _elapsed_seconds(start_time_ns)
                 return result
 
-            list_counts[source_name] = len(list_shows)
-            result.total_fetched += len(list_shows)
-            result.per_source[source_name] = len(list_shows)
-            log.info("Source '%s' returned %d show(s)", source_name, len(list_shows))
-
+            accepted_shows: list = []
             for show in list_shows:
+                should_include, reason = apply_filters(show, source.filters)
+                if should_include:
+                    accepted_shows.append(show)
+                else:
+                    log.info(
+                        "Filtered '%s' (tvdb:%d) from source '%s': %s",
+                        show.title,
+                        show.tvdb_id,
+                        source_name,
+                        reason,
+                    )
+                    result.skipped += 1
+                    _track_action(result, show, source_name, "skipped", reason)
+
+            list_counts[source_name] = len(accepted_shows)
+            result.total_fetched += len(accepted_shows)
+            result.per_source[source_name] = len(accepted_shows)
+            log.info(
+                "Source '%s' returned %d show(s), %d accepted after filters",
+                source_name,
+                len(list_shows),
+                len(accepted_shows),
+            )
+
+            for show in accepted_shows:
                 if show.tvdb_id not in trakt_shows_by_tvdb:
                     trakt_shows_by_tvdb[show.tvdb_id] = show
                 source_lists.setdefault(show.tvdb_id, []).append(source_name)

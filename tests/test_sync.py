@@ -589,3 +589,65 @@ class TestDeduplicationWithManySources:
         assert result.total_fetched == 0
         mock_trakt.get_shows.assert_not_called()
         mock_medusa.get_existing_tvdb_ids.assert_not_called()
+
+    def test_filters_skip_blocked_shows(self, config, mock_trakt, mock_medusa):
+        """Shows matching source filters should be skipped and not added."""
+        from app.models import ShowFilters
+
+        config.trakt.sources[0].filters = ShowFilters(blacklisted_genres=["reality"])
+        mock_trakt.get_shows.side_effect = [
+            [
+                TraktShow(title="Reality Show", tvdb_id=1, genres=["reality"]),
+                TraktShow(title="Drama Show", tvdb_id=2, genres=["drama"]),
+            ]
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        mock_medusa.add_show.return_value = True
+
+        result = run_sync(config)
+
+        assert result.skipped == 1
+        assert result.added == 1
+        mock_medusa.add_show.assert_called_once_with(2, "Drama Show", add_options=None)
+        assert any(a["reason"] == "filtered_by_genre" for a in result.show_actions)
+
+    def test_filtered_show_can_still_come_from_another_source(self, config, mock_trakt, mock_medusa):
+        """A show filtered from source A should still be added if source B accepts it."""
+        from app.models import ShowFilters, TraktSource
+
+        config.trakt.sources = [
+            TraktSource(type="trending", filters=ShowFilters(blacklisted_genres=["reality"])),
+            TraktSource(type="popular"),
+        ]
+        mock_trakt.get_shows.side_effect = [
+            [TraktShow(title="Reality Show", tvdb_id=1, genres=["reality"])],
+            [TraktShow(title="Reality Show", tvdb_id=1, genres=["reality"])],
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        mock_medusa.add_show.return_value = True
+
+        result = run_sync(config)
+
+        assert result.added == 1
+        mock_medusa.add_show.assert_called_once_with(1, "Reality Show", add_options=None)
+
+    def test_filters_are_counted_in_per_source_and_total(self, config, mock_trakt, mock_medusa):
+        """Post-filter counts should be reflected in total_fetched and per_source."""
+        from app.models import ShowFilters
+
+        config.trakt.sources[0].filters = ShowFilters(blacklisted_title_keywords=["bad"])
+        mock_trakt.get_shows.side_effect = [
+            [
+                TraktShow(title="Good Show", tvdb_id=1),
+                TraktShow(title="Bad Show", tvdb_id=2),
+            ]
+        ]
+        mock_medusa.get_existing_tvdb_ids.return_value = set()
+        mock_medusa.add_show.return_value = True
+
+        result = run_sync(config)
+
+        assert result.total_fetched == 1
+        assert result.per_source["trending"] == 1
+        assert result.added == 1
+        assert result.skipped == 1

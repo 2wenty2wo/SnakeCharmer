@@ -8,6 +8,7 @@ from app.config import (
     MedusaAddOptions,
     MedusaConfig,
     NotifyConfig,
+    ShowFilters,
     SyncConfig,
     TraktConfig,
     TraktSource,
@@ -108,6 +109,69 @@ class TestConfigToDict:
         result = config_to_dict(config)
         source = result["trakt"]["sources"][0]
         assert "medusa" not in source
+
+    def test_source_with_filters(self):
+        config = _make_config(
+            trakt=TraktConfig(
+                client_id="id",
+                sources=[
+                    TraktSource(
+                        type="trending",
+                        filters=ShowFilters(
+                            blacklisted_genres=["reality"],
+                            blacklisted_min_year=2010,
+                            blacklisted_tvdb_ids=[123],
+                        ),
+                    )
+                ],
+            )
+        )
+        result = config_to_dict(config)
+        source = result["trakt"]["sources"][0]
+        assert source["filters"]["blacklisted_genres"] == ["reality"]
+        assert source["filters"]["blacklisted_min_year"] == 2010
+        assert source["filters"]["blacklisted_tvdb_ids"] == [123]
+
+    def test_omits_empty_filters(self):
+        config = _make_config()
+        result = config_to_dict(config)
+        source = result["trakt"]["sources"][0]
+        assert "filters" not in source
+
+    def test_filters_roundtrip(self, tmp_path):
+        config = _make_config(
+            trakt=TraktConfig(
+                client_id="id",
+                sources=[
+                    TraktSource(
+                        type="trending",
+                        filters=ShowFilters(
+                            blacklisted_genres=["reality", "talk-show"],
+                            blacklisted_networks=["youtube"],
+                            blacklisted_min_year=2010,
+                            blacklisted_max_year=2025,
+                            blacklisted_title_keywords=["untitled"],
+                            blacklisted_tvdb_ids=[1, 2],
+                            allowed_countries=["us", "gb"],
+                            allowed_languages=["en"],
+                        ),
+                    )
+                ],
+            )
+        )
+        path = str(tmp_path / "config.yaml")
+        save_app_config(config, path)
+        loaded = reload_config(path)
+
+        f = loaded.trakt.sources[0].filters
+        assert f.blacklisted_genres == ["reality", "talk-show"]
+        assert f.blacklisted_networks == ["youtube"]
+        assert f.blacklisted_min_year == 2010
+        assert f.blacklisted_max_year == 2025
+        assert f.blacklisted_title_keywords == ["untitled"]
+        assert f.blacklisted_tvdb_ids == [1, 2]
+        assert f.allowed_countries == ["us", "gb"]
+        assert f.allowed_languages == ["en"]
 
     def test_omits_auth_when_none(self):
         config = _make_config(

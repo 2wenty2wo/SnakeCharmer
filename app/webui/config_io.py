@@ -38,6 +38,26 @@ def config_to_dict(config: AppConfig) -> dict:
         if medusa_opts:
             source_dict["medusa"] = medusa_opts
 
+        filters_opts: dict = {}
+        if source.filters.blacklisted_genres:
+            filters_opts["blacklisted_genres"] = source.filters.blacklisted_genres
+        if source.filters.blacklisted_networks:
+            filters_opts["blacklisted_networks"] = source.filters.blacklisted_networks
+        if source.filters.blacklisted_min_year is not None:
+            filters_opts["blacklisted_min_year"] = source.filters.blacklisted_min_year
+        if source.filters.blacklisted_max_year is not None:
+            filters_opts["blacklisted_max_year"] = source.filters.blacklisted_max_year
+        if source.filters.blacklisted_title_keywords:
+            filters_opts["blacklisted_title_keywords"] = source.filters.blacklisted_title_keywords
+        if source.filters.blacklisted_tvdb_ids:
+            filters_opts["blacklisted_tvdb_ids"] = source.filters.blacklisted_tvdb_ids
+        if source.filters.allowed_countries:
+            filters_opts["allowed_countries"] = source.filters.allowed_countries
+        if source.filters.allowed_languages:
+            filters_opts["allowed_languages"] = source.filters.allowed_languages
+        if filters_opts:
+            source_dict["filters"] = filters_opts
+
         trakt["sources"].append(source_dict)
 
     result = {

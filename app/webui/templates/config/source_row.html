@@ -7,7 +7,7 @@
                     hx-post="/config/trakt/sources/preview"
                     hx-target="#preview-{{ i }}"
                     hx-swap="innerHTML"
-                    hx-include="[name='csrf_token'],[name='client_id'],[name='client_secret'],[name='username'],[name='limit'],[name='source_{{ i }}_type'],[name='source_{{ i }}_owner'],[name='source_{{ i }}_list_slug'],[name='source_{{ i }}_auth'],[name='source_{{ i }}_auto_approve']"
+                    hx-include="[name='csrf_token'],[name='client_id'],[name='client_secret'],[name='username'],[name='limit'],[name='source_{{ i }}_type'],[name='source_{{ i }}_owner'],[name='source_{{ i }}_list_slug'],[name='source_{{ i }}_auth'],[name='source_{{ i }}_auto_approve'],[name='source_{{ i }}_quality'],[name='source_{{ i }}_required_words'],[name='source_{{ i }}_blacklisted_genres'],[name='source_{{ i }}_blacklisted_networks'],[name='source_{{ i }}_blacklisted_min_year'],[name='source_{{ i }}_blacklisted_max_year'],[name='source_{{ i }}_blacklisted_title_keywords'],[name='source_{{ i }}_blacklisted_tvdb_ids'],[name='source_{{ i }}_allowed_countries'],[name='source_{{ i }}_allowed_languages']"
                     hx-vals='{"source_index": "{{ i }}"}'
                     title="Preview shows from this source">
                 <i data-lucide="eye" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"></i>
@@ -96,6 +96,90 @@
         </label>
     </div>
     
+    <div class="source-filters">
+        <div class="source-filters-header">Filters</div>
+        <div class="source-grid">
+            <label class="field-label">
+                Blacklisted Genres
+                <input type="text"
+                       name="source_{{ i }}_blacklisted_genres"
+                       value="{{ source.filters.blacklisted_genres | join(', ') if source.filters.blacklisted_genres else '' }}"
+                       placeholder="e.g. reality, talk-show, anime"
+                       aria-describedby="bg-help-{{ i }}">
+                <small id="bg-help-{{ i }}">Comma-separated genres to exclude</small>
+            </label>
+            <label class="field-label">
+                Blacklisted Networks
+                <input type="text"
+                       name="source_{{ i }}_blacklisted_networks"
+                       value="{{ source.filters.blacklisted_networks | join(', ') if source.filters.blacklisted_networks else '' }}"
+                       placeholder="e.g. youtube, twitch, espn"
+                       aria-describedby="bn-help-{{ i }}">
+                <small id="bn-help-{{ i }}">Comma-separated networks to exclude</small>
+            </label>
+        </div>
+        <div class="source-grid">
+            <label class="field-label">
+                Min Year
+                <input type="number"
+                       name="source_{{ i }}_blacklisted_min_year"
+                       value="{{ source.filters.blacklisted_min_year if source.filters.blacklisted_min_year is not none else '' }}"
+                       placeholder="e.g. 2010"
+                       aria-describedby="bmy-help-{{ i }}">
+                <small id="bmy-help-{{ i }}">Skip shows released before this year</small>
+            </label>
+            <label class="field-label">
+                Max Year
+                <input type="number"
+                       name="source_{{ i }}_blacklisted_max_year"
+                       value="{{ source.filters.blacklisted_max_year if source.filters.blacklisted_max_year is not none else '' }}"
+                       placeholder="e.g. 2020"
+                       aria-describedby="bmaxy-help-{{ i }}">
+                <small id="bmaxy-help-{{ i }}">Skip shows released after this year</small>
+            </label>
+        </div>
+        <div class="source-grid">
+            <label class="field-label">
+                Blacklisted Title Keywords
+                <input type="text"
+                       name="source_{{ i }}_blacklisted_title_keywords"
+                       value="{{ source.filters.blacklisted_title_keywords | join(', ') if source.filters.blacklisted_title_keywords else '' }}"
+                       placeholder="e.g. untitled, barbie"
+                       aria-describedby="btk-help-{{ i }}">
+                <small id="btk-help-{{ i }}">Comma-separated keywords to exclude from titles</small>
+            </label>
+            <label class="field-label">
+                Blacklisted TVDB IDs
+                <input type="text"
+                       name="source_{{ i }}_blacklisted_tvdb_ids"
+                       value="{{ source.filters.blacklisted_tvdb_ids | join(', ') if source.filters.blacklisted_tvdb_ids else '' }}"
+                       placeholder="e.g. 79274, 85287"
+                       aria-describedby="btids-help-{{ i }}">
+                <small id="btids-help-{{ i }}">Comma-separated TVDB IDs to exclude</small>
+            </label>
+        </div>
+        <div class="source-grid">
+            <label class="field-label">
+                Allowed Countries
+                <input type="text"
+                       name="source_{{ i }}_allowed_countries"
+                       value="{{ source.filters.allowed_countries | join(', ') if source.filters.allowed_countries else '' }}"
+                       placeholder="e.g. us, gb, ca"
+                       aria-describedby="ac-help-{{ i }}">
+                <small id="ac-help-{{ i }}">Only allow shows from these countries (empty = any). Use 'ignore' to include shows with no country</small>
+            </label>
+            <label class="field-label">
+                Allowed Languages
+                <input type="text"
+                       name="source_{{ i }}_allowed_languages"
+                       value="{{ source.filters.allowed_languages | join(', ') if source.filters.allowed_languages else '' }}"
+                       placeholder="e.g. en, ja"
+                       aria-describedby="al-help-{{ i }}">
+                <small id="al-help-{{ i }}">Only allow shows with these languages (empty = any). Use 'ignore' to include shows with no language</small>
+            </label>
+        </div>
+    </div>
+
     <div id="preview-{{ i }}"></div>
 </div>
 

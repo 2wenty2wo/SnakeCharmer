@@ -20,6 +20,18 @@ class MedusaAddOptions:
 
 
 @dataclass
+class ShowFilters:
+    blacklisted_genres: list[str] = field(default_factory=list)
+    blacklisted_networks: list[str] = field(default_factory=list)
+    blacklisted_min_year: int | None = None
+    blacklisted_max_year: int | None = None
+    blacklisted_title_keywords: list[str] = field(default_factory=list)
+    blacklisted_tvdb_ids: list[int] = field(default_factory=list)
+    allowed_countries: list[str] = field(default_factory=list)
+    allowed_languages: list[str] = field(default_factory=list)
+
+
+@dataclass
 class PendingShow:
     """A show waiting for manual approval before being added to Medusa."""
 
@@ -46,6 +58,7 @@ class TraktSource:
     auth: bool | None = None
     auto_approve: bool = True
     medusa: MedusaAddOptions = field(default_factory=MedusaAddOptions)
+    filters: ShowFilters = field(default_factory=ShowFilters)
 
     @property
     def requires_auth(self) -> bool:

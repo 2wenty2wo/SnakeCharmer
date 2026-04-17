@@ -41,11 +41,19 @@ trakt:
       # medusa:
       #   quality: ["hd1080p", "uhd4k"]
       #   required_words: ["web-dl"]
+      # filters:
+      #   blacklisted_genres: ["reality", "talk-show"]
+      #   blacklisted_networks: ["youtube", "twitch"]
+      #   blacklisted_min_year: 2010
+      #   allowed_countries: ["us", "gb", "ca"]
     - type: user_list
       owner: giladg
       list_slug: weekly-shows
       # medusa:
       #   required_words: ["proper"]
+      # filters:
+      #   blacklisted_title_keywords: ["untitled"]
+      #   blacklisted_tvdb_ids: [79274]
     - type: user_list
       owner: YOUR_TRAKT_USERNAME
       list_slug: private-favorites

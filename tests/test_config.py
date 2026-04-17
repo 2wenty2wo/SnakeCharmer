@@ -271,6 +271,100 @@ class TestLoadConfig:
         assert source.medusa.quality is None
         assert source.medusa.required_words == []
 
+    def test_source_filters_parse(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {
+                        "type": "trending",
+                        "filters": {
+                            "blacklisted_genres": ["reality"],
+                            "blacklisted_networks": ["youtube"],
+                            "blacklisted_min_year": 2010,
+                            "blacklisted_max_year": 2020,
+                            "blacklisted_title_keywords": ["untitled"],
+                            "blacklisted_tvdb_ids": [123, 456],
+                            "allowed_countries": ["us", "gb"],
+                            "allowed_languages": ["en"],
+                        },
+                    }
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+
+        source = config.trakt.sources[0]
+        assert source.filters.blacklisted_genres == ["reality"]
+        assert source.filters.blacklisted_networks == ["youtube"]
+        assert source.filters.blacklisted_min_year == 2010
+        assert source.filters.blacklisted_max_year == 2020
+        assert source.filters.blacklisted_title_keywords == ["untitled"]
+        assert source.filters.blacklisted_tvdb_ids == [123, 456]
+        assert source.filters.allowed_countries == ["us", "gb"]
+        assert source.filters.allowed_languages == ["en"]
+
+    def test_source_filters_invalid_genres_type_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {"type": "trending", "filters": {"blacklisted_genres": "reality"}}
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_source_filters_invalid_tvdb_ids_type_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {
+                        "type": "trending",
+                        "filters": {"blacklisted_tvdb_ids": ["not-an-int"]},
+                    }
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_source_filters_invalid_year_type_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {"type": "trending", "filters": {"blacklisted_min_year": "bad"}}
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_source_filters_min_year_greater_than_max_year_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {"type": "trending", "filters": {"blacklisted_min_year": 2020, "blacklisted_max_year": 2010}}
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
     def test_source_medusa_options_defaults_when_not_provided(self, tmp_path, minimal_config):
         path = _write_config(tmp_path, minimal_config)
         config = load_config(path)

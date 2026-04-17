@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import os
 import re
@@ -890,6 +891,50 @@ def _parse_sources_from_form(form) -> list[dict]:
             ]
         if medusa_opts:
             source_dict["medusa"] = medusa_opts
+
+        # Parse filter fields
+        def _split_comma(val: str) -> list[str]:
+            return [v.strip() for v in val.split(",") if v.strip()]
+
+        def _split_ints(val: str) -> list[int]:
+            result = []
+            for v in val.split(","):
+                v = v.strip()
+                if v:
+                    with contextlib.suppress(ValueError):
+                        result.append(int(v))
+            return result
+
+        filters_opts: dict = {}
+        bg = form.get(f"source_{index}_blacklisted_genres", "").strip()
+        bn = form.get(f"source_{index}_blacklisted_networks", "").strip()
+        bmy = form.get(f"source_{index}_blacklisted_min_year", "").strip()
+        bmaxy = form.get(f"source_{index}_blacklisted_max_year", "").strip()
+        btk = form.get(f"source_{index}_blacklisted_title_keywords", "").strip()
+        btids = form.get(f"source_{index}_blacklisted_tvdb_ids", "").strip()
+        ac = form.get(f"source_{index}_allowed_countries", "").strip()
+        al = form.get(f"source_{index}_allowed_languages", "").strip()
+
+        if bg:
+            filters_opts["blacklisted_genres"] = _split_comma(bg)
+        if bn:
+            filters_opts["blacklisted_networks"] = _split_comma(bn)
+        if bmy:
+            with contextlib.suppress(ValueError):
+                filters_opts["blacklisted_min_year"] = int(bmy)
+        if bmaxy:
+            with contextlib.suppress(ValueError):
+                filters_opts["blacklisted_max_year"] = int(bmaxy)
+        if btk:
+            filters_opts["blacklisted_title_keywords"] = _split_comma(btk)
+        if btids:
+            filters_opts["blacklisted_tvdb_ids"] = _split_ints(btids)
+        if ac:
+            filters_opts["allowed_countries"] = _split_comma(ac)
+        if al:
+            filters_opts["allowed_languages"] = _split_comma(al)
+        if filters_opts:
+            source_dict["filters"] = filters_opts
 
         sources.append(source_dict)
     return sources

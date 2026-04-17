@@ -2055,6 +2055,35 @@ class TestRouteHelpers:
         parsed = webui_routes._parse_sources_from_form(form)
         assert parsed == []
 
+    def test_parse_sources_from_form_reads_filters(self):
+        form = {
+            "source_0_type": "trending",
+            "source_0_blacklisted_genres": "reality, talk-show",
+            "source_0_blacklisted_networks": "youtube",
+            "source_0_blacklisted_min_year": "2010",
+            "source_0_blacklisted_max_year": "2020",
+            "source_0_blacklisted_title_keywords": "untitled, barbie",
+            "source_0_blacklisted_tvdb_ids": "123, 456",
+            "source_0_allowed_countries": "us, gb",
+            "source_0_allowed_languages": "en",
+        }
+        parsed = webui_routes._parse_sources_from_form(form)
+        assert len(parsed) == 1
+        filters = parsed[0]["filters"]
+        assert filters["blacklisted_genres"] == ["reality", "talk-show"]
+        assert filters["blacklisted_networks"] == ["youtube"]
+        assert filters["blacklisted_min_year"] == 2010
+        assert filters["blacklisted_max_year"] == 2020
+        assert filters["blacklisted_title_keywords"] == ["untitled", "barbie"]
+        assert filters["blacklisted_tvdb_ids"] == [123, 456]
+        assert filters["allowed_countries"] == ["us", "gb"]
+        assert filters["allowed_languages"] == ["en"]
+
+    def test_parse_sources_from_form_omits_empty_filters(self):
+        form = {"source_0_type": "trending"}
+        parsed = webui_routes._parse_sources_from_form(form)
+        assert "filters" not in parsed[0]
+
 
 class TestSyncStatusHistory:
     def test_history_empty(self):

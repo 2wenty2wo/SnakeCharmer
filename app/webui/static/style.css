@@ -4192,6 +4192,22 @@ button[type="submit"]:disabled {
     margin-top: 16px;
 }
 
+.source-filters {
+    margin-top: 16px;
+    padding: 16px;
+    background: #181818;
+    border-radius: 8px;
+}
+
+.source-filters-header {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #b3b3b3;
+    margin-bottom: 12px;
+}
+
 /* === Pagination Meta === */
 .pagination-meta {
     font-size: 14px;
