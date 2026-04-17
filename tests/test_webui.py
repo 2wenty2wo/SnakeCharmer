@@ -2035,6 +2035,37 @@ class TestRouteHelpers:
         request = _FakeRequest(app)
         assert oauth_module._templates(request) is app.state.templates
 
+    def test_get_library_count_does_not_cache_failures(self, tmp_path):
+        """A failed Medusa fetch must not block retries until the success TTL."""
+        client, _, _ = _create_client(tmp_path)
+        app = client.app
+
+        class _FakeRequest:
+            def __init__(self, app):
+                self.app = app
+
+        request = _FakeRequest(app)
+        prev_cache = webui_routes._LIBRARY_COUNT_CACHE
+        try:
+            webui_routes._LIBRARY_COUNT_CACHE = None
+            mock_medusa = MagicMock()
+            mock_medusa.get_existing_tvdb_ids.side_effect = [
+                requests.ConnectionError("down"),
+                {301, 302},
+            ]
+            with patch("app.webui.routes.MedusaClient") as mock_cls:
+                mock_cls.return_value.__enter__.return_value = mock_medusa
+                assert webui_routes._get_library_count(request) is None
+                assert webui_routes._get_library_count(request) == 2
+            assert mock_medusa.get_existing_tvdb_ids.call_count == 2
+
+            with patch("app.webui.routes.MedusaClient") as mock_cls2:
+                mock_cls2.return_value.__enter__.return_value = mock_medusa
+                assert webui_routes._get_library_count(request) == 2
+            assert mock_medusa.get_existing_tvdb_ids.call_count == 2
+        finally:
+            webui_routes._LIBRARY_COUNT_CACHE = prev_cache
+
     def test_parse_sources_from_form_skips_missing_type(self):
         form = {
             "source_0_type": "trending",

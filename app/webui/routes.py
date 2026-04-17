@@ -48,15 +48,16 @@ def _sync_manager(request: Request):
 
 # --- Dashboard ---
 
-_LIBRARY_COUNT_CACHE: tuple[int | None, float] | None = None
+_LIBRARY_COUNT_CACHE: tuple[int, float] | None = None
 _LIBRARY_COUNT_TTL = 300  # 5 minutes
 
 
 def _get_library_count(request: Request) -> int | None:
     """Fetch the live library size from Medusa. Returns None on failure.
 
-    The result is cached for 5 minutes to avoid hammering Medusa on every
-    dashboard stats poll.
+    Successful counts are cached for five minutes to avoid hammering Medusa on
+    every dashboard stats poll. Failed fetches are not cached so a transient
+    outage does not suppress retries until the TTL expires.
     """
     global _LIBRARY_COUNT_CACHE
     config = _holder(request).get()
@@ -74,7 +75,7 @@ def _get_library_count(request: Request) -> int | None:
             result = len(client.get_existing_tvdb_ids())
     except Exception:
         log.debug("Could not fetch Medusa library count for dashboard")
-        result = None
+        return None
 
     _LIBRARY_COUNT_CACHE = (result, now)
     return result
