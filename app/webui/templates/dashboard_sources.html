@@ -2,7 +2,7 @@
 <div class="sources-strip">
     {% for source in config.trakt.sources %}
     <div class="source-strip-item">
-        <span class="source-strip-name">{{ source.type }}</span>
+        <span class="source-strip-name">{{ source.type|replace('_', ' ')|title }}</span>
         {% if not source.auto_approve %}
         <span class="source-strip-badge source-strip-badge--manual" title="Requires manual approval">Manual</span>
         {% endif %}
