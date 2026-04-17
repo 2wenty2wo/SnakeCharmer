@@ -1,0 +1,24 @@
+    <a href="/config/trakt" class="config-status-badge{% if config_status.trakt %} config-status-badge--ok{% else %} config-status-badge--error{% endif %}">
+        <i data-lucide="{% if config_status.trakt %}check-circle{% else %}alert-circle{% endif %}" style="width:14px;height:14px"></i>
+        <span>Trakt</span>
+    </a>
+    <a href="/config/medusa" class="config-status-badge{% if config_status.medusa %} config-status-badge--ok{% else %} config-status-badge--error{% endif %}">
+        <i data-lucide="{% if config_status.medusa %}check-circle{% else %}alert-circle{% endif %}" style="width:14px;height:14px"></i>
+        <span>Medusa</span>
+    </a>
+    <a href="/config/sync" class="config-status-badge config-status-badge--neutral">
+        <i data-lucide="refresh-cw" style="width:14px;height:14px"></i>
+        <span>
+            {% if config_status.sync_interval == 0 %}
+            Run Once
+            {% else %}
+            {% set h = config_status.sync_interval // 3600 %}
+            {% set m = (config_status.sync_interval % 3600) // 60 %}
+            {% if h > 0 %}{{ h }}h{% endif %}{% if m > 0 %} {{ m }}m{% endif %}
+            {% endif %}
+        </span>
+    </a>
+    <a href="/config/notify" class="config-status-badge{% if config_status.notify_enabled %} config-status-badge--ok{% else %} config-status-badge--off{% endif %}">
+        <i data-lucide="bell{% if not config_status.notify_enabled %}-off{% endif %}" style="width:14px;height:14px"></i>
+        <span>Notify {{ "On" if config_status.notify_enabled else "Off" }}</span>
+    </a>

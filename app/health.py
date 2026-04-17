@@ -91,6 +91,43 @@ class SyncStatus:
                     return len(self._history)
             return len(self._history)
 
+    def get_totals(self) -> dict:
+        """Return aggregate stats across all sync runs.
+
+        Delegates to the DB when available, otherwise computes from in-memory history.
+        """
+        with self._lock:
+            if self._db is not None:
+                try:
+                    return self._db.get_totals()
+                except Exception:
+                    log.exception("Failed to read totals from database")
+
+            total_runs = len(self._history)
+            if total_runs == 0:
+                return {
+                    "total_runs": 0,
+                    "total_added": 0,
+                    "total_queued": 0,
+                    "total_failed": 0,
+                    "success_rate": 0,
+                }
+            total_added = sum(e.get("added", 0) for e in self._history)
+            total_queued = sum(e.get("queued", 0) for e in self._history)
+            total_failed = sum(e.get("failed", 0) for e in self._history)
+            successful = sum(
+                1
+                for e in self._history
+                if e.get("failed", 0) == 0 and e.get("success", True)
+            )
+            return {
+                "total_runs": total_runs,
+                "total_added": total_added,
+                "total_queued": total_queued,
+                "total_failed": total_failed,
+                "success_rate": int((successful / total_runs) * 100),
+            }
+
     @staticmethod
     def _result_to_entry(result, sync_time: float) -> dict:
         return {

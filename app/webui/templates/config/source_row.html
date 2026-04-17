@@ -60,19 +60,21 @@
         </div>
     </div>
     
-    <div class="source-grid" style="margin-top: 16px;">
-        <label class="field-label">
+    <div class="source-grid source-grid--checkboxes">
+        <label class="field-label field-label--checkbox">
             <input type="checkbox" name="source_{{ i }}_auth" {{ "checked" if source.auth }}>
             <span>Requires OAuth</span>
             <small>Check if this source requires authentication (watchlist, private lists)</small>
         </label>
         
-        <label class="field-label">
+        <label class="field-label field-label--checkbox">
             <input type="checkbox" name="source_{{ i }}_auto_approve" {{ "checked" if source.auto_approve }}>
             <span>Auto-approve Shows</span>
             <small>If unchecked, shows go to the <a href="/pending">pending queue</a> for manual approval</small>
         </label>
-        
+    </div>
+    
+    <div class="source-grid">
         <label class="field-label">
             Quality Preset
             <input type="text"

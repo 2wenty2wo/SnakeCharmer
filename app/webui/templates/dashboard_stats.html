@@ -1,95 +1,30 @@
-<!-- Stats Overview Row - HTMX Refresh Target -->
-<div
-    id="dashboard-stats-poller"
-    hx-get="/dashboard/stats"
-    hx-trigger="every 30s"
-    hx-swap="outerHTML"
->
-    <div class="stats-overview" id="stats-overview">
-        <div class="stat-hero">
-            <div class="stat-hero-icon">
-                <i data-lucide="check-circle-2" style="width:24px;height:24px"></i>
-            </div>
-            <div class="stat-hero-content">
-                <span class="stat-hero-value">{{ stats.total_added }}</span>
-                <span class="stat-hero-label">Shows Added</span>
-            </div>
+<div class="card stats-card"
+     id="dashboard-stats-poller"
+     hx-get="/dashboard/stats"
+     hx-trigger="every 30s"
+     hx-swap="outerHTML">
+    <div class="stats-card-inner">
+        <div class="stats-card-hero">
+            <span class="stats-card-value">{{ stats.library_count if stats.library_count is not none else "—" }}</span>
+            <span class="stats-card-label">In Library</span>
         </div>
-
-        <div class="stat-hero stat-hero--success">
-            <div class="stat-hero-icon">
-                <i data-lucide="trending-up" style="width:24px;height:24px"></i>
+        <div class="stats-card-grid">
+            <div class="stats-card-mini">
+                <span class="stats-card-mini-value">{{ stats.total_added }}</span>
+                <span class="stats-card-mini-label">Shows Added</span>
             </div>
-            <div class="stat-hero-content">
-                <span class="stat-hero-value">{{ stats.success_rate }}%</span>
-                <span class="stat-hero-label">Success Rate</span>
+            <div class="stats-card-mini">
+                <span class="stats-card-mini-value">{{ stats.total_runs }}</span>
+                <span class="stats-card-mini-label">Total Syncs</span>
             </div>
-        </div>
-
-        <div
-            class="stat-hero stat-hero--warning{% if stats.pending_count == 0 %} stat-hero--empty{% endif %}"
-        >
-            <div class="stat-hero-icon">
-                <i data-lucide="inbox" style="width:24px;height:24px"></i>
+            <div class="stats-card-mini">
+                <span class="stats-card-mini-value">{{ stats.success_rate }}%</span>
+                <span class="stats-card-mini-label">Success Rate</span>
             </div>
-            <div class="stat-hero-content">
-                <span class="stat-hero-value">{{ stats.pending_count }}</span>
-                <span class="stat-hero-label">Pending</span>
-            </div>
-            {% if stats.pending_count > 0 %}
-            <a href="/pending" class="stat-hero-action">Review</a>
-            {% endif %}
-        </div>
-
-        <div class="stat-hero stat-hero--info">
-            <div class="stat-hero-icon">
-                <i data-lucide="clock" style="width:24px;height:24px"></i>
-            </div>
-            <div class="stat-hero-content">
-                {% if next_sync %}
-                <span class="stat-hero-value stat-hero-value--small" data-next-sync="{{ next_sync }}">--</span>
-                <span class="stat-hero-label">Next Sync</span>
-                {% else %}
-                <span class="stat-hero-value stat-hero-value--small">--</span>
-                <span class="stat-hero-label">{% if config.sync.interval == 0 %}Run Once{% else %}Next Sync{% endif %}</span>
-                {% endif %}
+            <div class="stats-card-mini">
+                <span class="stats-card-mini-value">{{ stats.pending_count }}</span>
+                <span class="stats-card-mini-label">Pending</span>
             </div>
         </div>
     </div>
 </div>
-
-{% if next_sync %}
-<script>
-(function() {
-    // Countdown timer for next sync
-    function updateCountdown() {
-        const el = document.querySelector('[data-next-sync]');
-        if (!el) return;
-        
-        const nextSync = new Date(el.dataset.nextSync);
-        const now = new Date();
-        const diff = nextSync - now;
-        
-        if (diff <= 0) {
-            el.textContent = 'Due';
-            return;
-        }
-        
-        const hours = Math.floor(diff / 3600000);
-        const minutes = Math.floor((diff % 3600000) / 60000);
-        
-        if (hours > 0) {
-            el.textContent = hours + 'h ' + minutes + 'm';
-        } else {
-            el.textContent = minutes + 'm';
-        }
-    }
-    
-    updateCountdown();
-    if (window.__dashboardNextSyncTimer) {
-        clearInterval(window.__dashboardNextSyncTimer);
-    }
-    window.__dashboardNextSyncTimer = setInterval(updateCountdown, 60000); // Update every minute
-})();
-</script>
-{% endif %}

@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 from html import escape
 
 from fastapi import APIRouter, Request
@@ -46,6 +47,37 @@ def _sync_manager(request: Request):
 
 # --- Dashboard ---
 
+_LIBRARY_COUNT_CACHE: tuple[int | None, float] | None = None
+_LIBRARY_COUNT_TTL = 300  # 5 minutes
+
+
+def _get_library_count(request: Request) -> int | None:
+    """Fetch the live library size from Medusa. Returns None on failure.
+
+    The result is cached for 5 minutes to avoid hammering Medusa on every
+    dashboard stats poll.
+    """
+    global _LIBRARY_COUNT_CACHE
+    config = _holder(request).get()
+    if not config.medusa.url or not config.medusa.api_key:
+        return None
+
+    now = time.monotonic()
+    if _LIBRARY_COUNT_CACHE is not None:
+        value, cached_at = _LIBRARY_COUNT_CACHE
+        if now - cached_at < _LIBRARY_COUNT_TTL:
+            return value
+
+    try:
+        with MedusaClient(config.medusa, max_retries=0, retry_backoff=0.0) as client:
+            result = len(client.get_existing_tvdb_ids())
+    except Exception:
+        log.debug("Could not fetch Medusa library count for dashboard")
+        result = None
+
+    _LIBRARY_COUNT_CACHE = (result, now)
+    return result
+
 
 def _get_dashboard_stats(request: Request) -> dict:
     """Gather comprehensive stats for the dashboard."""
@@ -57,40 +89,27 @@ def _get_dashboard_stats(request: Request) -> dict:
         "total_runs": 0,
         "success_rate": 0,
         "pending_count": 0,
-        "avg_duration": 0,
+        "library_count": None,
         "recent_runs": [],
+        "per_source": {},
     }
 
-    # Get pending count
     if pending_queue:
         stats["pending_count"] = pending_queue.get_count()
 
-    # Get sync history stats
     if sync_status:
-        # Get recent runs (last 5)
+        totals = sync_status.get_totals()
+        stats["total_added"] = totals["total_added"]
+        stats["total_runs"] = totals["total_runs"]
+        stats["success_rate"] = totals["success_rate"]
+
         recent = sync_status.get_history(limit=5, offset=0)
         stats["recent_runs"] = recent
-        stats["total_runs"] = sync_status.get_total_runs()
 
         if recent:
-            # Calculate totals
-            total_added = sum(r.get("added", 0) for r in recent)
-            total_runs_with_data = len([r for r in recent if r.get("duration_seconds", 0) > 0])
+            stats["per_source"] = recent[0].get("per_source", {})
 
-            stats["total_added"] = total_added
-
-            # Calculate success rate (runs with no failures / total runs)
-            successful_runs = len(
-                [r for r in recent if r.get("failed", 0) == 0 and r.get("success", True)]
-            )
-            stats["success_rate"] = int((successful_runs / len(recent)) * 100) if recent else 0
-
-            # Calculate average duration
-            if total_runs_with_data > 0:
-                avg_duration = (
-                    sum(r.get("duration_seconds", 0) for r in recent) / total_runs_with_data
-                )
-                stats["avg_duration"] = round(avg_duration, 1)
+    stats["library_count"] = _get_library_count(request)
 
     return stats
 
@@ -118,6 +137,14 @@ async def dashboard(request: Request):
         except (ValueError, TypeError):
             pass
 
+    # Per-section config status for the compact config row
+    config_status = {
+        "trakt": len(get_section_errors(config, "trakt")) == 0,
+        "medusa": len(get_section_errors(config, "medusa")) == 0,
+        "sync_interval": config.sync.interval,
+        "notify_enabled": config.notify.enabled,
+    }
+
     return _templates(request).TemplateResponse(
         request,
         "dashboard.html",
@@ -129,6 +156,7 @@ async def dashboard(request: Request):
             sync_running=sync_running,
             stats=stats,
             next_sync=next_sync,
+            config_status=config_status,
             active_page="dashboard",
         ),
     )
@@ -138,11 +166,26 @@ async def dashboard(request: Request):
 async def dashboard_stats(request: Request):
     """Auto-refresh partial for dashboard stats overview."""
     stats = _get_dashboard_stats(request)
+
+    return _templates(request).TemplateResponse(
+        request,
+        "dashboard_stats.html",
+        context=template_context(
+            request,
+            stats=stats,
+        ),
+    )
+
+
+@router.get("/dashboard/status", response_class=HTMLResponse)
+async def dashboard_status(request: Request):
+    """Auto-refresh partial for dashboard status cards."""
     config = _holder(request).get()
     sync_status = _sync_status(request)
     health_snapshot = sync_status.snapshot() if sync_status else None
+    sync_manager = _sync_manager(request)
+    sync_running = sync_manager.is_running() if sync_manager else False
 
-    # Calculate next sync time
     next_sync = None
     if config.sync.interval > 0 and health_snapshot and health_snapshot.get("last_sync"):
         from datetime import datetime, timedelta
@@ -155,25 +198,12 @@ async def dashboard_stats(request: Request):
         except (ValueError, TypeError):
             pass
 
-    return _templates(request).TemplateResponse(
-        request,
-        "dashboard_stats.html",
-        context=template_context(
-            request,
-            stats=stats,
-            config=config,
-            next_sync=next_sync,
-        ),
-    )
-
-
-@router.get("/dashboard/status", response_class=HTMLResponse)
-async def dashboard_status(request: Request):
-    """Auto-refresh partial for dashboard status cards."""
-    sync_status = _sync_status(request)
-    health_snapshot = sync_status.snapshot() if sync_status else None
-    sync_manager = _sync_manager(request)
-    sync_running = sync_manager.is_running() if sync_manager else False
+    config_status = {
+        "trakt": len(get_section_errors(config, "trakt")) == 0,
+        "medusa": len(get_section_errors(config, "medusa")) == 0,
+        "sync_interval": config.sync.interval,
+        "notify_enabled": config.notify.enabled,
+    }
 
     return _templates(request).TemplateResponse(
         request,
@@ -182,6 +212,9 @@ async def dashboard_status(request: Request):
             request,
             health=health_snapshot,
             sync_running=sync_running,
+            config=config,
+            next_sync=next_sync,
+            config_status=config_status,
         ),
     )
 

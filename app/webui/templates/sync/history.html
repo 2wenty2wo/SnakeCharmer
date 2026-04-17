@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Sync History - SnakeCharmer{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Sync History</h1>
-    <p class="page-description">Review sync operations and their results.</p>
+<div class="page-header dashboard-header">
+    <div class="dashboard-header-text">
+        <h1>Sync History</h1>
+        <p class="page-description">Review sync operations and their results.</p>
+    </div>
     <div class="page-actions">
         <button type="button" class="btn-primary"
                 hx-post="/sync/run"
@@ -44,6 +46,9 @@
                 </div>
                 <div class="history-card-metrics">
                     <span class="metric-badge {{ 'added' if entry.added > 0 }}" title="Added">{{ entry.added }}</span>
+                    {% if entry.queued > 0 %}
+                    <span class="metric-badge queued" title="Queued">{{ entry.queued }}</span>
+                    {% endif %}
                     <span class="metric-badge {{ 'skipped' if entry.skipped > 0 }}" title="Skipped">{{ entry.skipped }}</span>
                     <span class="metric-badge {{ 'failed' if entry.failed > 0 }}" title="Failed">{{ entry.failed }}</span>
                 </div>
@@ -114,7 +119,7 @@
 </div>
 
 <div class="history-pagination">
-    <p class="library-count">
+    <p class="pagination-meta">
         Showing page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
         ({{ total_runs }} total sync{{ "s" if total_runs != 1 }})
     </p>

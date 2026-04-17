@@ -32,10 +32,32 @@ class TestGetExistingTvdbIds:
             {"id": {"tvdb": 456}},
             {"id": {}},  # missing tvdb
         ]
-        with patch.object(client, "_request", return_value=_mock_response(series)):
+        with patch.object(client, "_request", return_value=_mock_response(series)) as mock_req:
             ids = client.get_existing_tvdb_ids()
 
         assert ids == {123, 456}
+        mock_req.assert_called_once_with(
+            "GET", "/series", params={"limit": 1000, "page": 1}
+        )
+
+    def test_fetches_multiple_pages_when_library_exceeds_page_size(self, client):
+        batch1 = [{"id": {"tvdb": i}} for i in range(1, 1001)]
+        batch2 = [{"id": {"tvdb": i}} for i in range(1001, 1051)]
+        with patch.object(
+            client,
+            "_request",
+            side_effect=[_mock_response(batch1), _mock_response(batch2)],
+        ) as mock_req:
+            ids = client.get_existing_tvdb_ids()
+
+        assert len(ids) == 1050
+        assert mock_req.call_count == 2
+        assert mock_req.call_args_list[0] == call(
+            "GET", "/series", params={"limit": 1000, "page": 1}
+        )
+        assert mock_req.call_args_list[1] == call(
+            "GET", "/series", params={"limit": 1000, "page": 2}
+        )
 
     def test_returns_empty_set_for_empty_library(self, client):
         with patch.object(client, "_request", return_value=_mock_response([])):

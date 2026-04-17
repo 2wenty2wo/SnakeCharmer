@@ -115,8 +115,8 @@ class TestDashboard:
     def test_dashboard_shows_config_summary(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        assert "testuser" in response.text
         assert "trending" in response.text
+        assert "source-overview-card" in response.text
 
     def test_dashboard_renders_added_show_titles_instead_of_dict_repr(self, tmp_path):
         config = _make_config()
@@ -141,7 +141,7 @@ class TestDashboard:
         assert "Example Show" in response.text
         assert "{&#39;title&#39;" not in response.text
 
-    def test_dashboard_stats_partial_keeps_poller_and_timer_guard(self, tmp_path):
+    def test_dashboard_stats_partial_keeps_poller(self, tmp_path):
         config = _make_config(sync=SyncConfig(interval=300))
         config_path = str(tmp_path / "config.yaml")
         save_app_config(config, config_path)
@@ -158,7 +158,6 @@ class TestDashboard:
         assert 'id="dashboard-stats-poller"' in response.text
         assert 'hx-get="/dashboard/stats"' in response.text
         assert 'hx-trigger="every 30s"' in response.text
-        assert "window.__dashboardNextSyncTimer" in response.text
 
     def test_dashboard_calculates_next_sync_and_pending_count(self, tmp_path):
         config = _make_config(sync=SyncConfig(interval=120))
@@ -177,28 +176,38 @@ class TestDashboard:
 
         response = client.get("/")
         assert response.status_code == 200
-        assert 'quick-action-badge">1<' in response.text
+        assert "Pending Approval" in response.text
+        assert "1 show" in response.text
         assert 'data-next-sync="' in response.text
 
-    def test_dashboard_stats_handles_invalid_last_sync_timestamp(self, tmp_path):
+    def test_dashboard_stats_handles_no_sync_data(self, tmp_path):
         config = _make_config(sync=SyncConfig(interval=120))
         client, _, _ = _create_client(tmp_path, config=config, with_sync=True)
 
-        class _BadSyncStatus:
+        class _EmptySyncStatus:
             def get_history(self, limit=5, offset=0):
                 return []
 
             def get_total_runs(self):
                 return 0
 
+            def get_totals(self):
+                return {
+                    "total_runs": 0,
+                    "total_added": 0,
+                    "total_queued": 0,
+                    "total_failed": 0,
+                    "success_rate": 0,
+                }
+
             def snapshot(self):
                 return {"last_sync": {"timestamp": "not-a-date"}}
 
-        client.app.state.sync_status = _BadSyncStatus()
+        client.app.state.sync_status = _EmptySyncStatus()
 
         response = client.get("/dashboard/stats")
         assert response.status_code == 200
-        assert "Next Sync:" not in response.text
+        assert "Total Syncs" in response.text
 
     def test_dashboard_handles_invalid_last_sync_timestamp(self, tmp_path):
         config = _make_config(sync=SyncConfig(interval=120))
@@ -210,6 +219,15 @@ class TestDashboard:
 
             def get_total_runs(self):
                 return 0
+
+            def get_totals(self):
+                return {
+                    "total_runs": 0,
+                    "total_added": 0,
+                    "total_queued": 0,
+                    "total_failed": 0,
+                    "success_rate": 0,
+                }
 
             def snapshot(self):
                 return {
@@ -230,6 +248,86 @@ class TestDashboard:
         response = client.get("/")
         assert response.status_code == 200
         assert "next-sync-timestamp" not in response.text
+
+    def test_dashboard_shows_dry_run_banner(self, tmp_path):
+        config = _make_config(sync=SyncConfig(dry_run=True))
+        client, _, _ = _create_client(tmp_path, config=config)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Dry Run Mode Active" in response.text
+
+    def test_dashboard_hides_dry_run_banner_when_off(self, tmp_path):
+        config = _make_config(sync=SyncConfig(dry_run=False))
+        client, _, _ = _create_client(tmp_path, config=config)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Dry Run Mode Active" not in response.text
+
+    def test_dashboard_shows_config_status_row(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "config-status-badge" in response.text
+        assert "Trakt" in response.text
+        assert "Medusa" in response.text
+        assert "Notify" in response.text
+
+    def test_dashboard_shows_sources_overview(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "source-overview-card" in response.text
+        assert "trending" in response.text
+
+    def test_dashboard_shows_all_time_stats(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(SyncResult(added=5, success=True))
+        sync_status.update(SyncResult(added=3, success=True))
+        app = create_app(holder, sync_status=sync_status)
+        client = _wrap_client_with_csrf(TestClient(app))
+
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Shows Added" in response.text
+        assert "Total Syncs" in response.text
+        assert "Success Rate" in response.text
+        assert "In Library" in response.text
+
+    def test_dashboard_no_quick_actions_section(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Quick Actions" not in response.text
+
+    def test_dashboard_no_config_cards(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Edit Configuration" not in response.text
+        assert "Edit Settings" not in response.text
+        assert "Edit Notifications" not in response.text
+
+    def test_dashboard_status_partial_includes_next_sync(self, tmp_path):
+        config = _make_config(sync=SyncConfig(interval=300))
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(SyncResult(success=True, duration_seconds=2.5))
+        app = create_app(holder, sync_status=sync_status)
+        client = _wrap_client_with_csrf(TestClient(app))
+
+        response = client.get("/dashboard/status")
+        assert response.status_code == 200
+        assert "data-next-sync" in response.text
 
 
 class TestTraktConfig:
@@ -914,8 +1012,8 @@ class TestDashboardStatus:
         client, _, _ = _create_client(tmp_path, with_sync=True)
         response = client.get("/dashboard/status")
         assert response.status_code == 200
-        assert "Status" in response.text
-        assert "unknown" in response.text
+        assert "status-unknown" in response.text
+        assert "Unknown" in response.text
 
     def test_dashboard_status_with_sync_result(self, tmp_path):
         config = _make_config()
@@ -932,7 +1030,7 @@ class TestDashboardStatus:
 
         response = client.get("/dashboard/status")
         assert response.status_code == 200
-        assert "Last Sync" in response.text
+        assert "status-ok" in response.text
         assert "3" in response.text  # added count
 
 
@@ -2753,16 +2851,16 @@ class TestDesignSystemCompliance:
 
         assert response.status_code == 200
         assert "btn-primary" in response.text
-        assert "quick-action-card" in response.text
+        assert "config-status-badge" in response.text
 
     def test_cards_have_hover_classes(self, tmp_path):
-        """Verify cards have interactive class for hover effects."""
+        """Verify cards have hover-capable classes."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
 
         assert response.status_code == 200
-        assert "card" in response.text
-        assert "interactive" in response.text
+        assert "source-overview-card" in response.text
+        assert "stat-hero" in response.text
 
     def test_empty_states_use_lucide_icons(self, tmp_path):
         """Verify empty states use Lucide icons, not emoji."""

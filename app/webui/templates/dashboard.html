@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - SnakeCharmer{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Dashboard</h1>
-    <p class="page-description">Overview of your SnakeCharmer configuration and sync status.</p>
+<div class="page-header dashboard-header">
+    <div class="dashboard-header-text">
+        <h1>Dashboard</h1>
+        <p class="page-description">Overview of your SnakeCharmer configuration and sync status.</p>
+    </div>
     <div class="page-actions">
         <button type="button" class="btn-primary btn-sync"
                 hx-post="/sync/run"
@@ -15,8 +17,8 @@
             <i data-lucide="refresh-cw" style="width:18px;height:18px"></i>
             Sync Now
         </button>
-        <a href="/sync/history" class="btn-secondary" title="View sync history">
-            <i data-lucide="history" style="width:18px;height:18px"></i>
+        <a href="/sync/history" class="btn-ghost" title="View sync history">
+            <i data-lucide="history" style="width:16px;height:16px"></i>
             History
         </a>
         <span id="dashboard-sync-indicator" class="sync-indicator sync-indicator-inline htmx-indicator" aria-live="polite">
@@ -41,263 +43,88 @@
 </div>
 {% endif %}
 
-<!-- Stats Overview Row -->
+{% if config.sync.dry_run %}
+<div class="banner dry-run-banner" role="status">
+    <i data-lucide="flask-conical" style="width:18px;height:18px;flex-shrink:0"></i>
+    <div>
+        <strong>Dry Run Mode Active</strong>
+        <p>No changes will be made to Medusa. Syncs will simulate only.</p>
+    </div>
+</div>
+{% endif %}
+
+<!-- Hero Grid -->
 {% if not config_errors %}
-<div id="dashboard-stats-poller">
+<div class="dashboard-hero-grid">
+    <div class="card status-card" id="live-status"
+         hx-get="/dashboard/status"
+         hx-trigger="every 10s"
+         hx-swap="innerHTML"
+         hx-select="#live-status-content">
+        {% include "dashboard_status.html" %}
+    </div>
     {% include "dashboard_stats.html" %}
 </div>
 {% endif %}
 
-<!-- Live Status Section -->
-<div id="live-status" class="status-section"
-     hx-get="/dashboard/status"
-     hx-trigger="every 10s"
-     hx-swap="innerHTML"
-     hx-select="#live-status-content">
-    {% include "dashboard_status.html" %}
+<!-- Sources -->
+<div class="dashboard-section">
+    <span class="dashboard-section-label">Sources</span>
+    {% include "dashboard_sources.html" %}
 </div>
 
 <!-- Recent Activity -->
 {% if stats.recent_runs %}
-<h2 class="section-title">
-    <i data-lucide="history" style="width:18px;height:18px"></i>
-    Recent Activity
-</h2>
-<div class="recent-activity">
-    {% for run in stats.recent_runs %}
-    <div class="activity-card{% if run.failed > 0 %} activity-card--warning{% endif %}">
-        <div class="activity-time">
-            <span class="activity-timestamp">{{ run.timestamp | format_timestamp }}</span>
-            <span class="activity-duration">{{ "%.1f" | format(run.duration_seconds) }}s</span>
-        </div>
-        <div class="activity-metrics">
-            <div class="activity-metric activity-metric--added" title="Added">
-                <i data-lucide="plus" style="width:14px;height:14px"></i>
-                <span>{{ run.added }}</span>
+<div class="dashboard-section">
+    <span class="dashboard-section-label">Recent Activity</span>
+    <div class="activity-timeline">
+        {% for run in stats.recent_runs %}
+        <div class="activity-timeline-item{% if run.failed > 0 %} activity-timeline-item--warning{% endif %}">
+            <div class="activity-timeline-main">
+                <div class="activity-timeline-meta">
+                    <span class="activity-timeline-time">{{ run.timestamp | format_timestamp }}</span>
+                    <span class="activity-timeline-duration">{{ "%.1f" | format(run.duration_seconds) }}s</span>
+                </div>
+                <div class="activity-timeline-metrics">
+                    <span class="activity-metric activity-metric--added" title="Added">
+                        <i data-lucide="plus" style="width:12px;height:12px"></i>
+                        {{ run.added }}
+                    </span>
+                    {% if run.queued > 0 %}
+                    <span class="activity-metric activity-metric--queued" title="Queued for approval">
+                        <i data-lucide="pause" style="width:12px;height:12px"></i>
+                        {{ run.queued }}
+                    </span>
+                    {% endif %}
+                    <span class="activity-metric activity-metric--skipped" title="Skipped">
+                        <i data-lucide="skip-forward" style="width:12px;height:12px"></i>
+                        {{ run.skipped }}
+                    </span>
+                    {% if run.failed > 0 %}
+                    <span class="activity-metric activity-metric--failed" title="Failed">
+                        <i data-lucide="x" style="width:12px;height:12px"></i>
+                        {{ run.failed }}
+                    </span>
+                    {% endif %}
+                </div>
             </div>
-            {% if run.queued > 0 %}
-            <div class="activity-metric activity-metric--queued" title="Queued for approval">
-                <i data-lucide="pause" style="width:14px;height:14px"></i>
-                <span>{{ run.queued }}</span>
-            </div>
-            {% endif %}
-            <div class="activity-metric activity-metric--skipped" title="Skipped">
-                <i data-lucide="skip-forward" style="width:14px;height:14px"></i>
-                <span>{{ run.skipped }}</span>
-            </div>
-            {% if run.failed > 0 %}
-            <div class="activity-metric activity-metric--failed" title="Failed">
-                <i data-lucide="x" style="width:14px;height:14px"></i>
-                <span>{{ run.failed }}</span>
-            </div>
-            {% endif %}
-        </div>
-        {% if run.added_shows %}
-        <div class="activity-shows">
-            {% for show in run.added_shows[:3] %}
-            <span class="activity-show">
-                {% if show is mapping %}
-                    {{ show.title or show["title"] }}
-                {% else %}
-                    {{ show }}
-                {% endif %}
-            </span>
-            {% endfor %}
-            {% if run.added_shows | length > 3 %}
-            <span class="activity-show activity-show--more">+{{ run.added_shows | length - 3 }} more</span>
-            {% endif %}
-        </div>
-        {% endif %}
-    </div>
-    {% endfor %}
-    <a href="/sync/history" class="activity-view-all">
-        <span>View All History</span>
-        <i data-lucide="arrow-right" style="width:16px;height:16px"></i>
-    </a>
-</div>
-{% endif %}
-
-<!-- Config Cards -->
-<h2 class="section-title">
-    <i data-lucide="settings-2" style="width:18px;height:18px"></i>
-    Configuration
-</h2>
-<div class="card-grid config-cards layout-2col">
-    <div class="card interactive">
-        <div class="card-header">
-            <i data-lucide="film" class="card-icon" aria-hidden="true"></i>
-            Trakt
-        </div>
-        <div class="info-row">
-            <span class="info-label">Username</span>
-            <span class="info-value">{{ config.trakt.username or "Not set" }}</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Sources</span>
-            <span class="info-value">{{ config.trakt.sources | length }} configured</span>
-        </div>
-        {% if config.trakt.sources %}
-        <div class="card-section">
-            <div class="section-label">Source Types</div>
-            <ul class="source-list" aria-label="Trakt sources">
-                {% for source in config.trakt.sources %}
-                <li>{{ source.type }}{% if source.type == 'user_list' %} ({{ source.owner }}){% endif %}</li>
+            {% if run.added_shows %}
+            <div class="activity-timeline-shows">
+                {% for show in run.added_shows %}
+                <span class="activity-show">
+                    {% if show is mapping %}
+                        {{ show.title or show["title"] }}
+                    {% else %}
+                        {{ show }}
+                    {% endif %}
+                </span>
                 {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-        <div class="card-footer">
-            <a href="/config/trakt" class="btn-outline">Edit Configuration</a>
-        </div>
-    </div>
-
-    <div class="card interactive">
-        <div class="card-header">
-            <i data-lucide="server" class="card-icon" aria-hidden="true"></i>
-            Medusa
-        </div>
-        <div class="info-row">
-            <span class="info-label">URL</span>
-            <span class="info-value" style="font-size:12px">{{ config.medusa.url or "Not set" }}</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">API Key</span>
-            <span class="info-value">
-                {% if config.medusa.api_key %}
-                <span class="mono-compact-text">***{{ config.medusa.api_key[-4:] }}</span>
-                {% else %}
-                Not set
-                {% endif %}
-            </span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Status</span>
-            <span class="info-value">
-                {% if config.medusa.url and config.medusa.api_key %}
-                <span class="config-badge">Configured</span>
-                {% else %}
-                <span class="config-badge off">Not Configured</span>
-                {% endif %}
-            </span>
-        </div>
-        <div class="card-footer">
-            <a href="/config/medusa" class="btn-outline">Edit Configuration</a>
-        </div>
-    </div>
-
-    <div class="card interactive">
-        <div class="card-header">
-            <i data-lucide="refresh-cw" class="card-icon" aria-hidden="true"></i>
-            Sync Settings
-        </div>
-        <div class="info-row">
-            <span class="info-label">Dry Run</span>
-            <span class="info-value">
-                <span class="config-badge{{ '' if config.sync.dry_run else ' off' }}">{{ "On" if config.sync.dry_run else "Off" }}</span>
-            </span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Interval</span>
-            <span class="info-value">
-                {% if config.sync.interval == 0 %}
-                Run once
-                {% else %}
-                {{ config.sync.interval // 3600 }}h {{ (config.sync.interval % 3600) // 60 }}m
-                {% endif %}
-            </span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Log Format</span>
-            <span class="info-value" style="text-transform:uppercase;font-size:12px">{{ config.sync.log_format }}</span>
-        </div>
-        <div class="card-footer">
-            <a href="/config/sync" class="btn-outline">Edit Settings</a>
-        </div>
-    </div>
-
-    <div class="card interactive">
-        <div class="card-header">
-            <i data-lucide="bell" class="card-icon" aria-hidden="true"></i>
-            Notifications
-        </div>
-        <div class="info-row">
-            <span class="info-label">Enabled</span>
-            <span class="info-value">
-                <span class="config-badge{{ '' if config.notify.enabled else ' off' }}">{{ "On" if config.notify.enabled else "Off" }}</span>
-            </span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Services</span>
-            <span class="info-value">{{ config.notify.urls | length }} configured</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">On Success</span>
-            <span class="info-value">
-                <span class="config-badge{{ '' if config.notify.on_success else ' off' }}">{{ "Yes" if config.notify.on_success else "No" }}</span>
-            </span>
-        </div>
-        <div class="card-footer">
-            <a href="/config/notify" class="btn-outline">Edit Notifications</a>
-        </div>
-    </div>
-</div>
-
-<!-- Quick Actions -->
-<h2 class="section-title">
-    <i data-lucide="zap" style="width:18px;height:18px"></i>
-    Quick Actions
-</h2>
-<div class="quick-actions-grid layout-2col">
-    <a href="/pending" class="quick-action-card{% if stats.pending_count > 0 %} quick-action-card--alert{% endif %}">
-        <div class="quick-action-icon">
-            <i data-lucide="inbox" style="width:20px;height:20px"></i>
-            {% if stats.pending_count > 0 %}
-            <span class="quick-action-badge">{{ stats.pending_count }}</span>
+            </div>
             {% endif %}
         </div>
-        <span class="quick-action-label">Review Pending</span>
-    </a>
-    <a href="/sync/history" class="quick-action-card">
-        <div class="quick-action-icon">
-            <i data-lucide="history" style="width:20px;height:20px"></i>
-        </div>
-        <span class="quick-action-label">Sync History</span>
-    </a>
+        {% endfor %}
+    </div>
 </div>
-
-{% if next_sync %}
-<script>
-(function() {
-    // Countdown timer for next sync
-    function updateCountdown() {
-        const el = document.querySelector('[data-next-sync]');
-        if (!el) return;
-        
-        const nextSync = new Date(el.dataset.nextSync);
-        const now = new Date();
-        const diff = nextSync - now;
-        
-        if (diff <= 0) {
-            el.textContent = 'Due';
-            return;
-        }
-        
-        const hours = Math.floor(diff / 3600000);
-        const minutes = Math.floor((diff % 3600000) / 60000);
-        
-        if (hours > 0) {
-            el.textContent = hours + 'h ' + minutes + 'm';
-        } else {
-            el.textContent = minutes + 'm';
-        }
-    }
-    
-    updateCountdown();
-    if (window.__dashboardNextSyncTimer) {
-        clearInterval(window.__dashboardNextSyncTimer);
-    }
-    window.__dashboardNextSyncTimer = setInterval(updateCountdown, 60000); // Update every minute
-})();
-</script>
 {% endif %}
+
 {% endblock %}
