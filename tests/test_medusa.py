@@ -470,6 +470,36 @@ class TestRetry:
         assert mock_sleep.call_args_list == [call(3.0), call(9.0)]
 
 
+class TestOnConnectionExhausted:
+    def test_logs_cannot_reach_medusa(self, client, medusa_config):
+        exc = requests.ConnectionError("refused")
+        with patch("app.medusa.log") as mock_log:
+            client._on_connection_exhausted(exc)
+        mock_log.error.assert_called_once()
+        call_args = mock_log.error.call_args[0]
+        assert medusa_config.url in call_args
+
+
+class TestFetchAllSeriesMaxPages:
+    def test_logs_warning_when_max_pages_exceeded(self, client):
+        """When all pages are full and the page limit is hit, log a warning."""
+        from app.medusa import _MEDUSA_SERIES_PAGE_LIMIT
+
+        full_batch = [{"id": {"tvdb": i}} for i in range(_MEDUSA_SERIES_PAGE_LIMIT)]
+
+        with (
+            patch("app.medusa._MEDUSA_SERIES_MAX_PAGES", 2),
+            patch.object(client, "_request", return_value=_mock_response(full_batch)),
+            patch("app.medusa.log") as mock_log,
+        ):
+            result = client._fetch_all_series()
+
+        mock_log.warning.assert_called_once()
+        assert "incomplete" in mock_log.warning.call_args[0][0]
+        # 2 pages * page_limit items each
+        assert len(result) == 2 * _MEDUSA_SERIES_PAGE_LIMIT
+
+
 class TestResolveQualityEdgeCases:
     def test_preset_combined_with_individual(self):
         """Combining a preset (hd) with an individual value (sddvd) merges bitmasks."""
