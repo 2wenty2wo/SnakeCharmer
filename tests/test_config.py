@@ -1145,3 +1145,39 @@ class TestValidateShowFilters:
             "trakt.sources[].filters.blacklisted_min_year must not exceed blacklisted_max_year"
             not in errors
         )
+
+    def test_invalid_max_year_with_valid_min_year_does_not_raise(self):
+        # Exercises both the validation error append (lines 418-419) and the second-pass
+        # int() fallback that sets max_year to None (lines 433-434) when conversion fails.
+        filters = _parse_show_filters({"blacklisted_min_year": 2010, "blacklisted_max_year": "xyz"})
+        errors: list[str] = []
+
+        _validate_show_filters(filters, errors)
+
+        assert "trakt.sources[].filters.blacklisted_max_year must be an integer" in errors
+        # Range comparison is skipped when max_year cannot be parsed.
+        assert (
+            "trakt.sources[].filters.blacklisted_min_year must not exceed blacklisted_max_year"
+            not in errors
+        )
+
+
+class TestParseShowFiltersNonDict:
+    """Cover the early-return branch when raw_filters is not a dict."""
+
+    def test_none_returns_default_show_filters(self):
+        # Hits the `return ShowFilters()` branch at the top of _parse_show_filters.
+        filters = _parse_show_filters(None)
+        assert filters.blacklisted_genres == []
+        assert filters.blacklisted_min_year is None
+        assert filters.blacklisted_max_year is None
+
+    def test_list_returns_default_show_filters(self):
+        filters = _parse_show_filters(["not", "a", "dict"])
+        assert filters.blacklisted_genres == []
+        assert filters.blacklisted_tvdb_ids == []
+
+    def test_string_returns_default_show_filters(self):
+        filters = _parse_show_filters("invalid")
+        assert filters.blacklisted_networks == []
+        assert filters.allowed_countries == []
