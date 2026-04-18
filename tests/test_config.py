@@ -356,7 +356,13 @@ class TestLoadConfig:
             "trakt": {
                 "client_id": "id",
                 "sources": [
-                    {"type": "trending", "filters": {"blacklisted_min_year": 2020, "blacklisted_max_year": 2010}}
+                    {
+                        "type": "trending",
+                        "filters": {
+                            "blacklisted_min_year": 2020,
+                            "blacklisted_max_year": 2010,
+                        },
+                    }
                 ],
             },
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},

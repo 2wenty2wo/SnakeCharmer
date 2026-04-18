@@ -611,7 +611,9 @@ class TestDeduplicationWithManySources:
         mock_medusa.add_show.assert_called_once_with(2, "Drama Show", add_options=None)
         assert any(a["reason"] == "filtered_by_genre" for a in result.show_actions)
 
-    def test_filtered_show_can_still_come_from_another_source(self, config, mock_trakt, mock_medusa):
+    def test_filtered_show_can_still_come_from_another_source(
+        self, config, mock_trakt, mock_medusa
+    ):
         """A show filtered from source A should still be added if source B accepts it."""
         from app.models import ShowFilters, TraktSource
 

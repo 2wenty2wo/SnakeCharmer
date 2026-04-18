@@ -13,8 +13,9 @@ import queue
 import threading
 import time
 from collections import deque
+from collections.abc import Callable, Iterable
+from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import Callable, Iterable
 
 log = logging.getLogger(__name__)
 
@@ -114,16 +115,11 @@ class SyncEventBroker:
             self._subscribers.append(q)
 
         def _unsubscribe() -> None:
-            with self._lock:
-                try:
-                    self._subscribers.remove(q)
-                except ValueError:
-                    pass
+            with self._lock, suppress(ValueError):
+                self._subscribers.remove(q)
             # Wake up any blocking reader so it can exit cleanly.
-            try:
+            with suppress(queue.Full):
                 q.put_nowait(None)
-            except queue.Full:
-                pass
 
         return q, _unsubscribe
 

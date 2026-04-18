@@ -1,8 +1,8 @@
 import json
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from app.config import AppConfig
 from app.filters import apply_filters
@@ -219,16 +219,22 @@ def run_sync(
             selected_source_label = selected_source.label if selected_source else "unknown"
             option_keys = sorted(selected_options.keys()) if selected_options else []
 
-            def _emit_show(action: str, reason: str | None = None) -> None:
+            def _emit_show(
+                action: str,
+                current: int = offset,
+                current_show=show,
+                source_label: str = selected_source_label,
+                reason: str | None = None,
+            ) -> None:
                 emit(
                     EVT_SHOW,
                     {
-                        "progress": {"current": offset, "total": total_missing},
-                        "tvdb_id": show.tvdb_id,
-                        "title": show.title,
-                        "year": show.year,
+                        "progress": {"current": current, "total": total_missing},
+                        "tvdb_id": current_show.tvdb_id,
+                        "title": current_show.title,
+                        "year": current_show.year,
                         "action": action,
-                        "source_label": selected_source_label,
+                        "source_label": source_label,
                         "dry_run": config.sync.dry_run,
                         "reason": reason,
                     },
