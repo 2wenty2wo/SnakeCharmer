@@ -107,9 +107,7 @@ class SyncManager:
                 "started_at": started_at,
                 "trigger": trigger,
                 "dry_run": config.sync.dry_run,
-                "sources": [
-                    {"name": s.label, "type": s.type} for s in config.trakt.sources
-                ],
+                "sources": [{"name": s.label, "type": s.type} for s in config.trakt.sources],
             },
         )
         emitter = make_emitter(broker)

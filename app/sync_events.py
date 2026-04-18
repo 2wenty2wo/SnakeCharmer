@@ -135,6 +135,7 @@ EventEmitter = Callable[[str, dict], None]
 def make_emitter(broker: SyncEventBroker | None) -> EventEmitter:
     """Return a best-effort emitter that never raises into sync code."""
     if broker is None:
+
         def _noop(_type: str, _data: dict) -> None:
             return None
 

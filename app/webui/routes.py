@@ -504,9 +504,7 @@ async def sync_events(request: Request):
     """Stream live sync progress events via Server-Sent Events."""
     sync_manager = _sync_manager(request)
     if sync_manager is None:
-        return JSONResponse(
-            {"error": "Sync manager not available"}, status_code=503
-        )
+        return JSONResponse({"error": "Sync manager not available"}, status_code=503)
 
     broker = sync_manager.broker
 
@@ -560,9 +558,7 @@ async def sync_events(request: Request):
         "X-Accel-Buffering": "no",
         "Connection": "keep-alive",
     }
-    return StreamingResponse(
-        event_stream(), media_type="text/event-stream", headers=headers
-    )
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=headers)
 
 
 # --- Sync History ---

@@ -36,9 +36,7 @@ class TestGetExistingTvdbIds:
             ids = client.get_existing_tvdb_ids()
 
         assert ids == {123, 456}
-        mock_req.assert_called_once_with(
-            "GET", "/series", params={"limit": 1000, "page": 1}
-        )
+        mock_req.assert_called_once_with("GET", "/series", params={"limit": 1000, "page": 1})
 
     def test_fetches_multiple_pages_when_library_exceeds_page_size(self, client):
         batch1 = [{"id": {"tvdb": i}} for i in range(1, 1001)]

@@ -169,9 +169,7 @@ class SyncHistoryDB:
                 "total_added": row[1],
                 "total_queued": row[2],
                 "total_failed": row[3],
-                "success_rate": (
-                    int((row[4] / total_runs) * 100) if total_runs > 0 else 0
-                ),
+                "success_rate": (int((row[4] / total_runs) * 100) if total_runs > 0 else 0),
             }
 
     def close(self) -> None:

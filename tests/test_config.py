@@ -310,9 +310,7 @@ class TestLoadConfig:
         data = {
             "trakt": {
                 "client_id": "id",
-                "sources": [
-                    {"type": "trending", "filters": {"blacklisted_genres": "reality"}}
-                ],
+                "sources": [{"type": "trending", "filters": {"blacklisted_genres": "reality"}}],
             },
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
         }
@@ -341,9 +339,7 @@ class TestLoadConfig:
         data = {
             "trakt": {
                 "client_id": "id",
-                "sources": [
-                    {"type": "trending", "filters": {"blacklisted_min_year": "bad"}}
-                ],
+                "sources": [{"type": "trending", "filters": {"blacklisted_min_year": "bad"}}],
             },
             "medusa": {"url": "http://localhost:8081", "api_key": "key"},
         }

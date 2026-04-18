@@ -116,9 +116,7 @@ class SyncStatus:
             total_queued = sum(e.get("queued", 0) for e in self._history)
             total_failed = sum(e.get("failed", 0) for e in self._history)
             successful = sum(
-                1
-                for e in self._history
-                if e.get("failed", 0) == 0 and e.get("success", True)
+                1 for e in self._history if e.get("failed", 0) == 0 and e.get("success", True)
             )
             return {
                 "total_runs": total_runs,

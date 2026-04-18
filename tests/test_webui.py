@@ -2133,14 +2133,8 @@ class TestRouteHelpers:
         }
         with pytest.raises(ConfigError) as exc:
             webui_routes._parse_sources_from_form(form)
-        assert (
-            "Source #1: blacklisted_min_year must be a valid integer."
-            in exc.value.errors
-        )
-        assert (
-            "Source #1: blacklisted_max_year must be a valid integer."
-            in exc.value.errors
-        )
+        assert "Source #1: blacklisted_min_year must be a valid integer." in exc.value.errors
+        assert "Source #1: blacklisted_max_year must be a valid integer." in exc.value.errors
 
 
 class TestSyncStatusHistory:
