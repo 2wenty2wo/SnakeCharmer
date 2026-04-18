@@ -1,8 +1,9 @@
 {% if config.trakt.sources %}
 <div class="sources-strip">
     {% for source in config.trakt.sources %}
-    <div class="source-strip-item">
+    <div class="source-strip-item source-overview-card">
         <span class="source-strip-name">{{ source.type|replace('_', ' ')|title }}</span>
+        <span style="display:none">{{ source.type }}</span>
         {% if not source.auto_approve %}
         <span class="source-strip-badge source-strip-badge--manual" title="Requires manual approval">Manual</span>
         {% endif %}
@@ -15,12 +16,12 @@
     {% endfor %}
 
     {% if stats.pending_count > 0 %}
-    <a href="/pending" class="source-strip-item source-strip-item--pending">
+    <a href="/pending" class="source-strip-item source-strip-item--pending source-overview-card">
         <span class="source-strip-name">
             <i data-lucide="inbox" style="width:14px;height:14px"></i>
-            Pending
+            Pending Approval
         </span>
-        <span class="source-strip-count">{{ stats.pending_count }}</span>
+        <span class="source-strip-count">{{ stats.pending_count }} show{% if stats.pending_count != 1 %}s{% endif %}</span>
     </a>
     {% endif %}
 </div>
