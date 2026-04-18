@@ -1,6 +1,7 @@
 import json
 import threading
 import time
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -3142,10 +3143,9 @@ class TestFormatSseEvent:
         assert "he said" in result
 
     def test_non_serializable_falls_back_to_str(self):
-        import datetime
         from app.sync_events import SyncEvent
 
-        dt = datetime.datetime(2024, 1, 1)
+        dt = datetime(2024, 1, 1)
         event = SyncEvent(id=2, type="sync.log", data={"ts": dt}, ts=0.0)
         result = webui_routes._format_sse_event(event)
         assert "2024-01-01" in result
@@ -3308,7 +3308,6 @@ class TestSyncEventsSSE:
         client, _, _ = _create_client(tmp_path, with_sync=True)
 
         captured: list[int] = []
-        original_subscribe = client.app.state.sync_manager.broker.subscribe
 
         def _capturing_subscribe(maxsize=1000, after_id=0):
             captured.append(after_id)

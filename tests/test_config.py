@@ -19,6 +19,7 @@ from app.config import (
     _safe_int_non_negative,
     _safe_int_port,
     _to_bool,
+    _validate_show_filters,
     get_config_errors,
     get_section_errors,
     load_config,
@@ -1074,7 +1075,10 @@ class TestLoadConfigErrorPaths:
         bad_yaml = tmp_path / "config.yaml"
         bad_yaml.write_text("key: [\nunclosed bracket")
 
-        monkeypatch.setattr("app.config.sys.exit", lambda code: (_ for _ in ()).throw(SystemExit(code)))
+        def exit_raiser(code):
+            raise SystemExit(code)
+
+        monkeypatch.setattr("app.config.sys.exit", exit_raiser)
 
         with pytest.raises(SystemExit) as exc_info:
             load_config(str(bad_yaml), skip_validate=True)
@@ -1084,7 +1088,10 @@ class TestLoadConfigErrorPaths:
         list_yaml = tmp_path / "config.yaml"
         list_yaml.write_text("- item1\n- item2\n")
 
-        monkeypatch.setattr("app.config.sys.exit", lambda code: (_ for _ in ()).throw(SystemExit(code)))
+        def exit_raiser(code):
+            raise SystemExit(code)
+
+        monkeypatch.setattr("app.config.sys.exit", exit_raiser)
 
         with pytest.raises(SystemExit) as exc_info:
             load_config(str(list_yaml), skip_validate=True)
@@ -1124,3 +1131,17 @@ class TestParseShowFiltersIntOrNone:
         # bool is a subclass of int but excluded by `not isinstance(value, bool)`.
         filters = _parse_show_filters({"blacklisted_min_year": True})
         assert filters.blacklisted_min_year is True
+
+
+class TestValidateShowFilters:
+    def test_invalid_min_year_with_valid_max_year_does_not_raise(self):
+        filters = _parse_show_filters({"blacklisted_min_year": "abc", "blacklisted_max_year": 2010})
+        errors: list[str] = []
+
+        _validate_show_filters(filters, errors)
+
+        assert "trakt.sources[].filters.blacklisted_min_year must be an integer" in errors
+        assert (
+            "trakt.sources[].filters.blacklisted_min_year must not exceed blacklisted_max_year"
+            not in errors
+        )

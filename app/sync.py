@@ -254,7 +254,7 @@ def run_sync(
                 )
                 result.skipped += 1
                 _track_action(result, show, selected_source_label, "skipped", "no_pending_queue")
-                _emit_show("skipped", "no_pending_queue")
+                _emit_show("skipped", reason="no_pending_queue")
                 continue
 
             # Check if this show should go to pending queue
@@ -271,7 +271,7 @@ def run_sync(
                     _track_action(
                         result, show, selected_source_label, "failed", "pending_queue_error"
                     )
-                    _emit_show("failed", "pending_queue_error")
+                    _emit_show("failed", reason="pending_queue_error")
                     result.failed += 1
                     result.success = False
                     result.duration_seconds = _elapsed_seconds(start_time_ns)
@@ -281,7 +281,7 @@ def run_sync(
                     log.debug("Already in pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
                     result.skipped += 1
                     _track_action(result, show, selected_source_label, "skipped", "already_pending")
-                    _emit_show("skipped", "already_pending")
+                    _emit_show("skipped", reason="already_pending")
                     continue
 
                 # Add to pending queue
@@ -323,7 +323,7 @@ def run_sync(
                     _track_action(
                         result, show, selected_source_label, "failed", "pending_queue_error"
                     )
-                    _emit_show("failed", "pending_queue_error")
+                    _emit_show("failed", reason="pending_queue_error")
                     result.failed += 1
                     result.success = False
                     result.duration_seconds = _elapsed_seconds(start_time_ns)
@@ -342,7 +342,7 @@ def run_sync(
                 else:
                     result.skipped += 1
                     _track_action(result, show, selected_source_label, "skipped", "already_pending")
-                    _emit_show("skipped", "already_pending")
+                    _emit_show("skipped", reason="already_pending")
                 continue
 
             # Auto-approve path: add directly to Medusa
@@ -399,12 +399,12 @@ def run_sync(
                     _track_action(
                         result, show, selected_source_label, "skipped", "medusa_returned_false"
                     )
-                    _emit_show("skipped", "medusa_returned_false")
+                    _emit_show("skipped", reason="medusa_returned_false")
             except Exception as e:
                 log.error("Failed to add '%s' (tvdb:%d): %s", show.title, show.tvdb_id, e)
                 result.failed += 1
                 _track_action(result, show, selected_source_label, "failed", str(e))
-                _emit_show("failed", str(e))
+                _emit_show("failed", reason=str(e))
 
         result.success = result.failed == 0
         result.duration_seconds = _elapsed_seconds(start_time_ns)

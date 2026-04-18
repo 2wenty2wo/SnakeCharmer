@@ -418,11 +418,22 @@ def _validate_show_filters(filters: ShowFilters, errors: list[str]) -> None:
         except (TypeError, ValueError):
             errors.append("trakt.sources[].filters.blacklisted_max_year must be an integer")
 
-    if (
-        filters.blacklisted_min_year is not None
-        and filters.blacklisted_max_year is not None
-        and int(filters.blacklisted_min_year) > int(filters.blacklisted_max_year)
-    ):
+    min_year: int | None = None
+    max_year: int | None = None
+
+    if filters.blacklisted_min_year is not None:
+        try:
+            min_year = int(filters.blacklisted_min_year)
+        except (TypeError, ValueError):
+            min_year = None
+
+    if filters.blacklisted_max_year is not None:
+        try:
+            max_year = int(filters.blacklisted_max_year)
+        except (TypeError, ValueError):
+            max_year = None
+
+    if min_year is not None and max_year is not None and min_year > max_year:
         errors.append(
             "trakt.sources[].filters.blacklisted_min_year must not exceed blacklisted_max_year"
         )
