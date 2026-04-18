@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=6">
+    <link rel="stylesheet" href="/static/style.css?v=7">
     <script src="https://unpkg.com/htmx.org@2.0.4" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
@@ -93,6 +93,86 @@
         </main>
     </div>
     
+    <!-- Live Sync Drawer -->
+    <div class="sync-drawer-backdrop" id="sync-drawer-backdrop" aria-hidden="true"></div>
+    <aside class="sync-drawer" id="sync-drawer" data-state="idle" role="dialog" aria-modal="false" aria-labelledby="sync-drawer-title" aria-hidden="true">
+        <header class="sync-drawer-header">
+            <p class="sync-drawer-eyebrow">
+                <span class="sync-drawer-eyebrow-dot" aria-hidden="true"></span>
+                <span id="sync-drawer-status-label">Idle</span>
+            </p>
+            <h2 class="sync-drawer-title" id="sync-drawer-title">Sync</h2>
+            <div class="sync-drawer-meta">
+                <span><i data-lucide="clock" style="width:12px;height:12px" aria-hidden="true"></i><strong id="sync-drawer-elapsed">0.0s</strong></span>
+                <span><i data-lucide="layers" style="width:12px;height:12px" aria-hidden="true"></i><strong id="sync-drawer-source-count">0</strong> sources</span>
+                <span id="sync-drawer-dry" class="sync-drawer-dry" hidden>
+                    <i data-lucide="flask-conical" style="width:11px;height:11px" aria-hidden="true"></i>
+                    Dry run
+                </span>
+            </div>
+            <button type="button" class="sync-drawer-close" id="sync-drawer-close" aria-label="Close sync drawer">
+                <i data-lucide="x" style="width:16px;height:16px" aria-hidden="true"></i>
+            </button>
+        </header>
+        <div class="sync-drawer-progress">
+            <div class="sync-drawer-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Sync progress">
+                <div class="sync-drawer-progress-fill" id="sync-drawer-progress-fill"></div>
+            </div>
+            <div class="sync-drawer-progress-label">
+                <span id="sync-drawer-phase">Waiting to start…</span>
+                <span><strong id="sync-drawer-percent">0%</strong></span>
+            </div>
+        </div>
+        <div class="sync-drawer-body">
+            <section class="sync-drawer-section" id="sync-drawer-summary-section" hidden>
+                <div class="sync-drawer-section-title">
+                    <span>Summary</span>
+                </div>
+                <div class="sync-drawer-summary">
+                    <div class="sync-drawer-stat" data-accent="added">
+                        <div class="sync-drawer-stat-value" id="sync-drawer-stat-added">0</div>
+                        <span class="sync-drawer-stat-label">Added</span>
+                    </div>
+                    <div class="sync-drawer-stat" data-accent="queued">
+                        <div class="sync-drawer-stat-value" id="sync-drawer-stat-queued">0</div>
+                        <span class="sync-drawer-stat-label">Queued</span>
+                    </div>
+                    <div class="sync-drawer-stat" data-accent="skipped">
+                        <div class="sync-drawer-stat-value" id="sync-drawer-stat-skipped">0</div>
+                        <span class="sync-drawer-stat-label">Skipped</span>
+                    </div>
+                    <div class="sync-drawer-stat" data-accent="failed">
+                        <div class="sync-drawer-stat-value" id="sync-drawer-stat-failed">0</div>
+                        <span class="sync-drawer-stat-label">Failed</span>
+                    </div>
+                </div>
+            </section>
+            <section class="sync-drawer-section">
+                <div class="sync-drawer-section-title">
+                    <span>Sources</span>
+                    <span class="count" id="sync-drawer-source-progress">0 / 0</span>
+                </div>
+                <div class="sync-drawer-sources" id="sync-drawer-sources"></div>
+            </section>
+            <section class="sync-drawer-section">
+                <div class="sync-drawer-section-title">
+                    <span>Activity</span>
+                    <span class="count" id="sync-drawer-activity-count">0</span>
+                </div>
+                <div class="sync-drawer-activity" id="sync-drawer-activity">
+                    <div class="sync-drawer-activity-empty">Activity will appear here once shows are processed.</div>
+                </div>
+            </section>
+        </div>
+        <footer class="sync-drawer-footer">
+            <a href="/sync/history" class="btn-ghost">
+                <i data-lucide="history" style="width:14px;height:14px" aria-hidden="true"></i>
+                History
+            </a>
+            <button type="button" class="btn-secondary" id="sync-drawer-dismiss">Close</button>
+        </footer>
+    </aside>
+
     <!-- Toast Container for notifications -->
     <div class="toast-container" id="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
     
@@ -392,6 +472,472 @@
             }
         }, 300);
     }
+
+    // === Live Sync Drawer ===
+    (function() {
+        var drawer = document.getElementById('sync-drawer');
+        if (!drawer) return;
+
+        var backdrop = document.getElementById('sync-drawer-backdrop');
+        var closeBtn = document.getElementById('sync-drawer-close');
+        var dismissBtn = document.getElementById('sync-drawer-dismiss');
+        var statusLabel = document.getElementById('sync-drawer-status-label');
+        var title = document.getElementById('sync-drawer-title');
+        var elapsedEl = document.getElementById('sync-drawer-elapsed');
+        var sourceCountEl = document.getElementById('sync-drawer-source-count');
+        var dryEl = document.getElementById('sync-drawer-dry');
+        var progressFill = document.getElementById('sync-drawer-progress-fill');
+        var progressTrack = progressFill.parentElement;
+        var phaseEl = document.getElementById('sync-drawer-phase');
+        var percentEl = document.getElementById('sync-drawer-percent');
+        var summarySection = document.getElementById('sync-drawer-summary-section');
+        var statAdded = document.getElementById('sync-drawer-stat-added');
+        var statQueued = document.getElementById('sync-drawer-stat-queued');
+        var statSkipped = document.getElementById('sync-drawer-stat-skipped');
+        var statFailed = document.getElementById('sync-drawer-stat-failed');
+        var sourcesEl = document.getElementById('sync-drawer-sources');
+        var sourceProgressEl = document.getElementById('sync-drawer-source-progress');
+        var activityEl = document.getElementById('sync-drawer-activity');
+        var activityCountEl = document.getElementById('sync-drawer-activity-count');
+
+        var state = {
+            source: null,
+            runId: 0,
+            startedAt: 0,
+            running: false,
+            sources: [],
+            activity: [],
+            counts: { added: 0, queued: 0, skipped: 0, failed: 0 },
+            totalMissing: 0,
+            processedMissing: 0,
+            phase: null,
+            tickerInterval: null,
+            lastEventId: 0
+        };
+
+        var PHASE_WEIGHTS = {
+            fetching: { base: 0, span: 40 },
+            comparing: { base: 40, span: 15 },
+            applying: { base: 55, span: 45 },
+            done: { base: 100, span: 0 }
+        };
+
+        var ACTION_ICONS = {
+            added: 'check-circle',
+            queued: 'pause',
+            skipped: 'skip-forward',
+            failed: 'x-circle'
+        };
+
+        function openDrawer() {
+            drawer.classList.add('is-open');
+            drawer.setAttribute('aria-hidden', 'false');
+            backdrop.classList.add('is-open');
+        }
+
+        function closeDrawer() {
+            drawer.classList.remove('is-open');
+            drawer.setAttribute('aria-hidden', 'true');
+            backdrop.classList.remove('is-open');
+        }
+
+        function setDrawerState(value) {
+            drawer.setAttribute('data-state', value);
+        }
+
+        function escapeHtml(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatElapsed(seconds) {
+            if (!isFinite(seconds) || seconds < 0) seconds = 0;
+            if (seconds < 60) return seconds.toFixed(1) + 's';
+            var mins = Math.floor(seconds / 60);
+            var rest = Math.floor(seconds % 60);
+            return mins + 'm ' + rest + 's';
+        }
+
+        function setProgressFromState() {
+            var percent = 0;
+            if (state.phase && PHASE_WEIGHTS[state.phase]) {
+                var weight = PHASE_WEIGHTS[state.phase];
+                var span = weight.span;
+                var portion = 1;
+                if (state.phase === 'fetching' && state.sources.length) {
+                    var done = state.sources.filter(function(s) {
+                        return s.status === 'done' || s.status === 'error';
+                    }).length;
+                    portion = Math.min(1, done / state.sources.length);
+                } else if (state.phase === 'applying' && state.totalMissing > 0) {
+                    portion = Math.min(1, state.processedMissing / state.totalMissing);
+                }
+                percent = Math.min(100, weight.base + span * portion);
+            }
+            if (state.phase === 'done') percent = 100;
+
+            progressFill.style.width = percent + '%';
+            percentEl.textContent = Math.round(percent) + '%';
+            progressTrack.setAttribute('aria-valuenow', Math.round(percent));
+        }
+
+        function startTicker() {
+            stopTicker();
+            state.tickerInterval = setInterval(function() {
+                if (!state.startedAt) return;
+                var elapsed = (Date.now() - state.startedAt) / 1000;
+                elapsedEl.textContent = formatElapsed(elapsed);
+            }, 250);
+        }
+
+        function stopTicker() {
+            if (state.tickerInterval) {
+                clearInterval(state.tickerInterval);
+                state.tickerInterval = null;
+            }
+        }
+
+        function resetForNewRun(data) {
+            state.runId = data.run_id || 0;
+            state.startedAt = Date.now();
+            state.running = true;
+            state.sources = (data.sources || []).map(function(s, idx) {
+                return {
+                    index: idx,
+                    name: s.name,
+                    type: s.type,
+                    status: 'waiting',
+                    fetched: 0,
+                    accepted: 0,
+                    filtered: 0,
+                    error: null
+                };
+            });
+            state.activity = [];
+            state.counts = { added: 0, queued: 0, skipped: 0, failed: 0 };
+            state.totalMissing = 0;
+            state.processedMissing = 0;
+            state.phase = 'fetching';
+
+            title.textContent = (data.dry_run ? 'Dry-Run Sync' : 'Sync Running');
+            statusLabel.textContent = 'Running';
+            sourceCountEl.textContent = state.sources.length;
+            if (dryEl) dryEl.hidden = !data.dry_run;
+            summarySection.hidden = true;
+            phaseEl.textContent = 'Fetching Trakt sources';
+            sourceProgressEl.textContent = '0 / ' + state.sources.length;
+            activityCountEl.textContent = '0';
+
+            setDrawerState('running');
+            renderSources();
+            renderActivity();
+            setProgressFromState();
+            startTicker();
+        }
+
+        function renderSources() {
+            if (!state.sources.length) {
+                sourcesEl.innerHTML = '<div class="sync-drawer-activity-empty">No sources configured.</div>';
+                return;
+            }
+            var parts = state.sources.map(function(s) {
+                var icon;
+                if (s.status === 'active') {
+                    icon = '<span class="sync-drawer-source-spinner" aria-hidden="true"></span>';
+                } else if (s.status === 'done') {
+                    icon = '<i data-lucide="check-circle" style="width:16px;height:16px" aria-hidden="true"></i>';
+                } else if (s.status === 'error') {
+                    icon = '<i data-lucide="alert-triangle" style="width:16px;height:16px" aria-hidden="true"></i>';
+                } else {
+                    icon = '<i data-lucide="circle" style="width:12px;height:12px;opacity:0.4" aria-hidden="true"></i>';
+                }
+
+                var meta = '';
+                if (s.status === 'done') {
+                    meta += '<span class="sync-drawer-source-pill sync-drawer-source-pill--accept">' + s.accepted + '</span>';
+                    if (s.filtered > 0) {
+                        meta += '<span class="sync-drawer-source-pill sync-drawer-source-pill--filter" title="Filtered out">-' + s.filtered + '</span>';
+                    }
+                } else if (s.status === 'error') {
+                    meta += '<span class="sync-drawer-source-pill sync-drawer-source-pill--error">Error</span>';
+                } else if (s.status === 'active') {
+                    meta += '<span class="sync-drawer-source-pill">Fetching…</span>';
+                } else {
+                    meta += '<span class="sync-drawer-source-pill" style="opacity:0.6">Queued</span>';
+                }
+
+                return '' +
+                    '<div class="sync-drawer-source" data-status="' + escapeHtml(s.status) + '">' +
+                        '<div class="sync-drawer-source-icon">' + icon + '</div>' +
+                        '<div class="sync-drawer-source-name" title="' + escapeHtml(s.name) + '">' + escapeHtml(s.name) + '</div>' +
+                        '<div class="sync-drawer-source-meta">' + meta + '</div>' +
+                    '</div>';
+            });
+            sourcesEl.innerHTML = parts.join('');
+            createLucideIcons();
+        }
+
+        function renderActivity() {
+            if (!state.activity.length) {
+                activityEl.innerHTML = '<div class="sync-drawer-activity-empty">Activity will appear here once shows are processed.</div>';
+                return;
+            }
+            var parts = state.activity.slice(0, 50).map(function(row) {
+                var iconName = ACTION_ICONS[row.action] || 'info';
+                var badge = row.action.toUpperCase();
+                var reason = row.reason ? '<span class="sync-drawer-activity-reason">' + escapeHtml(row.reason) + '</span>' : '';
+                var titleText = row.title + (row.year ? ' (' + row.year + ')' : '');
+                return '' +
+                    '<div class="sync-drawer-activity-row" data-action="' + escapeHtml(row.action) + '">' +
+                        '<div class="sync-drawer-activity-icon"><i data-lucide="' + iconName + '" style="width:14px;height:14px" aria-hidden="true"></i></div>' +
+                        '<div class="sync-drawer-activity-title" title="' + escapeHtml(titleText) + '">' + escapeHtml(titleText) + reason + '</div>' +
+                        '<span class="sync-drawer-activity-badge">' + escapeHtml(badge) + '</span>' +
+                    '</div>';
+            });
+            activityEl.innerHTML = parts.join('');
+            createLucideIcons();
+        }
+
+        function pushActivity(row) {
+            state.activity.unshift(row);
+            if (state.activity.length > 100) state.activity.pop();
+            activityCountEl.textContent = state.activity.length;
+            renderActivity();
+        }
+
+        function updateSource(index, updates) {
+            var src = state.sources[index];
+            if (!src) return;
+            Object.assign(src, updates);
+            var doneCount = state.sources.filter(function(s) {
+                return s.status === 'done' || s.status === 'error';
+            }).length;
+            sourceProgressEl.textContent = doneCount + ' / ' + state.sources.length;
+            renderSources();
+        }
+
+        function handleEvent(type, data) {
+            if (type === 'sync.hello') {
+                if (data && data.running && !state.running) {
+                    phaseEl.textContent = 'Sync in progress…';
+                    setDrawerState('running');
+                }
+                return;
+            }
+            if (type === 'sync.started') {
+                resetForNewRun(data);
+                openDrawer();
+                return;
+            }
+            if (type === 'sync.phase') {
+                state.phase = data.phase;
+                if (typeof data.missing === 'number') state.totalMissing = data.missing;
+                if (data.label) phaseEl.textContent = data.label;
+                setProgressFromState();
+                return;
+            }
+            if (type === 'sync.source.start') {
+                updateSource(data.index, { status: 'active' });
+                setProgressFromState();
+                return;
+            }
+            if (type === 'sync.source.end') {
+                if (data.error) {
+                    updateSource(data.index, { status: 'error', error: data.error });
+                } else {
+                    updateSource(data.index, {
+                        status: 'done',
+                        fetched: data.fetched || 0,
+                        accepted: data.accepted || 0,
+                        filtered: data.filtered || 0
+                    });
+                }
+                setProgressFromState();
+                return;
+            }
+            if (type === 'sync.compare') {
+                phaseEl.textContent = (data.missing || 0) + ' show(s) to evaluate';
+                state.totalMissing = data.missing || 0;
+                setProgressFromState();
+                return;
+            }
+            if (type === 'sync.show') {
+                state.processedMissing += 1;
+                if (data.action && state.counts[data.action] != null) {
+                    state.counts[data.action] += 1;
+                }
+                pushActivity({
+                    title: data.title,
+                    year: data.year,
+                    action: data.action,
+                    reason: data.reason,
+                    dry_run: data.dry_run
+                });
+                if (state.totalMissing > 0 && state.phase === 'applying') {
+                    phaseEl.textContent = 'Processed ' + state.processedMissing + ' / ' + state.totalMissing;
+                }
+                setProgressFromState();
+                return;
+            }
+            if (type === 'sync.finished') {
+                state.running = false;
+                state.phase = 'done';
+                stopTicker();
+                elapsedEl.textContent = formatElapsed(data.duration_seconds || 0);
+                statAdded.textContent = data.added || 0;
+                statQueued.textContent = data.queued || 0;
+                statSkipped.textContent = data.skipped || 0;
+                statFailed.textContent = data.failed || 0;
+                summarySection.hidden = false;
+                setProgressFromState();
+
+                var success = data.success && (data.failed || 0) === 0;
+                var hasWarnings = (data.failed || 0) > 0;
+                title.textContent = success ? 'Sync complete' : (hasWarnings ? 'Sync completed with errors' : 'Sync complete');
+                statusLabel.textContent = success ? 'Complete' : (hasWarnings ? 'Errors' : 'Complete');
+                phaseEl.textContent = success
+                    ? 'Added ' + (data.added || 0) + ' · queued ' + (data.queued || 0) + ' · skipped ' + (data.skipped || 0)
+                    : 'Completed with ' + (data.failed || 0) + ' failure(s)';
+                setDrawerState(success ? 'success' : (hasWarnings ? 'warning' : 'success'));
+                return;
+            }
+            if (type === 'sync.error') {
+                state.running = false;
+                stopTicker();
+                setDrawerState('error');
+                title.textContent = 'Sync failed';
+                statusLabel.textContent = 'Error';
+                phaseEl.textContent = data.message || 'Sync failed unexpectedly.';
+                return;
+            }
+        }
+
+        function ensureEventSource() {
+            if (state.source && state.source.readyState !== 2) return;
+            try {
+                var url = '/sync/events';
+                if (state.lastEventId) {
+                    url += '?last_event_id=' + encodeURIComponent(state.lastEventId);
+                }
+                state.source = new EventSource(url);
+            } catch (e) {
+                console.warn('EventSource not available', e);
+                return;
+            }
+
+            function handle(type) {
+                return function(ev) {
+                    if (ev.lastEventId) {
+                        var parsed = parseInt(ev.lastEventId, 10);
+                        if (!isNaN(parsed)) state.lastEventId = parsed;
+                    }
+                    var data = {};
+                    try { data = ev.data ? JSON.parse(ev.data) : {}; } catch (e) { data = {}; }
+                    handleEvent(type, data);
+                };
+            }
+
+            [
+                'sync.hello',
+                'sync.started',
+                'sync.phase',
+                'sync.source.start',
+                'sync.source.end',
+                'sync.library',
+                'sync.compare',
+                'sync.show',
+                'sync.finished',
+                'sync.error'
+            ].forEach(function(type) {
+                state.source.addEventListener(type, handle(type));
+            });
+
+            state.source.onerror = function() {
+                // Browser will auto-reconnect using retry hint.
+            };
+        }
+
+        function triggerSync(options) {
+            options = options || {};
+            openDrawer();
+            ensureEventSource();
+
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            var csrf = meta ? meta.getAttribute('content') : '';
+            var button = options.button || null;
+            if (button) button.disabled = true;
+
+            fetch('/sync/run', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'X-CSRF-Token': csrf,
+                    'X-Requested-With': 'sync-drawer'
+                }
+            }).then(function(resp) {
+                return resp.text().then(function(text) { return { ok: resp.ok, status: resp.status, text: text }; });
+            }).then(function(result) {
+                if (button) button.disabled = false;
+                if (!result.ok) {
+                    phaseEl.textContent = 'Could not start sync';
+                    setDrawerState('error');
+                    window.showToast && window.showToast('Failed to start sync.', 'error');
+                }
+            }).catch(function(err) {
+                if (button) button.disabled = false;
+                setDrawerState('error');
+                phaseEl.textContent = 'Network error starting sync.';
+                window.showToast && window.showToast('Network error starting sync.', 'error');
+            });
+        }
+
+        window.SnakeCharmerSync = {
+            open: openDrawer,
+            close: closeDrawer,
+            trigger: triggerSync
+        };
+
+        // Delegate clicks on any element with data-sync-trigger (e.g. Sync Now buttons)
+        document.addEventListener('click', function(e) {
+            var trigger = e.target.closest('[data-sync-trigger]');
+            if (!trigger) return;
+            if (trigger.hasAttribute('disabled') || trigger.classList.contains('is-disabled')) return;
+            e.preventDefault();
+            triggerSync({ button: trigger });
+        });
+
+        closeBtn.addEventListener('click', closeDrawer);
+        dismissBtn.addEventListener('click', closeDrawer);
+        backdrop.addEventListener('click', closeDrawer);
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && drawer.classList.contains('is-open')) {
+                closeDrawer();
+            }
+        });
+
+        // Auto-connect on pages where we want to show live state passively.
+        // (Connects lazily on first sync trigger or if sync is already running.)
+        function probeRunning() {
+            fetch('/sync/state', { credentials: 'same-origin' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(data) {
+                    if (data && data.running) {
+                        ensureEventSource();
+                        openDrawer();
+                        setDrawerState('running');
+                        statusLabel.textContent = 'Running';
+                        title.textContent = 'Sync in progress';
+                        phaseEl.textContent = 'Reconnecting to live stream…';
+                    }
+                })
+                .catch(function() {});
+        }
+        probeRunning();
+    })();
     </script>
 </body>
 </html>

@@ -2767,7 +2767,8 @@ class TestSyncManagerGetState:
         sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
 
         state = sm.get_state()
-        assert state == {"running": False}
+        assert state["running"] is False
+        assert state["run_id"] == 0
 
     def test_get_state_with_result(self, tmp_path):
         config = _make_config()

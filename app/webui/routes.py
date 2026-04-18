@@ -1,15 +1,19 @@
+import asyncio
 import contextlib
+import json
 import logging
 import os
+import queue
 import re
 import time
 from html import escape
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from app.config import ConfigError, TraktConfig, TraktSource, get_config_errors, get_section_errors
 from app.medusa import MedusaClient
+from app.sync_events import SyncEvent
 from app.trakt import TraktClient
 from app.webui.config_io import config_to_dict, load_config_dict, save_config
 from app.webui.csrf import template_context, verify_csrf
@@ -466,6 +470,78 @@ async def sync_state(request: Request):
     if sync_manager is None:
         return JSONResponse({"running": False})
     return JSONResponse(sync_manager.get_state())
+
+
+def _format_sse_event(event: SyncEvent) -> str:
+    """Render a SyncEvent into the text/event-stream wire format."""
+    payload = json.dumps(event.data, separators=(",", ":"), default=str)
+    return f"id: {event.id}\nevent: {event.type}\ndata: {payload}\n\n"
+
+
+@router.get("/sync/events")
+async def sync_events(request: Request):
+    """Stream live sync progress events via Server-Sent Events."""
+    sync_manager = _sync_manager(request)
+    if sync_manager is None:
+        return JSONResponse(
+            {"error": "Sync manager not available"}, status_code=503
+        )
+
+    broker = sync_manager.broker
+
+    # Resumable streams: client can send Last-Event-ID to replay what it missed.
+    last_event_id_header = request.headers.get("last-event-id") or request.query_params.get(
+        "last_event_id"
+    )
+    try:
+        after_id = int(last_event_id_header) if last_event_id_header else 0
+    except (TypeError, ValueError):
+        after_id = 0
+
+    subscription_queue, unsubscribe = broker.subscribe(after_id=after_id)
+
+    async def event_stream():
+        try:
+            # Hint EventSource to back off to 3s reconnects.
+            yield "retry: 3000\n\n"
+            # Immediately send a hello so clients know the stream is live.
+            hello = {
+                "run_id": broker.current_run_id,
+                "running": sync_manager.is_running(),
+            }
+            hello_json = json.dumps(hello, separators=(",", ":"))
+            yield f"event: sync.hello\ndata: {hello_json}\n\n"
+
+            heartbeat_interval = 15.0
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    event = await asyncio.to_thread(
+                        subscription_queue.get, True, heartbeat_interval
+                    )
+                except queue.Empty:
+                    yield ": ping\n\n"
+                    continue
+
+                if event is None:
+                    break
+
+                yield _format_sse_event(event)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            unsubscribe()
+
+    headers = {
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
+    }
+    return StreamingResponse(
+        event_stream(), media_type="text/event-stream", headers=headers
+    )
 
 
 # --- Sync History ---
