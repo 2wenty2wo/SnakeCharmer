@@ -1,100 +1,154 @@
 <div id="live-status-content">
 {% if sync_running %}
-<div class="card card--active">
-    <div class="card-header">
-        <i data-lucide="loader" class="card-icon card-icon--spinning" aria-hidden="true"></i>
-        Sync In Progress
-    </div>
-    <div class="sync-indicator">
-        <span class="spinner" aria-hidden="true"></span>
+<div class="status-card-banner status-card-banner--active">
+    <i data-lucide="loader" class="card-icon card-icon--spinning" aria-hidden="true"></i>
+    <div>
+        <strong>Sync In Progress</strong>
         <span>Syncing shows from Trakt to Medusa...</span>
     </div>
 </div>
 {% endif %}
 
 {% if health %}
-<div class="status-cards-row">
-    <div class="card{% if health.status == 'ok' %} card--success{% elif health.status == 'degraded' %} card--error{% endif %}">
-        <div class="card-header">
+<div class="status-card-body">
+    <div class="status-card-main">
+        <div class="status-badge-group">
             {% if health.status == 'ok' %}
-            <i data-lucide="check-circle" class="card-icon" aria-hidden="true"></i>
-            {% elif health.status == 'degraded' %}
-            <i data-lucide="alert-triangle" class="card-icon" aria-hidden="true"></i>
-            {% else %}
-            <i data-lucide="activity" class="card-icon" aria-hidden="true"></i>
-            {% endif %}
-            System Status
-        </div>
-        <div class="info-row">
-            <span class="info-label">Health</span>
-            <span class="info-value">
-                <span class="status-badge status-{{ health.status }}">{{ health.status }}</span>
+            <span class="status-badge status-ok status-badge--large">
+                <i data-lucide="check-circle" style="width:16px;height:16px"></i>
+                OK
             </span>
+            {% elif health.status == 'degraded' %}
+            <span class="status-badge status-degraded status-badge--large">
+                <i data-lucide="alert-triangle" style="width:16px;height:16px"></i>
+                Degraded
+            </span>
+            {% else %}
+            <span class="status-badge status-unknown status-badge--large">
+                <i data-lucide="activity" style="width:16px;height:16px"></i>
+                Unknown
+            </span>
+            {% endif %}
         </div>
-        <div class="info-row">
-            <span class="info-label">Uptime</span>
-            <span class="info-value">
+        <div class="status-card-meta">
+            <span class="status-meta-item" title="Application uptime">
+                <i data-lucide="clock" style="width:14px;height:14px"></i>
                 {% set uptime = health.uptime_seconds | int %}
                 {% if uptime >= 86400 %}
                 {{ uptime // 86400 }}d {{ (uptime % 86400) // 3600 }}h
                 {% elif uptime >= 3600 %}
                 {{ uptime // 3600 }}h {{ (uptime % 3600) // 60 }}m
                 {% elif uptime >= 60 %}
-                {{ uptime // 60 }}m {{ uptime % 60 }}s
+                {{ uptime // 60 }}m
                 {% else %}
                 {{ uptime }}s
                 {% endif %}
             </span>
+            {% if next_sync %}
+            <span class="status-meta-item status-meta-item--next" title="Next scheduled sync">
+                <i data-lucide="timer" style="width:14px;height:14px"></i>
+                <span data-next-sync="{{ next_sync }}">--</span>
+            </span>
+            {% elif config.sync.interval == 0 %}
+            <span class="status-meta-item" title="Sync mode">
+                <i data-lucide="timer" style="width:14px;height:14px"></i>
+                Run Once
+            </span>
+            {% endif %}
         </div>
     </div>
 
     {% if health.last_sync %}
-    <div class="card card--highlight">
-        <div class="card-header">
-            <i data-lucide="bar-chart-3" class="card-icon" aria-hidden="true"></i>
-            Last Sync Result
+    <div class="status-card-last-sync">
+        <div class="status-card-last-sync-header">
+            <span>Last Sync</span>
+            <span class="status-duration">{{ "%.1f" | format(health.last_sync.duration_seconds) }}s</span>
         </div>
-        <div class="info-row">
-            <span class="info-label">Timestamp</span>
-            <span class="info-value" title="{{ health.last_sync.timestamp }}">{{ health.last_sync.timestamp | format_timestamp }}</span>
-        </div>
-        <div class="info-row">
-            <span class="info-label">Duration</span>
-            <span class="info-value">{{ "%.1f" | format(health.last_sync.duration_seconds) }}s</span>
-        </div>
-        <div class="sync-metrics">
-            <div class="metric" title="Shows successfully added to Medusa">
-                <span class="metric-value added">{{ health.last_sync.added }}</span>
-                <span class="metric-label">Added</span>
-            </div>
+        <div class="status-card-metrics">
+            <span class="activity-metric activity-metric--added" title="Added">
+                <i data-lucide="plus" style="width:12px;height:12px"></i>
+                {{ health.last_sync.added }}
+            </span>
             {% if health.last_sync.queued > 0 %}
-            <div class="metric" title="Shows queued for approval">
-                <span class="metric-value queued">{{ health.last_sync.queued }}</span>
-                <span class="metric-label">Queued</span>
-            </div>
+            <span class="activity-metric activity-metric--queued" title="Queued">
+                <i data-lucide="pause" style="width:12px;height:12px"></i>
+                {{ health.last_sync.queued }}
+            </span>
             {% endif %}
-            <div class="metric" title="Shows already in Medusa library">
-                <span class="metric-value skipped">{{ health.last_sync.skipped }}</span>
-                <span class="metric-label">Skipped</span>
-            </div>
-            <div class="metric" title="Shows that failed to add">
-                <span class="metric-value failed">{{ health.last_sync.failed }}</span>
-                <span class="metric-label">Failed</span>
-            </div>
+            <span class="activity-metric activity-metric--skipped" title="Skipped">
+                <i data-lucide="skip-forward" style="width:12px;height:12px"></i>
+                {{ health.last_sync.skipped }}
+            </span>
+            {% if health.last_sync.failed > 0 %}
+            <span class="activity-metric activity-metric--failed" title="Failed">
+                <i data-lucide="x" style="width:12px;height:12px"></i>
+                {{ health.last_sync.failed }}
+            </span>
+            {% endif %}
         </div>
+        <div class="status-card-sync-time" title="{{ health.last_sync.timestamp }}">
+            {{ health.last_sync.timestamp | format_timestamp }}
+        </div>
+    </div>
+    {% else %}
+    <div class="status-card-empty">
+        <span class="status-meta-item">No sync data yet</span>
     </div>
     {% endif %}
 </div>
+
+<div class="status-card-footer">
+    {% include "dashboard_config_status.html" %}
+</div>
+
 {% elif not health %}
-<div class="empty-state empty-state--compact" role="status">
+<div class="status-card-empty status-card-empty--large">
     <i data-lucide="activity" aria-hidden="true"></i>
     <p class="empty-state-title">No sync data yet</p>
     <p class="empty-state-hint">Run a sync to see status information here.</p>
     <div class="empty-state-action">
-        <button type="button" class="btn-primary" onclick="document.querySelector('.page-actions .btn-primary').click()">
+        <button type="button" class="btn-primary" data-sync-trigger>
             Run First Sync
         </button>
     </div>
 </div>
+<div class="status-card-footer">
+    {% include "dashboard_config_status.html" %}
+</div>
 {% endif %}
 </div>
+
+{% if next_sync %}
+<script>
+(function() {
+    function updateCountdown() {
+        var el = document.querySelector('[data-next-sync]');
+        if (!el) return;
+
+        var nextSync = new Date(el.dataset.nextSync);
+        var now = new Date();
+        var diff = nextSync - now;
+
+        if (diff <= 0) {
+            el.textContent = 'Due';
+            return;
+        }
+
+        var hours = Math.floor(diff / 3600000);
+        var minutes = Math.floor((diff % 3600000) / 60000);
+
+        if (hours > 0) {
+            el.textContent = hours + 'h ' + minutes + 'm';
+        } else {
+            el.textContent = minutes + 'm';
+        }
+    }
+
+    updateCountdown();
+    if (window.__dashboardNextSyncTimer) {
+        clearInterval(window.__dashboardNextSyncTimer);
+    }
+    window.__dashboardNextSyncTimer = setInterval(updateCountdown, 60000);
+})();
+</script>
+{% endif %}

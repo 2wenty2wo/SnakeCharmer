@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Medusa Configuration - SnakeCharmer{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Medusa Configuration</h1>
-    <p class="page-description">Connect to your Medusa instance to automatically add shows to your library.</p>
+<div class="page-header dashboard-header">
+    <div class="dashboard-header-text">
+        <h1>Medusa Configuration</h1>
+        <p class="page-description">Connect to your Medusa instance to automatically add shows to your library.</p>
+    </div>
 </div>
 
 <form class="form-config" hx-post="/config/medusa" hx-target="#result-banner" hx-swap="innerHTML" id="medusa-form">

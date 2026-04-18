@@ -32,10 +32,30 @@ class TestGetExistingTvdbIds:
             {"id": {"tvdb": 456}},
             {"id": {}},  # missing tvdb
         ]
-        with patch.object(client, "_request", return_value=_mock_response(series)):
+        with patch.object(client, "_request", return_value=_mock_response(series)) as mock_req:
             ids = client.get_existing_tvdb_ids()
 
         assert ids == {123, 456}
+        mock_req.assert_called_once_with("GET", "/series", params={"limit": 1000, "page": 1})
+
+    def test_fetches_multiple_pages_when_library_exceeds_page_size(self, client):
+        batch1 = [{"id": {"tvdb": i}} for i in range(1, 1001)]
+        batch2 = [{"id": {"tvdb": i}} for i in range(1001, 1051)]
+        with patch.object(
+            client,
+            "_request",
+            side_effect=[_mock_response(batch1), _mock_response(batch2)],
+        ) as mock_req:
+            ids = client.get_existing_tvdb_ids()
+
+        assert len(ids) == 1050
+        assert mock_req.call_count == 2
+        assert mock_req.call_args_list[0] == call(
+            "GET", "/series", params={"limit": 1000, "page": 1}
+        )
+        assert mock_req.call_args_list[1] == call(
+            "GET", "/series", params={"limit": 1000, "page": 2}
+        )
 
     def test_returns_empty_set_for_empty_library(self, client):
         with patch.object(client, "_request", return_value=_mock_response([])):
@@ -448,6 +468,36 @@ class TestRetry:
             client._request("GET", "/series")
 
         assert mock_sleep.call_args_list == [call(3.0), call(9.0)]
+
+
+class TestOnConnectionExhausted:
+    def test_logs_cannot_reach_medusa(self, client, medusa_config):
+        exc = requests.ConnectionError("refused")
+        with patch("app.medusa.log") as mock_log:
+            client._on_connection_exhausted(exc)
+        mock_log.error.assert_called_once()
+        call_args = mock_log.error.call_args[0]
+        assert medusa_config.url in call_args
+
+
+class TestFetchAllSeriesMaxPages:
+    def test_logs_warning_when_max_pages_exceeded(self, client):
+        """When all pages are full and the page limit is hit, log a warning."""
+        from app.medusa import _MEDUSA_SERIES_PAGE_LIMIT
+
+        full_batch = [{"id": {"tvdb": i}} for i in range(_MEDUSA_SERIES_PAGE_LIMIT)]
+
+        with (
+            patch("app.medusa._MEDUSA_SERIES_MAX_PAGES", 2),
+            patch.object(client, "_request", return_value=_mock_response(full_batch)),
+            patch("app.medusa.log") as mock_log,
+        ):
+            result = client._fetch_all_series()
+
+        mock_log.warning.assert_called_once()
+        assert "incomplete" in mock_log.warning.call_args[0][0]
+        # 2 pages * page_limit items each
+        assert len(result) == 2 * _MEDUSA_SERIES_PAGE_LIMIT
 
 
 class TestResolveQualityEdgeCases:

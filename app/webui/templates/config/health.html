@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Health Configuration - SnakeCharmer{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Health Configuration</h1>
-    <p class="page-description">Configure the HTTP health endpoint for Docker, Kubernetes, and monitoring tools.</p>
+<div class="page-header dashboard-header">
+    <div class="dashboard-header-text">
+        <h1>Health Configuration</h1>
+        <p class="page-description">Configure the HTTP health endpoint for Docker, Kubernetes, and monitoring tools.</p>
+    </div>
 </div>
 
 <form class="form-config" hx-post="/config/health" hx-target="#result-banner" hx-swap="innerHTML" id="health-form">
@@ -35,13 +37,13 @@
 
     <fieldset>
         <legend>About Health Checks</legend>
-        <div style="background: var(--gd-surface-2); padding: 16px; border-radius: var(--gd-radius-md); font-size: 14px; color: var(--gd-text-secondary);">
-            <p style="margin: 0 0 12px 0;"><strong style="color: var(--gd-text);">Response Codes:</strong></p>
-            <ul style="margin: 0; padding-left: 20px;">
+        <div class="info-panel">
+            <p><strong>Response Codes:</strong></p>
+            <ul>
                 <li><strong>200 OK</strong> - Last sync was successful or no sync yet</li>
                 <li><strong>503 Service Unavailable</strong> - Last sync failed</li>
             </ul>
-            <p style="margin: 12px 0 0 0;">Compatible with Docker HEALTHCHECK, Kubernetes liveness/readiness probes, and monitoring tools like Uptime Kuma.</p>
+            <p>Compatible with Docker HEALTHCHECK, Kubernetes liveness/readiness probes, and monitoring tools like Uptime Kuma.</p>
         </div>
     </fieldset>
     </div>

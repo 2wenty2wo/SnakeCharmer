@@ -1,0 +1,37 @@
+{% if config.trakt.sources %}
+<div class="sources-strip">
+    {% for source in config.trakt.sources %}
+    <div class="source-strip-item source-overview-card">
+        <span class="source-strip-name">{{ source.type|replace('_', ' ')|title }}</span>
+        <span style="display:none">{{ source.type }}</span>
+        {% if not source.auto_approve %}
+        <span class="source-strip-badge source-strip-badge--manual" title="Requires manual approval">Manual</span>
+        {% endif %}
+        {% if stats.per_source and source.label in stats.per_source %}
+        <span class="source-strip-count">{{ stats.per_source[source.label] }}</span>
+        {% else %}
+        <span class="source-strip-count source-strip-count--empty">—</span>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if stats.pending_count > 0 %}
+    <a href="/pending" class="source-strip-item source-strip-item--pending source-overview-card">
+        <span class="source-strip-name">
+            <i data-lucide="inbox" style="width:14px;height:14px"></i>
+            Pending Approval
+        </span>
+        <span class="source-strip-count">{{ stats.pending_count }} show{% if stats.pending_count != 1 %}s{% endif %}</span>
+    </a>
+    {% endif %}
+</div>
+{% else %}
+<div class="empty-state empty-state--compact" role="status">
+    <i data-lucide="list-plus" aria-hidden="true"></i>
+    <p class="empty-state-title">No sources configured</p>
+    <p class="empty-state-hint">Add Trakt sources to start syncing shows to Medusa.</p>
+    <div class="empty-state-action">
+        <a href="/config/trakt" class="btn-secondary">Configure Sources</a>
+    </div>
+</div>
+{% endif %}

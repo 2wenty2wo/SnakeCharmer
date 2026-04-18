@@ -13,6 +13,7 @@ from app.models import (  # noqa: F401 — re-exported as the public config API
     MedusaAddOptions,
     MedusaConfig,
     NotifyConfig,
+    ShowFilters,
     SyncConfig,
     TraktConfig,
     TraktSource,
@@ -336,6 +337,8 @@ def _normalize_trakt_sources(trakt_raw: dict) -> list[TraktSource]:
         auto_approve = _to_bool(item.get("auto_approve", True))
         medusa_raw = item.get("medusa", {})
         medusa = _parse_medusa_add_options(medusa_raw)
+        filters_raw = item.get("filters", {})
+        filters = _parse_show_filters(filters_raw)
         sources.append(
             TraktSource(
                 type=source_type,
@@ -344,6 +347,7 @@ def _normalize_trakt_sources(trakt_raw: dict) -> list[TraktSource]:
                 auth=auth,
                 auto_approve=auto_approve,
                 medusa=medusa,
+                filters=filters,
             )
         )
     return sources
@@ -357,6 +361,82 @@ def _parse_medusa_add_options(raw_options) -> MedusaAddOptions:
         quality=quality,
         required_words=raw_options.get("required_words", []),
     )
+
+
+def _parse_show_filters(raw_filters) -> ShowFilters:
+    if not isinstance(raw_filters, dict):
+        return ShowFilters()
+
+    def _int_or_none(value):
+        if value is None:
+            return None
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.lstrip("-").isdigit():
+            return int(value)
+        return value  # preserve invalid values so validation can report them
+
+    return ShowFilters(
+        blacklisted_genres=raw_filters.get("blacklisted_genres", []),
+        blacklisted_networks=raw_filters.get("blacklisted_networks", []),
+        blacklisted_min_year=_int_or_none(raw_filters.get("blacklisted_min_year")),
+        blacklisted_max_year=_int_or_none(raw_filters.get("blacklisted_max_year")),
+        blacklisted_title_keywords=raw_filters.get("blacklisted_title_keywords", []),
+        blacklisted_tvdb_ids=raw_filters.get("blacklisted_tvdb_ids", []),
+        allowed_countries=raw_filters.get("allowed_countries", []),
+        allowed_languages=raw_filters.get("allowed_languages", []),
+    )
+
+
+def _validate_show_filters(filters: ShowFilters, errors: list[str]) -> None:
+    """Validate filter fields and append errors to the provided list."""
+    list_str_fields = {
+        "blacklisted_genres": filters.blacklisted_genres,
+        "blacklisted_networks": filters.blacklisted_networks,
+        "blacklisted_title_keywords": filters.blacklisted_title_keywords,
+        "allowed_countries": filters.allowed_countries,
+        "allowed_languages": filters.allowed_languages,
+    }
+    for name, value in list_str_fields.items():
+        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+            errors.append(f"trakt.sources[].filters.{name} must be a list of strings")
+
+    if not isinstance(filters.blacklisted_tvdb_ids, list) or any(
+        not isinstance(item, int) for item in filters.blacklisted_tvdb_ids
+    ):
+        errors.append("trakt.sources[].filters.blacklisted_tvdb_ids must be a list of integers")
+
+    if filters.blacklisted_min_year is not None:
+        try:
+            int(filters.blacklisted_min_year)
+        except (TypeError, ValueError):
+            errors.append("trakt.sources[].filters.blacklisted_min_year must be an integer")
+
+    if filters.blacklisted_max_year is not None:
+        try:
+            int(filters.blacklisted_max_year)
+        except (TypeError, ValueError):
+            errors.append("trakt.sources[].filters.blacklisted_max_year must be an integer")
+
+    min_year: int | None = None
+    max_year: int | None = None
+
+    if filters.blacklisted_min_year is not None:
+        try:
+            min_year = int(filters.blacklisted_min_year)
+        except (TypeError, ValueError):
+            min_year = None
+
+    if filters.blacklisted_max_year is not None:
+        try:
+            max_year = int(filters.blacklisted_max_year)
+        except (TypeError, ValueError):
+            max_year = None
+
+    if min_year is not None and max_year is not None and min_year > max_year:
+        errors.append(
+            "trakt.sources[].filters.blacklisted_min_year must not exceed blacklisted_max_year"
+        )
 
 
 def get_config_errors(config: AppConfig) -> list[str]:
@@ -446,6 +526,9 @@ def get_config_errors(config: AppConfig) -> list[str]:
                 errors.append(
                     "trakt.sources[].medusa.required_words must be a list of non-empty strings"
                 )
+
+        # Validate filters
+        _validate_show_filters(source.filters, errors)
 
     try:
         interval = int(config.sync.interval)

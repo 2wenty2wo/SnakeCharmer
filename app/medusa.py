@@ -14,6 +14,10 @@ __all__ = ["MedusaClient", "REQUEST_TIMEOUT", "resolve_quality"]
 
 log = logging.getLogger(__name__)
 
+# Medusa API v2 paginates GET /series (default limit=20, max 1000 per pymedusa base handler).
+_MEDUSA_SERIES_PAGE_LIMIT = 1000
+_MEDUSA_SERIES_MAX_PAGES = 500
+
 
 def _bitmask_to_quality_list(bitmask: int) -> list[int]:
     """Decompose a bitmask into a sorted list of individual quality values."""
@@ -59,10 +63,37 @@ class MedusaClient(RetryClient):
             retry_backoff=retry_backoff,
         )
 
-    def get_existing_tvdb_ids(self) -> set[int]:
+    def _fetch_all_series(self, request_timeout: float | None = None) -> list[dict]:
+        """Return every series from Medusa, following API v2 pagination."""
+        all_series: list[dict] = []
+        page = 1
+        while page <= _MEDUSA_SERIES_MAX_PAGES:
+            request_kwargs = {}
+            if request_timeout is not None:
+                request_kwargs["timeout"] = request_timeout
+            resp = self._request(
+                "GET",
+                "/series",
+                params={"limit": _MEDUSA_SERIES_PAGE_LIMIT, "page": page},
+                **request_kwargs,
+            )
+            batch = resp.json()
+            if not batch:
+                break
+            all_series.extend(batch)
+            if len(batch) < _MEDUSA_SERIES_PAGE_LIMIT:
+                break
+            page += 1
+        else:
+            log.warning(
+                "Medusa series list exceeded %d pages; library count may be incomplete",
+                _MEDUSA_SERIES_MAX_PAGES,
+            )
+        return all_series
+
+    def get_existing_tvdb_ids(self, request_timeout: float | None = None) -> set[int]:
         """Fetch all existing show TVDB IDs from Medusa."""
-        resp = self._request("GET", "/series")
-        series_list = resp.json()
+        series_list = self._fetch_all_series(request_timeout=request_timeout)
 
         tvdb_ids = set()
         for series in series_list:
@@ -78,8 +109,7 @@ class MedusaClient(RetryClient):
 
     def get_series_list(self) -> list[dict]:
         """Fetch all series from Medusa with display info."""
-        resp = self._request("GET", "/series")
-        series_list = resp.json()
+        series_list = self._fetch_all_series()
 
         shows = []
         for series in series_list:

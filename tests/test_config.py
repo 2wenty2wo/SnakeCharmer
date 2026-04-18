@@ -12,12 +12,14 @@ from app.config import (
     WebUIConfig,
     _normalize_notify_urls,
     _normalize_trakt_sources,
+    _parse_show_filters,
     _safe_float,
     _safe_float_non_negative,
     _safe_int,
     _safe_int_non_negative,
     _safe_int_port,
     _to_bool,
+    _validate_show_filters,
     get_config_errors,
     get_section_errors,
     load_config,
@@ -270,6 +272,102 @@ class TestLoadConfig:
         source = config.trakt.sources[0]
         assert source.medusa.quality is None
         assert source.medusa.required_words == []
+
+    def test_source_filters_parse(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {
+                        "type": "trending",
+                        "filters": {
+                            "blacklisted_genres": ["reality"],
+                            "blacklisted_networks": ["youtube"],
+                            "blacklisted_min_year": 2010,
+                            "blacklisted_max_year": 2020,
+                            "blacklisted_title_keywords": ["untitled"],
+                            "blacklisted_tvdb_ids": [123, 456],
+                            "allowed_countries": ["us", "gb"],
+                            "allowed_languages": ["en"],
+                        },
+                    }
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        config = load_config(path)
+
+        source = config.trakt.sources[0]
+        assert source.filters.blacklisted_genres == ["reality"]
+        assert source.filters.blacklisted_networks == ["youtube"]
+        assert source.filters.blacklisted_min_year == 2010
+        assert source.filters.blacklisted_max_year == 2020
+        assert source.filters.blacklisted_title_keywords == ["untitled"]
+        assert source.filters.blacklisted_tvdb_ids == [123, 456]
+        assert source.filters.allowed_countries == ["us", "gb"]
+        assert source.filters.allowed_languages == ["en"]
+
+    def test_source_filters_invalid_genres_type_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [{"type": "trending", "filters": {"blacklisted_genres": "reality"}}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_source_filters_invalid_tvdb_ids_type_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {
+                        "type": "trending",
+                        "filters": {"blacklisted_tvdb_ids": ["not-an-int"]},
+                    }
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_source_filters_invalid_year_type_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [{"type": "trending", "filters": {"blacklisted_min_year": "bad"}}],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
+
+    def test_source_filters_min_year_greater_than_max_year_exits(self, tmp_path):
+        data = {
+            "trakt": {
+                "client_id": "id",
+                "sources": [
+                    {
+                        "type": "trending",
+                        "filters": {
+                            "blacklisted_min_year": 2020,
+                            "blacklisted_max_year": 2010,
+                        },
+                    }
+                ],
+            },
+            "medusa": {"url": "http://localhost:8081", "api_key": "key"},
+        }
+        path = _write_config(tmp_path, data)
+        with pytest.raises(SystemExit):
+            load_config(path)
 
     def test_source_medusa_options_defaults_when_not_provided(self, tmp_path, minimal_config):
         path = _write_config(tmp_path, minimal_config)
@@ -968,3 +1066,118 @@ class TestGetConfigErrorsNumeric:
         config = AppConfig(**kwargs)
         errors = get_config_errors(config)
         assert "webui.port must be between 0 and 65535" in errors
+
+
+class TestLoadConfigErrorPaths:
+    """Cover the sys.exit branches in load_config that are hard to hit otherwise."""
+
+    def test_yaml_parse_error_exits(self, tmp_path, monkeypatch):
+        bad_yaml = tmp_path / "config.yaml"
+        bad_yaml.write_text("key: [\nunclosed bracket")
+
+        def exit_raiser(code):
+            raise SystemExit(code)
+
+        monkeypatch.setattr("app.config.sys.exit", exit_raiser)
+
+        with pytest.raises(SystemExit) as exc_info:
+            load_config(str(bad_yaml), skip_validate=True)
+        assert exc_info.value.code == 1
+
+    def test_non_dict_yaml_exits(self, tmp_path, monkeypatch):
+        list_yaml = tmp_path / "config.yaml"
+        list_yaml.write_text("- item1\n- item2\n")
+
+        def exit_raiser(code):
+            raise SystemExit(code)
+
+        monkeypatch.setattr("app.config.sys.exit", exit_raiser)
+
+        with pytest.raises(SystemExit) as exc_info:
+            load_config(str(list_yaml), skip_validate=True)
+        assert exc_info.value.code == 1
+
+
+class TestParseShowFiltersIntOrNone:
+    """Cover the _int_or_none fallback branch in _parse_show_filters."""
+
+    def test_none_value_returns_none(self):
+        filters = _parse_show_filters({"blacklisted_min_year": None})
+        assert filters.blacklisted_min_year is None
+
+    def test_int_value_returns_int(self):
+        filters = _parse_show_filters({"blacklisted_min_year": 2010})
+        assert filters.blacklisted_min_year == 2010
+
+    def test_digit_string_returns_int(self):
+        filters = _parse_show_filters({"blacklisted_min_year": "2010"})
+        assert filters.blacklisted_min_year == 2010
+
+    def test_negative_digit_string_returns_int(self):
+        filters = _parse_show_filters({"blacklisted_min_year": "-5"})
+        assert filters.blacklisted_min_year == -5
+
+    def test_non_digit_string_returns_value_as_is(self):
+        # Exercises the final `return value` fallback at line 377 of config.py.
+        filters = _parse_show_filters({"blacklisted_min_year": "bad"})
+        assert filters.blacklisted_min_year == "bad"
+
+    def test_float_returns_value_as_is(self):
+        # float is not int, not str → hits the fallback branch.
+        filters = _parse_show_filters({"blacklisted_min_year": 2000.5})
+        assert filters.blacklisted_min_year == 2000.5
+
+    def test_bool_returns_value_as_is(self):
+        # bool is a subclass of int but excluded by `not isinstance(value, bool)`.
+        filters = _parse_show_filters({"blacklisted_min_year": True})
+        assert filters.blacklisted_min_year is True
+
+
+class TestValidateShowFilters:
+    def test_invalid_min_year_with_valid_max_year_does_not_raise(self):
+        filters = _parse_show_filters({"blacklisted_min_year": "abc", "blacklisted_max_year": 2010})
+        errors: list[str] = []
+
+        _validate_show_filters(filters, errors)
+
+        assert "trakt.sources[].filters.blacklisted_min_year must be an integer" in errors
+        assert (
+            "trakt.sources[].filters.blacklisted_min_year must not exceed blacklisted_max_year"
+            not in errors
+        )
+
+    def test_invalid_max_year_with_valid_min_year_does_not_raise(self):
+        # Exercises both the validation error append (lines 418-419) and the second-pass
+        # int() fallback that sets max_year to None (lines 433-434) when conversion fails.
+        filters = _parse_show_filters({"blacklisted_min_year": 2010, "blacklisted_max_year": "xyz"})
+        errors: list[str] = []
+
+        _validate_show_filters(filters, errors)
+
+        assert "trakt.sources[].filters.blacklisted_max_year must be an integer" in errors
+        # Range comparison is skipped when max_year cannot be parsed.
+        assert (
+            "trakt.sources[].filters.blacklisted_min_year must not exceed blacklisted_max_year"
+            not in errors
+        )
+
+
+class TestParseShowFiltersNonDict:
+    """Cover the early-return branch when raw_filters is not a dict."""
+
+    def test_none_returns_default_show_filters(self):
+        # Hits the `return ShowFilters()` branch at the top of _parse_show_filters.
+        filters = _parse_show_filters(None)
+        assert filters.blacklisted_genres == []
+        assert filters.blacklisted_min_year is None
+        assert filters.blacklisted_max_year is None
+
+    def test_list_returns_default_show_filters(self):
+        filters = _parse_show_filters(["not", "a", "dict"])
+        assert filters.blacklisted_genres == []
+        assert filters.blacklisted_tvdb_ids == []
+
+    def test_string_returns_default_show_filters(self):
+        filters = _parse_show_filters("invalid")
+        assert filters.blacklisted_networks == []
+        assert filters.allowed_countries == []

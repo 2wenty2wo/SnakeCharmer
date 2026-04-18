@@ -25,9 +25,9 @@ def test_dashboard_renders_with_green_deck_colors(page: Page, live_server_url: s
     sync_button = page.locator("button:has-text('Sync Now')").first
     expect(sync_button).to_have_css("background-color", "rgb(29, 185, 84)")
 
-    # Check card surface color (#181818)
-    card = page.locator(".card").first
-    expect(card).to_have_css("background-color", "rgb(24, 24, 24)")
+    # Check source card surface color (#181818)
+    source_card = page.locator(".source-overview-card").first
+    expect(source_card).to_have_css("background-color", "rgb(24, 24, 24)")
 
 
 def test_sidebar_is_black(page: Page, live_server_url: str):
@@ -50,24 +50,21 @@ def test_buttons_are_pill_shaped(page: Page, live_server_url: str):
 
 
 def test_cards_have_hover_effect(page: Page, live_server_url: str):
-    """Verify cards have lift effect on hover."""
+    """Verify source cards have lift effect on hover."""
     page.goto(f"{live_server_url}/")
 
-    card = page.locator(".card").first
+    card = page.locator(".source-overview-card").first
 
     # Get initial state
     initial_transform = card.evaluate("el => getComputedStyle(el).transform")
-    card.evaluate("el => getComputedStyle(el).boxShadow")
 
     # Hover over card
     card.hover()
 
-    # Check that hover state has different transform/box-shadow
-    # (The exact values depend on CSS, but they should change)
+    # Check that hover state has different transform
     page.wait_for_timeout(300)  # Wait for transition
 
     hover_transform = card.evaluate("el => getComputedStyle(el).transform")
-    card.evaluate("el => getComputedStyle(el).boxShadow")
 
     # Transform should change on hover (translateY)
     assert initial_transform != hover_transform or hover_transform != "none", (

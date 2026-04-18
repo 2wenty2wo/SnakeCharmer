@@ -184,6 +184,38 @@ trakt:
         required_words: ["x265", "2160p"]
 ```
 
+### Example: per-source content filters
+
+Each source can have filters to exclude unwanted shows before they are added to Medusa.
+
+```yaml
+trakt:
+  client_id: YOUR_TRAKT_CLIENT_ID
+  sources:
+    - type: trending
+      filters:
+        blacklisted_genres: ["reality", "talk-show", "anime"]
+        blacklisted_networks: ["youtube", "twitch", "espn"]
+        blacklisted_min_year: 2010
+        blacklisted_title_keywords: ["untitled", "barbie"]
+        allowed_countries: ["us", "gb", "ca"]
+    - type: user_list
+      owner: alice
+      list_slug: must-watch
+      filters:
+        blacklisted_tvdb_ids: [79274, 85287]
+        allowed_languages: ["en", "ja"]
+```
+
+**Filter fields:**
+- `blacklisted_genres` — skip shows with these genres (case-insensitive)
+- `blacklisted_networks` — skip shows from these networks (case-insensitive)
+- `blacklisted_min_year` / `blacklisted_max_year` — skip shows outside this year range (inclusive)
+- `blacklisted_title_keywords` — skip shows whose title contains these keywords (case-insensitive)
+- `blacklisted_tvdb_ids` — skip specific shows by TVDB ID
+- `allowed_countries` — only allow shows from these 2-letter country codes. Empty = allow any. Add `"ignore"` to also allow shows with no country specified.
+- `allowed_languages` — only allow shows with these 2-letter language codes. Empty = allow any. Add `"ignore"` to also allow shows with no language specified.
+
 ### Example: manual approval queue
 
 Disable `auto_approve` on any source to queue shows for manual approval instead of adding them immediately. Use the Web UI to review and approve/reject queued shows.

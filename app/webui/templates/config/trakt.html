@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Trakt Configuration - SnakeCharmer{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Trakt Configuration</h1>
-    <p class="page-description">Connect to Trakt.tv to fetch shows from your lists and trending content.</p>
+<div class="page-header dashboard-header">
+    <div class="dashboard-header-text">
+        <h1>Trakt Configuration</h1>
+        <p class="page-description">Connect to Trakt.tv to fetch shows from your lists and trending content.</p>
+    </div>
 </div>
 
 <form class="form-config" hx-post="/config/trakt" hx-target="#result-banner" hx-swap="innerHTML" id="trakt-form">
@@ -68,7 +70,7 @@
 
     <fieldset>
         <legend>OAuth Authentication</legend>
-        <p style="color: var(--gd-text-secondary); font-size: 14px; margin-bottom: 16px;">
+        <p class="form-help-text">
             Required for accessing private watchlists and user-specific content.
         </p>
 
@@ -105,7 +107,7 @@
 
     <fieldset>
         <legend>Sources</legend>
-        <p style="color: var(--gd-text-secondary); font-size: 14px; margin-bottom: 16px;">
+        <p class="form-help-text">
             Configure where to fetch shows from. Each source can have different quality settings.
         </p>
         <div id="sources-list">

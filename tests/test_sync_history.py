@@ -255,3 +255,37 @@ class TestSyncHistoryDB:
         db.record(result)
         actions = db.get_history()[0]["show_actions"]
         assert actions[0]["reason"] == "Connection timeout"
+
+    def test_get_totals_empty_db(self, db):
+        totals = db.get_totals()
+        assert totals == {
+            "total_runs": 0,
+            "total_added": 0,
+            "total_queued": 0,
+            "total_failed": 0,
+            "success_rate": 0,
+        }
+
+    def test_get_totals_aggregates_all_runs(self, db):
+        db.record(SyncResult(added=3, queued=1, failed=0, success=True))
+        db.record(SyncResult(added=2, queued=0, failed=1, success=False))
+        db.record(SyncResult(added=5, queued=2, failed=0, success=True))
+
+        totals = db.get_totals()
+        assert totals["total_runs"] == 3
+        assert totals["total_added"] == 10
+        assert totals["total_queued"] == 3
+        assert totals["total_failed"] == 1
+        assert totals["success_rate"] == 66  # 2/3 successful
+
+    def test_get_totals_success_rate_all_successful(self, db):
+        for _ in range(5):
+            db.record(SyncResult(added=1, failed=0, success=True))
+        totals = db.get_totals()
+        assert totals["success_rate"] == 100
+
+    def test_get_totals_success_rate_all_failed(self, db):
+        for _ in range(3):
+            db.record(SyncResult(added=0, failed=1, success=False))
+        totals = db.get_totals()
+        assert totals["success_rate"] == 0

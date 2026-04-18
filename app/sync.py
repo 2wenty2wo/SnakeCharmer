@@ -1,14 +1,30 @@
 import json
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from app.config import AppConfig
+from app.filters import apply_filters
 from app.medusa import MedusaClient
 from app.models import PendingShow
+from app.sync_events import (
+    EVT_COMPARE,
+    EVT_LIBRARY,
+    EVT_PHASE,
+    EVT_SHOW,
+    EVT_SOURCE_END,
+    EVT_SOURCE_START,
+)
 from app.trakt import TraktClient
 
 log = logging.getLogger(__name__)
+
+EventEmitter = Callable[[str, dict], None]
+
+
+def _noop_emitter(_type: str, _data: dict) -> None:
+    return None
 
 
 @dataclass
@@ -27,8 +43,18 @@ class SyncResult:
     show_actions: list[dict] = field(default_factory=list)
 
 
-def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
-    """Run a single sync cycle: fetch Trakt lists, compare with Medusa, add missing shows."""
+def run_sync(
+    config: AppConfig,
+    pending_queue=None,
+    emit: EventEmitter | None = None,
+) -> SyncResult:
+    """Run a single sync cycle: fetch Trakt lists, compare with Medusa, add missing shows.
+
+    Optional ``emit`` callback receives structured progress events suitable
+    for streaming to a live UI (SSE). The callback must never raise; callers
+    are expected to wrap it safely.
+    """
+    emit = emit or _noop_emitter
     start_time_ns = time.perf_counter_ns()
     result = SyncResult()
 
@@ -50,24 +76,76 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
         source_objs: dict[int, list] = {}
         list_counts: dict[str, int] = {}
         options_policy = "first_source_in_config_order"
+        total_sources = len(config.trakt.sources)
 
-        # Fetch shows from Trakt sources and dedupe by TVDB ID
-        for source in config.trakt.sources:
+        emit(EVT_PHASE, {"phase": "fetching", "label": "Fetching Trakt sources"})
+
+        for index, source in enumerate(config.trakt.sources):
             source_name = source.label
+            emit(
+                EVT_SOURCE_START,
+                {
+                    "index": index,
+                    "total": total_sources,
+                    "name": source_name,
+                    "type": source.type,
+                },
+            )
             try:
                 list_shows = trakt_client.get_shows(source)
             except Exception as e:
                 log.error("Failed to fetch Trakt source '%s': %s", source_name, e)
+                emit(
+                    EVT_SOURCE_END,
+                    {
+                        "index": index,
+                        "name": source_name,
+                        "error": str(e),
+                    },
+                )
                 result.success = False
                 result.duration_seconds = _elapsed_seconds(start_time_ns)
                 return result
 
-            list_counts[source_name] = len(list_shows)
-            result.total_fetched += len(list_shows)
-            result.per_source[source_name] = len(list_shows)
-            log.info("Source '%s' returned %d show(s)", source_name, len(list_shows))
-
+            accepted_shows: list = []
+            filtered_count = 0
             for show in list_shows:
+                should_include, reason = apply_filters(show, source.filters)
+                if should_include:
+                    accepted_shows.append(show)
+                else:
+                    log.info(
+                        "Filtered '%s' (tvdb:%d) from source '%s': %s",
+                        show.title,
+                        show.tvdb_id,
+                        source_name,
+                        reason,
+                    )
+                    result.skipped += 1
+                    filtered_count += 1
+                    _track_action(result, show, source_name, "skipped", reason)
+
+            list_counts[source_name] = len(accepted_shows)
+            result.total_fetched += len(accepted_shows)
+            result.per_source[source_name] = len(accepted_shows)
+            log.info(
+                "Source '%s' returned %d show(s), %d accepted after filters",
+                source_name,
+                len(list_shows),
+                len(accepted_shows),
+            )
+            emit(
+                EVT_SOURCE_END,
+                {
+                    "index": index,
+                    "name": source_name,
+                    "fetched": len(list_shows),
+                    "accepted": len(accepted_shows),
+                    "filtered": filtered_count,
+                },
+            )
+
+            for show in accepted_shows:
                 if show.tvdb_id not in trakt_shows_by_tvdb:
                     trakt_shows_by_tvdb[show.tvdb_id] = show
                 source_lists.setdefault(show.tvdb_id, []).append(source_name)
@@ -82,7 +160,8 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
             result.duration_seconds = _elapsed_seconds(start_time_ns)
             return result
 
-        # Fetch existing Medusa library
+        emit(EVT_PHASE, {"phase": "comparing", "label": "Comparing with Medusa library"})
+
         try:
             existing_ids = medusa_client.get_existing_tvdb_ids()
         except Exception as e:
@@ -91,9 +170,19 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
             result.duration_seconds = _elapsed_seconds(start_time_ns)
             return result
 
-        # Find missing shows
+        emit(EVT_LIBRARY, {"existing_count": len(existing_ids)})
+
         missing = [s for s in trakt_shows if s.tvdb_id not in existing_ids]
         result.already_in_medusa = len(trakt_shows) - len(missing)
+
+        emit(
+            EVT_COMPARE,
+            {
+                "unique_shows": len(trakt_shows),
+                "already_in_library": result.already_in_medusa,
+                "missing": len(missing),
+            },
+        )
 
         if not missing:
             log.info(
@@ -111,19 +200,50 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
             ", ".join(f"{name}={count}" for name, count in list_counts.items()),
         )
 
-        # Add missing shows (or queue for approval)
-        for show in missing:
+        emit(
+            EVT_PHASE,
+            {
+                "phase": "applying",
+                "label": (
+                    "Simulating additions" if config.sync.dry_run else "Adding shows to Medusa"
+                ),
+                "missing": len(missing),
+            },
+        )
+
+        total_missing = len(missing)
+        for offset, show in enumerate(missing, start=1):
             show_sources = source_objs.get(show.tvdb_id, [])
             selected_source = show_sources[0] if show_sources else None
             selected_options = _medusa_add_options_from_source(selected_source)
             selected_source_label = selected_source.label if selected_source else "unknown"
             option_keys = sorted(selected_options.keys()) if selected_options else []
 
+            def _emit_show(
+                action: str,
+                current: int = offset,
+                current_show=show,
+                source_label: str = selected_source_label,
+                reason: str | None = None,
+            ) -> None:
+                emit(
+                    EVT_SHOW,
+                    {
+                        "progress": {"current": current, "total": total_missing},
+                        "tvdb_id": current_show.tvdb_id,
+                        "title": current_show.title,
+                        "year": current_show.year,
+                        "action": action,
+                        "source_label": source_label,
+                        "dry_run": config.sync.dry_run,
+                        "reason": reason,
+                    },
+                )
+
             requires_manual_approval = (
                 selected_source is not None and not selected_source.auto_approve
             )
 
-            # Respect manual approval even when no pending queue is available
             if requires_manual_approval and pending_queue is None:
                 log.warning(
                     "Skipping '%s' (tvdb:%d): source '%s' requires manual approval but no pending "
@@ -134,6 +254,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                 )
                 result.skipped += 1
                 _track_action(result, show, selected_source_label, "skipped", "no_pending_queue")
+                _emit_show("skipped", reason="no_pending_queue")
                 continue
 
             # Check if this show should go to pending queue
@@ -150,6 +271,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     _track_action(
                         result, show, selected_source_label, "failed", "pending_queue_error"
                     )
+                    _emit_show("failed", reason="pending_queue_error")
                     result.failed += 1
                     result.success = False
                     result.duration_seconds = _elapsed_seconds(start_time_ns)
@@ -159,6 +281,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     log.debug("Already in pending queue: %s (tvdb:%d)", show.title, show.tvdb_id)
                     result.skipped += 1
                     _track_action(result, show, selected_source_label, "skipped", "already_pending")
+                    _emit_show("skipped", reason="already_pending")
                     continue
 
                 # Add to pending queue
@@ -185,6 +308,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     )
                     result.queued += 1
                     _track_action(result, show, selected_source_label, "queued")
+                    _emit_show("queued")
                     continue
 
                 try:
@@ -199,6 +323,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     _track_action(
                         result, show, selected_source_label, "failed", "pending_queue_error"
                     )
+                    _emit_show("failed", reason="pending_queue_error")
                     result.failed += 1
                     result.success = False
                     result.duration_seconds = _elapsed_seconds(start_time_ns)
@@ -213,9 +338,11 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     )
                     result.queued += 1
                     _track_action(result, show, selected_source_label, "queued")
+                    _emit_show("queued")
                 else:
                     result.skipped += 1
                     _track_action(result, show, selected_source_label, "skipped", "already_pending")
+                    _emit_show("skipped", reason="already_pending")
                 continue
 
             # Auto-approve path: add directly to Medusa
@@ -240,6 +367,7 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                     }
                 )
                 _track_action(result, show, selected_source_label, "added")
+                _emit_show("added")
                 continue
 
             try:
@@ -265,15 +393,18 @@ def run_sync(config: AppConfig, pending_queue=None) -> SyncResult:
                         }
                     )
                     _track_action(result, show, selected_source_label, "added")
+                    _emit_show("added")
                 else:
                     result.skipped += 1
                     _track_action(
                         result, show, selected_source_label, "skipped", "medusa_returned_false"
                     )
+                    _emit_show("skipped", reason="medusa_returned_false")
             except Exception as e:
                 log.error("Failed to add '%s' (tvdb:%d): %s", show.title, show.tvdb_id, e)
                 result.failed += 1
                 _track_action(result, show, selected_source_label, "failed", str(e))
+                _emit_show("failed", reason=str(e))
 
         result.success = result.failed == 0
         result.duration_seconds = _elapsed_seconds(start_time_ns)

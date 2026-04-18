@@ -151,6 +151,27 @@ class SyncHistoryDB:
             row = self._conn.execute("SELECT COUNT(*) FROM sync_runs").fetchone()
             return row[0]
 
+    def get_totals(self) -> dict:
+        """Return aggregate stats across all sync runs."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*) as total_runs, "
+                "COALESCE(SUM(added), 0) as total_added, "
+                "COALESCE(SUM(queued), 0) as total_queued, "
+                "COALESCE(SUM(failed), 0) as total_failed, "
+                "SUM(CASE WHEN failed = 0 AND success = 1 THEN 1 ELSE 0 END) "
+                "as successful_runs "
+                "FROM sync_runs"
+            ).fetchone()
+            total_runs = row[0]
+            return {
+                "total_runs": total_runs,
+                "total_added": row[1],
+                "total_queued": row[2],
+                "total_failed": row[3],
+                "success_rate": (int((row[4] / total_runs) * 100) if total_runs > 0 else 0),
+            }
+
     def close(self) -> None:
         """Close the database connection."""
         self._conn.close()

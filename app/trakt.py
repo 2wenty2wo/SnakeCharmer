@@ -25,6 +25,8 @@ class TraktShow:
     poster_url: str | None = None
     network: str | None = None
     genres: list[str] = field(default_factory=list)
+    country: str | None = None
+    language: str | None = None
 
 
 class MalformedTokenError(RuntimeError):
@@ -195,9 +197,11 @@ class TraktClient(RetryClient):
                 url = f"https://{url}"
             poster_url = url
 
-        # Extract network and genres
+        # Extract network, genres, country, and language
         network = data.get("network")
         genres = data.get("genres", [])
+        country = data.get("country")
+        language = data.get("language")
 
         return TraktShow(
             title=title,
@@ -207,6 +211,8 @@ class TraktClient(RetryClient):
             poster_url=poster_url,
             network=network,
             genres=genres if genres else [],
+            country=country,
+            language=language,
         )
 
     # --- OAuth Device Auth ---

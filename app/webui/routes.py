@@ -1,13 +1,19 @@
+import asyncio
+import contextlib
+import json
 import logging
 import os
+import queue
 import re
+import time
 from html import escape
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from app.config import ConfigError, TraktConfig, TraktSource, get_config_errors, get_section_errors
 from app.medusa import MedusaClient
+from app.sync_events import SyncEvent
 from app.trakt import TraktClient
 from app.webui.config_io import config_to_dict, load_config_dict, save_config
 from app.webui.csrf import template_context, verify_csrf
@@ -46,6 +52,49 @@ def _sync_manager(request: Request):
 
 # --- Dashboard ---
 
+_LIBRARY_COUNT_CACHE: tuple[int, float] | None = None
+_LIBRARY_COUNT_TTL = 300  # 5 minutes
+_LIBRARY_COUNT_FAILURE_CACHE_AT: float | None = None
+_LIBRARY_COUNT_FAILURE_TTL = 30  # 30 seconds
+_LIBRARY_COUNT_PROBE_TIMEOUT_SECONDS = 3.0
+
+
+def _get_library_count(request: Request) -> int | None:
+    """Fetch the live library size from Medusa. Returns None on failure.
+
+    Successful counts are cached for five minutes to avoid hammering Medusa on
+    every dashboard stats poll. Failed fetches are cached briefly so repeated
+    dashboard polls do not block workers during Medusa outages.
+    """
+    global _LIBRARY_COUNT_CACHE, _LIBRARY_COUNT_FAILURE_CACHE_AT
+    config = _holder(request).get()
+    if not config.medusa.url or not config.medusa.api_key:
+        return None
+
+    now = time.monotonic()
+    if _LIBRARY_COUNT_CACHE is not None:
+        value, cached_at = _LIBRARY_COUNT_CACHE
+        if now - cached_at < _LIBRARY_COUNT_TTL:
+            return value
+    if _LIBRARY_COUNT_FAILURE_CACHE_AT is not None:
+        if now - _LIBRARY_COUNT_FAILURE_CACHE_AT < _LIBRARY_COUNT_FAILURE_TTL:
+            return None
+        _LIBRARY_COUNT_FAILURE_CACHE_AT = None
+
+    try:
+        with MedusaClient(config.medusa, max_retries=0, retry_backoff=0.0) as client:
+            result = len(
+                client.get_existing_tvdb_ids(request_timeout=_LIBRARY_COUNT_PROBE_TIMEOUT_SECONDS)
+            )
+    except Exception:
+        log.debug("Could not fetch Medusa library count for dashboard")
+        _LIBRARY_COUNT_FAILURE_CACHE_AT = now
+        return None
+
+    _LIBRARY_COUNT_CACHE = (result, now)
+    _LIBRARY_COUNT_FAILURE_CACHE_AT = None
+    return result
+
 
 def _get_dashboard_stats(request: Request) -> dict:
     """Gather comprehensive stats for the dashboard."""
@@ -57,40 +106,27 @@ def _get_dashboard_stats(request: Request) -> dict:
         "total_runs": 0,
         "success_rate": 0,
         "pending_count": 0,
-        "avg_duration": 0,
+        "library_count": None,
         "recent_runs": [],
+        "per_source": {},
     }
 
-    # Get pending count
     if pending_queue:
         stats["pending_count"] = pending_queue.get_count()
 
-    # Get sync history stats
     if sync_status:
-        # Get recent runs (last 5)
+        totals = sync_status.get_totals()
+        stats["total_added"] = totals["total_added"]
+        stats["total_runs"] = totals["total_runs"]
+        stats["success_rate"] = totals["success_rate"]
+
         recent = sync_status.get_history(limit=5, offset=0)
         stats["recent_runs"] = recent
-        stats["total_runs"] = sync_status.get_total_runs()
 
         if recent:
-            # Calculate totals
-            total_added = sum(r.get("added", 0) for r in recent)
-            total_runs_with_data = len([r for r in recent if r.get("duration_seconds", 0) > 0])
+            stats["per_source"] = recent[0].get("per_source", {})
 
-            stats["total_added"] = total_added
-
-            # Calculate success rate (runs with no failures / total runs)
-            successful_runs = len(
-                [r for r in recent if r.get("failed", 0) == 0 and r.get("success", True)]
-            )
-            stats["success_rate"] = int((successful_runs / len(recent)) * 100) if recent else 0
-
-            # Calculate average duration
-            if total_runs_with_data > 0:
-                avg_duration = (
-                    sum(r.get("duration_seconds", 0) for r in recent) / total_runs_with_data
-                )
-                stats["avg_duration"] = round(avg_duration, 1)
+    stats["library_count"] = _get_library_count(request)
 
     return stats
 
@@ -118,6 +154,14 @@ async def dashboard(request: Request):
         except (ValueError, TypeError):
             pass
 
+    # Per-section config status for the compact config row
+    config_status = {
+        "trakt": len(get_section_errors(config, "trakt")) == 0,
+        "medusa": len(get_section_errors(config, "medusa")) == 0,
+        "sync_interval": config.sync.interval,
+        "notify_enabled": config.notify.enabled,
+    }
+
     return _templates(request).TemplateResponse(
         request,
         "dashboard.html",
@@ -129,6 +173,7 @@ async def dashboard(request: Request):
             sync_running=sync_running,
             stats=stats,
             next_sync=next_sync,
+            config_status=config_status,
             active_page="dashboard",
         ),
     )
@@ -138,11 +183,26 @@ async def dashboard(request: Request):
 async def dashboard_stats(request: Request):
     """Auto-refresh partial for dashboard stats overview."""
     stats = _get_dashboard_stats(request)
+
+    return _templates(request).TemplateResponse(
+        request,
+        "dashboard_stats.html",
+        context=template_context(
+            request,
+            stats=stats,
+        ),
+    )
+
+
+@router.get("/dashboard/status", response_class=HTMLResponse)
+async def dashboard_status(request: Request):
+    """Auto-refresh partial for dashboard status cards."""
     config = _holder(request).get()
     sync_status = _sync_status(request)
     health_snapshot = sync_status.snapshot() if sync_status else None
+    sync_manager = _sync_manager(request)
+    sync_running = sync_manager.is_running() if sync_manager else False
 
-    # Calculate next sync time
     next_sync = None
     if config.sync.interval > 0 and health_snapshot and health_snapshot.get("last_sync"):
         from datetime import datetime, timedelta
@@ -155,25 +215,12 @@ async def dashboard_stats(request: Request):
         except (ValueError, TypeError):
             pass
 
-    return _templates(request).TemplateResponse(
-        request,
-        "dashboard_stats.html",
-        context=template_context(
-            request,
-            stats=stats,
-            config=config,
-            next_sync=next_sync,
-        ),
-    )
-
-
-@router.get("/dashboard/status", response_class=HTMLResponse)
-async def dashboard_status(request: Request):
-    """Auto-refresh partial for dashboard status cards."""
-    sync_status = _sync_status(request)
-    health_snapshot = sync_status.snapshot() if sync_status else None
-    sync_manager = _sync_manager(request)
-    sync_running = sync_manager.is_running() if sync_manager else False
+    config_status = {
+        "trakt": len(get_section_errors(config, "trakt")) == 0,
+        "medusa": len(get_section_errors(config, "medusa")) == 0,
+        "sync_interval": config.sync.interval,
+        "notify_enabled": config.notify.enabled,
+    }
 
     return _templates(request).TemplateResponse(
         request,
@@ -182,6 +229,9 @@ async def dashboard_status(request: Request):
             request,
             health=health_snapshot,
             sync_running=sync_running,
+            config=config,
+            next_sync=next_sync,
+            config_status=config_status,
         ),
     )
 
@@ -226,7 +276,17 @@ async def save_trakt(request: Request):
         )
 
     # Parse sources from form
-    sources = _parse_sources_from_form(form)
+    try:
+        sources = _parse_sources_from_form(form)
+    except ConfigError as e:
+        error_html = (
+            '<div class="banner error" role="alert"><strong>Validation errors:</strong><ul>'
+        )
+        for err in e.errors:
+            error_html += f"<li>{escape(err)}</li>"
+        error_html += "</ul></div>"
+        return HTMLResponse(error_html, status_code=422)
+
     config_dict["trakt"]["sources"] = sources
 
     return _save_and_respond(request, config_dict, holder, "trakt")
@@ -431,6 +491,74 @@ async def sync_state(request: Request):
     if sync_manager is None:
         return JSONResponse({"running": False})
     return JSONResponse(sync_manager.get_state())
+
+
+def _format_sse_event(event: SyncEvent) -> str:
+    """Render a SyncEvent into the text/event-stream wire format."""
+    payload = json.dumps(event.data, separators=(",", ":"), default=str)
+    return f"id: {event.id}\nevent: {event.type}\ndata: {payload}\n\n"
+
+
+@router.get("/sync/events")
+async def sync_events(request: Request):
+    """Stream live sync progress events via Server-Sent Events."""
+    sync_manager = _sync_manager(request)
+    if sync_manager is None:
+        return JSONResponse({"error": "Sync manager not available"}, status_code=503)
+
+    broker = sync_manager.broker
+
+    # Resumable streams: client can send Last-Event-ID to replay what it missed.
+    last_event_id_header = request.headers.get("last-event-id") or request.query_params.get(
+        "last_event_id"
+    )
+    try:
+        after_id = int(last_event_id_header) if last_event_id_header else 0
+    except (TypeError, ValueError):
+        after_id = 0
+
+    subscription_queue, unsubscribe = broker.subscribe(after_id=after_id)
+
+    async def event_stream():
+        try:
+            # Hint EventSource to back off to 3s reconnects.
+            yield "retry: 3000\n\n"
+            # Immediately send a hello so clients know the stream is live.
+            hello = {
+                "run_id": broker.current_run_id,
+                "running": sync_manager.is_running(),
+            }
+            hello_json = json.dumps(hello, separators=(",", ":"))
+            yield f"event: sync.hello\ndata: {hello_json}\n\n"
+
+            heartbeat_interval = 15.0
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    event = await asyncio.to_thread(
+                        subscription_queue.get, True, heartbeat_interval
+                    )
+                except queue.Empty:
+                    yield ": ping\n\n"
+                    continue
+
+                if event is None:
+                    break
+
+                yield _format_sse_event(event)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            unsubscribe()
+
+    headers = {
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
+    }
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=headers)
 
 
 # --- Sync History ---
@@ -828,6 +956,7 @@ def _parse_sources_from_form(form) -> list[dict]:
     indexes = sorted(
         {int(match.group(1)) for key in form if (match := index_pattern.match(key)) is not None}
     )
+    validation_errors: list[str] = []
     for index in indexes:
         source_type = form.get(f"source_{index}_type")
         if source_type is None:
@@ -858,7 +987,62 @@ def _parse_sources_from_form(form) -> list[dict]:
         if medusa_opts:
             source_dict["medusa"] = medusa_opts
 
+        # Parse filter fields
+        def _split_comma(val: str) -> list[str]:
+            return [v.strip() for v in val.split(",") if v.strip()]
+
+        def _split_ints(val: str) -> list[int]:
+            result = []
+            for v in val.split(","):
+                v = v.strip()
+                if v:
+                    with contextlib.suppress(ValueError):
+                        result.append(int(v))
+            return result
+
+        filters_opts: dict = {}
+        bg = form.get(f"source_{index}_blacklisted_genres", "").strip()
+        bn = form.get(f"source_{index}_blacklisted_networks", "").strip()
+        bmy = form.get(f"source_{index}_blacklisted_min_year", "").strip()
+        bmaxy = form.get(f"source_{index}_blacklisted_max_year", "").strip()
+        btk = form.get(f"source_{index}_blacklisted_title_keywords", "").strip()
+        btids = form.get(f"source_{index}_blacklisted_tvdb_ids", "").strip()
+        ac = form.get(f"source_{index}_allowed_countries", "").strip()
+        al = form.get(f"source_{index}_allowed_languages", "").strip()
+
+        if bg:
+            filters_opts["blacklisted_genres"] = _split_comma(bg)
+        if bn:
+            filters_opts["blacklisted_networks"] = _split_comma(bn)
+        if bmy:
+            try:
+                filters_opts["blacklisted_min_year"] = int(bmy)
+            except ValueError:
+                validation_errors.append(
+                    f"Source #{index + 1}: blacklisted_min_year must be a valid integer."
+                )
+        if bmaxy:
+            try:
+                filters_opts["blacklisted_max_year"] = int(bmaxy)
+            except ValueError:
+                validation_errors.append(
+                    f"Source #{index + 1}: blacklisted_max_year must be a valid integer."
+                )
+        if btk:
+            filters_opts["blacklisted_title_keywords"] = _split_comma(btk)
+        if btids:
+            filters_opts["blacklisted_tvdb_ids"] = _split_ints(btids)
+        if ac:
+            filters_opts["allowed_countries"] = _split_comma(ac)
+        if al:
+            filters_opts["allowed_languages"] = _split_comma(al)
+        if filters_opts:
+            source_dict["filters"] = filters_opts
+
         sources.append(source_dict)
+
+    if validation_errors:
+        raise ConfigError(validation_errors)
     return sources
 
 

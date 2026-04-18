@@ -305,6 +305,48 @@ class TestHealthSnapshotSchema:
         assert not errors
 
 
+class TestSyncStatusGetTotals:
+    def test_get_totals_empty(self, sync_status):
+        totals = sync_status.get_totals()
+        assert totals["total_runs"] == 0
+        assert totals["total_added"] == 0
+        assert totals["success_rate"] == 0
+
+    def test_get_totals_in_memory(self, sync_status):
+        sync_status.update(SyncResult(added=3, failed=0, success=True))
+        sync_status.update(SyncResult(added=2, failed=1, success=False))
+        totals = sync_status.get_totals()
+        assert totals["total_runs"] == 2
+        assert totals["total_added"] == 5
+        assert totals["total_failed"] == 1
+        assert totals["success_rate"] == 50
+
+    def test_get_totals_with_db(self, db_sync_status):
+        db_sync_status.update(SyncResult(added=4, queued=1, failed=0, success=True))
+        db_sync_status.update(SyncResult(added=1, queued=0, failed=2, success=False))
+        totals = db_sync_status.get_totals()
+        assert totals["total_runs"] == 2
+        assert totals["total_added"] == 5
+        assert totals["total_queued"] == 1
+        assert totals["total_failed"] == 2
+        assert totals["success_rate"] == 50
+
+    def test_get_totals_falls_back_on_db_error(self):
+        class BrokenTotalsDB:
+            def record(self, result, timestamp):
+                return None
+
+            def get_totals(self):
+                raise RuntimeError("db totals failed")
+
+        sync_status = SyncStatus(_db=BrokenTotalsDB())
+        sync_status.update(SyncResult(added=7, failed=0, success=True))
+        totals = sync_status.get_totals()
+        assert totals["total_runs"] == 1
+        assert totals["total_added"] == 7
+        assert totals["success_rate"] == 100
+
+
 class TestSyncStatusWithDB:
     """Tests for SyncStatus backed by SyncHistoryDB."""
 

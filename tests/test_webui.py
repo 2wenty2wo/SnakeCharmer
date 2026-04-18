@@ -1,6 +1,7 @@
 import json
 import threading
 import time
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.config import (
     AppConfig,
+    ConfigError,
     HealthConfig,
     MedusaConfig,
     NotifyConfig,
@@ -115,8 +117,8 @@ class TestDashboard:
     def test_dashboard_shows_config_summary(self, tmp_path):
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
-        assert "testuser" in response.text
         assert "trending" in response.text
+        assert "source-overview-card" in response.text
 
     def test_dashboard_renders_added_show_titles_instead_of_dict_repr(self, tmp_path):
         config = _make_config()
@@ -141,7 +143,7 @@ class TestDashboard:
         assert "Example Show" in response.text
         assert "{&#39;title&#39;" not in response.text
 
-    def test_dashboard_stats_partial_keeps_poller_and_timer_guard(self, tmp_path):
+    def test_dashboard_stats_partial_keeps_poller(self, tmp_path):
         config = _make_config(sync=SyncConfig(interval=300))
         config_path = str(tmp_path / "config.yaml")
         save_app_config(config, config_path)
@@ -158,7 +160,6 @@ class TestDashboard:
         assert 'id="dashboard-stats-poller"' in response.text
         assert 'hx-get="/dashboard/stats"' in response.text
         assert 'hx-trigger="every 30s"' in response.text
-        assert "window.__dashboardNextSyncTimer" in response.text
 
     def test_dashboard_calculates_next_sync_and_pending_count(self, tmp_path):
         config = _make_config(sync=SyncConfig(interval=120))
@@ -177,28 +178,38 @@ class TestDashboard:
 
         response = client.get("/")
         assert response.status_code == 200
-        assert 'quick-action-badge">1<' in response.text
+        assert "Pending Approval" in response.text
+        assert "1 show" in response.text
         assert 'data-next-sync="' in response.text
 
-    def test_dashboard_stats_handles_invalid_last_sync_timestamp(self, tmp_path):
+    def test_dashboard_stats_handles_no_sync_data(self, tmp_path):
         config = _make_config(sync=SyncConfig(interval=120))
         client, _, _ = _create_client(tmp_path, config=config, with_sync=True)
 
-        class _BadSyncStatus:
+        class _EmptySyncStatus:
             def get_history(self, limit=5, offset=0):
                 return []
 
             def get_total_runs(self):
                 return 0
 
+            def get_totals(self):
+                return {
+                    "total_runs": 0,
+                    "total_added": 0,
+                    "total_queued": 0,
+                    "total_failed": 0,
+                    "success_rate": 0,
+                }
+
             def snapshot(self):
                 return {"last_sync": {"timestamp": "not-a-date"}}
 
-        client.app.state.sync_status = _BadSyncStatus()
+        client.app.state.sync_status = _EmptySyncStatus()
 
         response = client.get("/dashboard/stats")
         assert response.status_code == 200
-        assert "Next Sync:" not in response.text
+        assert "Total Syncs" in response.text
 
     def test_dashboard_handles_invalid_last_sync_timestamp(self, tmp_path):
         config = _make_config(sync=SyncConfig(interval=120))
@@ -210,6 +221,15 @@ class TestDashboard:
 
             def get_total_runs(self):
                 return 0
+
+            def get_totals(self):
+                return {
+                    "total_runs": 0,
+                    "total_added": 0,
+                    "total_queued": 0,
+                    "total_failed": 0,
+                    "success_rate": 0,
+                }
 
             def snapshot(self):
                 return {
@@ -230,6 +250,121 @@ class TestDashboard:
         response = client.get("/")
         assert response.status_code == 200
         assert "next-sync-timestamp" not in response.text
+
+    def test_dashboard_shows_dry_run_banner(self, tmp_path):
+        config = _make_config(sync=SyncConfig(dry_run=True))
+        client, _, _ = _create_client(tmp_path, config=config)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Dry Run Mode Active" in response.text
+
+    def test_dashboard_hides_dry_run_banner_when_off(self, tmp_path):
+        config = _make_config(sync=SyncConfig(dry_run=False))
+        client, _, _ = _create_client(tmp_path, config=config)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Dry Run Mode Active" not in response.text
+
+    def test_dashboard_shows_config_status_row(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "config-status-badge" in response.text
+        assert "Trakt" in response.text
+        assert "Medusa" in response.text
+        assert "Notify" in response.text
+
+    def test_dashboard_shows_sources_overview(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "source-overview-card" in response.text
+        assert "trending" in response.text
+
+    def test_dashboard_shows_all_time_stats(self, tmp_path):
+        config = _make_config()
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(SyncResult(added=5, success=True))
+        sync_status.update(SyncResult(added=3, success=True))
+        app = create_app(holder, sync_status=sync_status)
+        client = _wrap_client_with_csrf(TestClient(app))
+
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Shows Added" in response.text
+        assert "Total Syncs" in response.text
+        assert "Success Rate" in response.text
+        assert "In Library" in response.text
+
+    def test_dashboard_no_quick_actions_section(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Quick Actions" not in response.text
+
+    def test_dashboard_no_config_cards(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "Edit Configuration" not in response.text
+        assert "Edit Settings" not in response.text
+        assert "Edit Notifications" not in response.text
+
+    def test_dashboard_status_partial_includes_next_sync(self, tmp_path):
+        config = _make_config(sync=SyncConfig(interval=300))
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = SyncStatus()
+        sync_status.update(SyncResult(success=True, duration_seconds=2.5))
+        app = create_app(holder, sync_status=sync_status)
+        client = _wrap_client_with_csrf(TestClient(app))
+
+        response = client.get("/dashboard/status")
+        assert response.status_code == 200
+        assert "data-next-sync" in response.text
+
+    def test_dashboard_status_swallows_invalid_last_sync_timestamp(self, tmp_path):
+        """A malformed last_sync.timestamp is caught and next_sync stays unset."""
+        config = _make_config(sync=SyncConfig(interval=300))
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = MagicMock()
+        sync_status.snapshot.return_value = {
+            "status": "ok",
+            "uptime_seconds": 1.0,
+            "last_sync": {
+                # Not parseable by datetime.fromisoformat → triggers the except branch.
+                "timestamp": "not-a-real-timestamp",
+                "duration_seconds": 1.0,
+                "added": 0,
+                "queued": 0,
+                "skipped": 0,
+                "failed": 0,
+                "unique_shows": 0,
+                "already_in_medusa": 0,
+            },
+        }
+        app = create_app(holder, sync_status=sync_status)
+        client = _wrap_client_with_csrf(TestClient(app))
+
+        response = client.get("/dashboard/status")
+        assert response.status_code == 200
+        # The except branch swallowed the parse failure: next_sync is None and the
+        # template omits the data-next-sync attribute entirely.
+        assert "data-next-sync" not in response.text
+        # The malformed timestamp is still shown verbatim in the last-sync footer.
+        assert "not-a-real-timestamp" in response.text
 
 
 class TestTraktConfig:
@@ -357,6 +492,47 @@ class TestTraktConfig:
         )
         assert response.status_code == 422
         assert "limit must be a valid integer" in response.text.lower()
+
+    def test_save_trakt_returns_banner_when_source_filters_invalid(self, tmp_path):
+        """Bad year filter on a source raises ConfigError; route renders the error banner."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_blacklisted_min_year": "not-a-year",
+            },
+        )
+        assert response.status_code == 422
+        assert "validation errors" in response.text.lower()
+        assert "blacklisted_min_year must be a valid integer" in response.text
+
+    def test_save_trakt_escapes_filter_error_messages(self, tmp_path):
+        """ConfigError messages from filters are HTML-escaped before being rendered."""
+        from unittest.mock import patch
+
+        client, _, _ = _create_client(tmp_path)
+        with patch(
+            "app.webui.routes._parse_sources_from_form",
+            side_effect=ConfigError(["<script>boom()</script>"]),
+        ):
+            response = client.post(
+                "/config/trakt",
+                data={
+                    "client_id": "test_id",
+                    "client_secret": "test_secret",
+                    "username": "testuser",
+                    "limit": "50",
+                    "source_0_type": "trending",
+                },
+            )
+        assert response.status_code == 422
+        assert "<script>boom()</script>" not in response.text
+        assert "&lt;script&gt;boom()&lt;/script&gt;" in response.text
 
     def test_save_trakt_rejects_missing_csrf_token(self, tmp_path):
         from fastapi.testclient import TestClient
@@ -914,8 +1090,8 @@ class TestDashboardStatus:
         client, _, _ = _create_client(tmp_path, with_sync=True)
         response = client.get("/dashboard/status")
         assert response.status_code == 200
-        assert "Status" in response.text
-        assert "unknown" in response.text
+        assert "status-unknown" in response.text
+        assert "Unknown" in response.text
 
     def test_dashboard_status_with_sync_result(self, tmp_path):
         config = _make_config()
@@ -932,7 +1108,7 @@ class TestDashboardStatus:
 
         response = client.get("/dashboard/status")
         assert response.status_code == 200
-        assert "Last Sync" in response.text
+        assert "status-ok" in response.text
         assert "3" in response.text  # added count
 
 
@@ -1937,6 +2113,46 @@ class TestRouteHelpers:
         request = _FakeRequest(app)
         assert oauth_module._templates(request) is app.state.templates
 
+    def test_get_library_count_caches_failures_briefly(self, tmp_path):
+        """A failed Medusa fetch is cached briefly to avoid repeated timeout probes."""
+        client, _, _ = _create_client(tmp_path)
+        app = client.app
+
+        class _FakeRequest:
+            def __init__(self, app):
+                self.app = app
+
+        request = _FakeRequest(app)
+        prev_cache = webui_routes._LIBRARY_COUNT_CACHE
+        prev_failure_cache = webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT
+        try:
+            webui_routes._LIBRARY_COUNT_CACHE = None
+            webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = None
+            mock_medusa = MagicMock()
+            mock_medusa.get_existing_tvdb_ids.side_effect = [
+                requests.ConnectionError("down"),
+                {301, 302},
+            ]
+            with patch("app.webui.routes.MedusaClient") as mock_cls:
+                mock_cls.return_value.__enter__.return_value = mock_medusa
+                assert webui_routes._get_library_count(request) is None
+                assert webui_routes._get_library_count(request) is None
+            assert mock_medusa.get_existing_tvdb_ids.call_count == 1
+
+            webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = (
+                time.monotonic() - webui_routes._LIBRARY_COUNT_FAILURE_TTL - 1
+            )
+            with patch("app.webui.routes.MedusaClient") as mock_cls2:
+                mock_cls2.return_value.__enter__.return_value = mock_medusa
+                assert webui_routes._get_library_count(request) == 2
+            assert mock_medusa.get_existing_tvdb_ids.call_count == 2
+            mock_medusa.get_existing_tvdb_ids.assert_called_with(
+                request_timeout=webui_routes._LIBRARY_COUNT_PROBE_TIMEOUT_SECONDS
+            )
+        finally:
+            webui_routes._LIBRARY_COUNT_CACHE = prev_cache
+            webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = prev_failure_cache
+
     def test_parse_sources_from_form_skips_missing_type(self):
         form = {
             "source_0_type": "trending",
@@ -1956,6 +2172,46 @@ class TestRouteHelpers:
         form = _NoneTypeForm({"source_0_type": "trending"})
         parsed = webui_routes._parse_sources_from_form(form)
         assert parsed == []
+
+    def test_parse_sources_from_form_reads_filters(self):
+        form = {
+            "source_0_type": "trending",
+            "source_0_blacklisted_genres": "reality, talk-show",
+            "source_0_blacklisted_networks": "youtube",
+            "source_0_blacklisted_min_year": "2010",
+            "source_0_blacklisted_max_year": "2020",
+            "source_0_blacklisted_title_keywords": "untitled, barbie",
+            "source_0_blacklisted_tvdb_ids": "123, 456",
+            "source_0_allowed_countries": "us, gb",
+            "source_0_allowed_languages": "en",
+        }
+        parsed = webui_routes._parse_sources_from_form(form)
+        assert len(parsed) == 1
+        filters = parsed[0]["filters"]
+        assert filters["blacklisted_genres"] == ["reality", "talk-show"]
+        assert filters["blacklisted_networks"] == ["youtube"]
+        assert filters["blacklisted_min_year"] == 2010
+        assert filters["blacklisted_max_year"] == 2020
+        assert filters["blacklisted_title_keywords"] == ["untitled", "barbie"]
+        assert filters["blacklisted_tvdb_ids"] == [123, 456]
+        assert filters["allowed_countries"] == ["us", "gb"]
+        assert filters["allowed_languages"] == ["en"]
+
+    def test_parse_sources_from_form_omits_empty_filters(self):
+        form = {"source_0_type": "trending"}
+        parsed = webui_routes._parse_sources_from_form(form)
+        assert "filters" not in parsed[0]
+
+    def test_parse_sources_from_form_rejects_invalid_year_filters(self):
+        form = {
+            "source_0_type": "trending",
+            "source_0_blacklisted_min_year": "20x5",
+            "source_0_blacklisted_max_year": "y2030",
+        }
+        with pytest.raises(ConfigError) as exc:
+            webui_routes._parse_sources_from_form(form)
+        assert "Source #1: blacklisted_min_year must be a valid integer." in exc.value.errors
+        assert "Source #1: blacklisted_max_year must be a valid integer." in exc.value.errors
 
 
 class TestSyncStatusHistory:
@@ -2609,7 +2865,8 @@ class TestSyncManagerGetState:
         sm = SyncManager(config_holder=holder, sync_status=SyncStatus())
 
         state = sm.get_state()
-        assert state == {"running": False}
+        assert state["running"] is False
+        assert state["run_id"] == 0
 
     def test_get_state_with_result(self, tmp_path):
         config = _make_config()
@@ -2753,16 +3010,16 @@ class TestDesignSystemCompliance:
 
         assert response.status_code == 200
         assert "btn-primary" in response.text
-        assert "quick-action-card" in response.text
+        assert "config-status-badge" in response.text
 
     def test_cards_have_hover_classes(self, tmp_path):
-        """Verify cards have interactive class for hover effects."""
+        """Verify cards have hover-capable classes."""
         client, _, _ = _create_client(tmp_path)
         response = client.get("/")
 
         assert response.status_code == 200
-        assert "card" in response.text
-        assert "interactive" in response.text
+        assert "source-overview-card" in response.text
+        assert "stat-hero" in response.text
 
     def test_empty_states_use_lucide_icons(self, tmp_path):
         """Verify empty states use Lucide icons, not emoji."""
@@ -2938,3 +3195,364 @@ class TestMalformedInputs:
         )
         assert response.status_code == 200
         assert "Invalid OAuth polling parameters" in response.text
+
+
+# ---------------------------------------------------------------------------
+# _format_sse_event helper
+# ---------------------------------------------------------------------------
+
+
+class TestFormatSseEvent:
+    def test_basic_format(self):
+        from app.sync_events import SyncEvent
+
+        event = SyncEvent(id=5, type="sync.started", data={"run_id": 1}, ts=0.0)
+        result = webui_routes._format_sse_event(event)
+        assert result == 'id: 5\nevent: sync.started\ndata: {"run_id":1}\n\n'
+
+    def test_special_chars_in_data_are_serialized(self):
+        from app.sync_events import SyncEvent
+
+        event = SyncEvent(id=1, type="sync.log", data={"msg": 'he said "hi"'}, ts=0.0)
+        result = webui_routes._format_sse_event(event)
+        assert "sync.log" in result
+        assert "he said" in result
+
+    def test_non_serializable_falls_back_to_str(self):
+        from app.sync_events import SyncEvent
+
+        dt = datetime(2024, 1, 1)
+        event = SyncEvent(id=2, type="sync.log", data={"ts": dt}, ts=0.0)
+        result = webui_routes._format_sse_event(event)
+        assert "2024-01-01" in result
+
+
+# ---------------------------------------------------------------------------
+# _get_library_count caching
+# ---------------------------------------------------------------------------
+
+
+class TestGetLibraryCount:
+    @pytest.fixture(autouse=True)
+    def reset_cache(self):
+        """Reset module-level cache globals before every test."""
+        webui_routes._LIBRARY_COUNT_CACHE = None
+        webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = None
+        yield
+        webui_routes._LIBRARY_COUNT_CACHE = None
+        webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = None
+
+    def _mock_request(self, tmp_path, medusa_url="http://localhost:8081"):
+        """Build a minimal mock request whose app state satisfies _get_library_count."""
+        config = _make_config(medusa=MedusaConfig(url=medusa_url, api_key="key"))
+        holder = MagicMock()
+        holder.get.return_value = config
+        req = MagicMock()
+        req.app.state.config_holder = holder
+        return req
+
+    def test_returns_count_on_success(self, tmp_path):
+        req = self._mock_request(tmp_path)
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.return_value = {1, 2, 3}
+            result = webui_routes._get_library_count(req)
+        assert result == 3
+
+    def test_caches_successful_result(self, tmp_path):
+        req = self._mock_request(tmp_path)
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.return_value = {1, 2, 3}
+            first = webui_routes._get_library_count(req)
+            second = webui_routes._get_library_count(req)
+        assert first == second == 3
+        # MedusaClient constructed only once — second call hits cache.
+        assert MockClient.call_count == 1
+
+    def test_returns_cached_value_within_ttl(self, tmp_path):
+        import time as _time
+
+        req = self._mock_request(tmp_path)
+        webui_routes._LIBRARY_COUNT_CACHE = (42, _time.monotonic())
+        result = webui_routes._get_library_count(req)
+        assert result == 42
+
+    def test_cache_refreshes_after_ttl(self, tmp_path):
+        import time as _time
+
+        req = self._mock_request(tmp_path)
+        # Plant a stale cache entry (TTL + 1 seconds old).
+        webui_routes._LIBRARY_COUNT_CACHE = (
+            99,
+            _time.monotonic() - webui_routes._LIBRARY_COUNT_TTL - 1,
+        )
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.return_value = {10, 20}
+            result = webui_routes._get_library_count(req)
+        assert result == 2  # fresh fetch, not the stale 99
+
+    def test_returns_none_on_exception(self, tmp_path):
+        req = self._mock_request(tmp_path)
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.side_effect = Exception("unreachable")
+            result = webui_routes._get_library_count(req)
+        assert result is None
+
+    def test_caches_failure_briefly(self, tmp_path):
+        req = self._mock_request(tmp_path)
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.side_effect = Exception("down")
+            webui_routes._get_library_count(req)
+            # Second call within failure TTL skips Medusa entirely.
+            result = webui_routes._get_library_count(req)
+        assert result is None
+        assert MockClient.call_count == 1
+
+    def test_failure_cache_expires_after_ttl(self, tmp_path):
+        import time as _time
+
+        req = self._mock_request(tmp_path)
+        # Plant a stale failure entry.
+        webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = (
+            _time.monotonic() - webui_routes._LIBRARY_COUNT_FAILURE_TTL - 1
+        )
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.return_value = {7}
+            result = webui_routes._get_library_count(req)
+        assert result == 1
+
+    def test_returns_none_when_no_medusa_url(self, tmp_path):
+        config = _make_config(medusa=MedusaConfig(url="", api_key="key"))
+        holder = MagicMock()
+        holder.get.return_value = config
+        req = MagicMock()
+        req.app.state.config_holder = holder
+        result = webui_routes._get_library_count(req)
+        assert result is None
+
+    def test_returns_none_when_no_medusa_api_key(self, tmp_path):
+        config = _make_config(medusa=MedusaConfig(url="http://localhost:8081", api_key=""))
+        holder = MagicMock()
+        holder.get.return_value = config
+        req = MagicMock()
+        req.app.state.config_holder = holder
+        result = webui_routes._get_library_count(req)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# sync/events SSE endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestSyncEventsSSE:
+    def test_returns_503_when_no_sync_manager(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)  # no with_sync
+        response = client.get("/sync/events")
+        assert response.status_code == 503
+        assert response.json()["error"] == "Sync manager not available"
+
+    def test_streams_retry_and_hello_events(self, tmp_path):
+        import queue as q_module
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        # Pre-fill a queue with a None sentinel so the stream exits immediately.
+        sentinel_q = q_module.Queue()
+        sentinel_q.put(None)
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            return_value=(sentinel_q, lambda: None),
+        ):
+            response = client.get("/sync/events")
+
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers["content-type"]
+        assert "retry: 3000" in response.text
+        assert "sync.hello" in response.text
+
+    def test_last_event_id_header_forwarded_as_after_id(self, tmp_path):
+        import queue as q_module
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        captured: list[int] = []
+
+        def _capturing_subscribe(maxsize=1000, after_id=0):
+            captured.append(after_id)
+            q = q_module.Queue()
+            q.put(None)
+            return q, lambda: None
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            side_effect=_capturing_subscribe,
+        ):
+            client.get("/sync/events", headers={"last-event-id": "42"})
+
+        assert captured == [42]
+
+    def test_invalid_last_event_id_defaults_to_zero(self, tmp_path):
+        import queue as q_module
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        captured: list[int] = []
+
+        def _capturing_subscribe(maxsize=1000, after_id=0):
+            captured.append(after_id)
+            q = q_module.Queue()
+            q.put(None)
+            return q, lambda: None
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            side_effect=_capturing_subscribe,
+        ):
+            client.get("/sync/events", headers={"last-event-id": "not-a-number"})
+
+        assert captured == [0]
+
+    def test_sse_response_includes_proper_headers(self, tmp_path):
+        import queue as q_module
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+        sentinel_q = q_module.Queue()
+        sentinel_q.put(None)
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            return_value=(sentinel_q, lambda: None),
+        ):
+            response = client.get("/sync/events")
+
+        assert response.headers.get("cache-control") == "no-cache, no-transform"
+        assert response.headers.get("x-accel-buffering") == "no"
+
+    def test_streams_real_event_then_heartbeat_then_exit(self, tmp_path):
+        """Cover live-event yield, queue.Empty heartbeat, and the None sentinel exit."""
+        import queue as q_module
+
+        from app.sync_events import SyncEvent
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        class _ScriptedQueue:
+            def __init__(self, script):
+                self._script = list(script)
+
+            def get(self, block, timeout):
+                if not self._script:
+                    return None
+                item = self._script.pop(0)
+                if item == "EMPTY":
+                    raise q_module.Empty
+                return item
+
+        scripted = _ScriptedQueue(
+            [
+                SyncEvent(id=7, type="sync.progress", data={"step": "fetching"}, ts=0.0),
+                "EMPTY",
+                None,
+            ]
+        )
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            return_value=(scripted, lambda: None),
+        ):
+            response = client.get("/sync/events")
+
+        assert response.status_code == 200
+        # Real event was rendered through _format_sse_event.
+        assert "event: sync.progress" in response.text
+        assert '"step":"fetching"' in response.text
+        # queue.Empty timeout produced a heartbeat ping.
+        assert ": ping" in response.text
+
+    def test_disconnected_client_breaks_event_loop(self, tmp_path):
+        """When request.is_disconnected() returns True, the stream loop exits cleanly."""
+        import queue as q_module
+
+        from starlette.requests import Request as StarletteRequest
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        sentinel_q = q_module.Queue()
+
+        async def _is_disconnected(self):
+            return True
+
+        with (
+            patch.object(
+                client.app.state.sync_manager.broker,
+                "subscribe",
+                return_value=(sentinel_q, lambda: None),
+            ),
+            patch.object(StarletteRequest, "is_disconnected", _is_disconnected),
+        ):
+            response = client.get("/sync/events")
+
+        assert response.status_code == 200
+        # The hello frame still made it through before the loop exited via the
+        # is_disconnected break; no ping or sentinel-driven termination expected.
+        assert "sync.hello" in response.text
+        # No ping frame because the loop never reached the queue.get heartbeat.
+        assert ": ping" not in response.text
+
+    def test_event_stream_handles_cancelled_error(self, tmp_path):
+        """Drive the generator directly to cover the live-loop body and CancelledError branch."""
+        import asyncio
+        import contextlib
+        import queue as q_module
+
+        from app.sync_events import SyncEvent
+        from app.webui.routes import sync_events
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        live_q: q_module.Queue = q_module.Queue()
+        live_q.put(SyncEvent(id=1, type="sync.tick", data={"n": 1}, ts=0.0))
+
+        class _StubRequest:
+            def __init__(self, app):
+                self.app = app
+                self.headers = {}
+                self.query_params = {}
+
+            async def is_disconnected(self):
+                return False
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            return_value=(live_q, lambda: None),
+        ):
+
+            async def _drive():
+                stub = _StubRequest(client.app)
+                response = await sync_events(stub)
+                gen = response.body_iterator
+                # Consume retry + hello frames.
+                await gen.__anext__()  # "retry: 3000\n\n"
+                await gen.__anext__()  # "event: sync.hello\n..."
+                # Consume the live event — this drives the loop through the
+                # try/await asyncio.to_thread/get path and the yield event branch.
+                live_frame = await gen.__anext__()
+                assert "sync.tick" in live_frame
+                # Now throw CancelledError to exercise the except-CancelledError clause.
+                with contextlib.suppress(StopAsyncIteration, asyncio.CancelledError):
+                    await gen.athrow(asyncio.CancelledError())
+
+            asyncio.run(_drive())
