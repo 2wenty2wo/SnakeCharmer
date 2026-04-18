@@ -331,6 +331,41 @@ class TestDashboard:
         assert response.status_code == 200
         assert "data-next-sync" in response.text
 
+    def test_dashboard_status_swallows_invalid_last_sync_timestamp(self, tmp_path):
+        """A malformed last_sync.timestamp is caught and next_sync stays unset."""
+        config = _make_config(sync=SyncConfig(interval=300))
+        config_path = str(tmp_path / "config.yaml")
+        save_app_config(config, config_path)
+        config.config_dir = str(tmp_path)
+
+        holder = ConfigHolder(config=config, config_path=config_path)
+        sync_status = MagicMock()
+        sync_status.snapshot.return_value = {
+            "status": "ok",
+            "uptime_seconds": 1.0,
+            "last_sync": {
+                # Not parseable by datetime.fromisoformat → triggers the except branch.
+                "timestamp": "not-a-real-timestamp",
+                "duration_seconds": 1.0,
+                "added": 0,
+                "queued": 0,
+                "skipped": 0,
+                "failed": 0,
+                "unique_shows": 0,
+                "already_in_medusa": 0,
+            },
+        }
+        app = create_app(holder, sync_status=sync_status)
+        client = _wrap_client_with_csrf(TestClient(app))
+
+        response = client.get("/dashboard/status")
+        assert response.status_code == 200
+        # The except branch swallowed the parse failure: next_sync is None and the
+        # template omits the data-next-sync attribute entirely.
+        assert "data-next-sync" not in response.text
+        # The malformed timestamp is still shown verbatim in the last-sync footer.
+        assert "not-a-real-timestamp" in response.text
+
 
 class TestTraktConfig:
     def test_get_trakt_page(self, tmp_path):
@@ -457,6 +492,47 @@ class TestTraktConfig:
         )
         assert response.status_code == 422
         assert "limit must be a valid integer" in response.text.lower()
+
+    def test_save_trakt_returns_banner_when_source_filters_invalid(self, tmp_path):
+        """Bad year filter on a source raises ConfigError; route renders the error banner."""
+        client, _, _ = _create_client(tmp_path)
+        response = client.post(
+            "/config/trakt",
+            data={
+                "client_id": "test_id",
+                "client_secret": "test_secret",
+                "username": "testuser",
+                "limit": "50",
+                "source_0_type": "trending",
+                "source_0_blacklisted_min_year": "not-a-year",
+            },
+        )
+        assert response.status_code == 422
+        assert "validation errors" in response.text.lower()
+        assert "blacklisted_min_year must be a valid integer" in response.text
+
+    def test_save_trakt_escapes_filter_error_messages(self, tmp_path):
+        """ConfigError messages from filters are HTML-escaped before being rendered."""
+        from unittest.mock import patch
+
+        client, _, _ = _create_client(tmp_path)
+        with patch(
+            "app.webui.routes._parse_sources_from_form",
+            side_effect=ConfigError(["<script>boom()</script>"]),
+        ):
+            response = client.post(
+                "/config/trakt",
+                data={
+                    "client_id": "test_id",
+                    "client_secret": "test_secret",
+                    "username": "testuser",
+                    "limit": "50",
+                    "source_0_type": "trending",
+                },
+            )
+        assert response.status_code == 422
+        assert "<script>boom()</script>" not in response.text
+        assert "&lt;script&gt;boom()&lt;/script&gt;" in response.text
 
     def test_save_trakt_rejects_missing_csrf_token(self, tmp_path):
         from fastapi.testclient import TestClient
@@ -3362,3 +3438,121 @@ class TestSyncEventsSSE:
 
         assert response.headers.get("cache-control") == "no-cache, no-transform"
         assert response.headers.get("x-accel-buffering") == "no"
+
+    def test_streams_real_event_then_heartbeat_then_exit(self, tmp_path):
+        """Cover live-event yield, queue.Empty heartbeat, and the None sentinel exit."""
+        import queue as q_module
+
+        from app.sync_events import SyncEvent
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        class _ScriptedQueue:
+            def __init__(self, script):
+                self._script = list(script)
+
+            def get(self, block, timeout):
+                if not self._script:
+                    return None
+                item = self._script.pop(0)
+                if item == "EMPTY":
+                    raise q_module.Empty
+                return item
+
+        scripted = _ScriptedQueue(
+            [
+                SyncEvent(id=7, type="sync.progress", data={"step": "fetching"}, ts=0.0),
+                "EMPTY",
+                None,
+            ]
+        )
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            return_value=(scripted, lambda: None),
+        ):
+            response = client.get("/sync/events")
+
+        assert response.status_code == 200
+        # Real event was rendered through _format_sse_event.
+        assert "event: sync.progress" in response.text
+        assert '"step":"fetching"' in response.text
+        # queue.Empty timeout produced a heartbeat ping.
+        assert ": ping" in response.text
+
+    def test_disconnected_client_breaks_event_loop(self, tmp_path):
+        """When request.is_disconnected() returns True, the stream loop exits cleanly."""
+        import queue as q_module
+
+        from starlette.requests import Request as StarletteRequest
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        sentinel_q = q_module.Queue()
+
+        async def _is_disconnected(self):
+            return True
+
+        with (
+            patch.object(
+                client.app.state.sync_manager.broker,
+                "subscribe",
+                return_value=(sentinel_q, lambda: None),
+            ),
+            patch.object(StarletteRequest, "is_disconnected", _is_disconnected),
+        ):
+            response = client.get("/sync/events")
+
+        assert response.status_code == 200
+        # The hello frame still made it through before the loop exited via the
+        # is_disconnected break; no ping or sentinel-driven termination expected.
+        assert "sync.hello" in response.text
+        # No ping frame because the loop never reached the queue.get heartbeat.
+        assert ": ping" not in response.text
+
+    def test_event_stream_handles_cancelled_error(self, tmp_path):
+        """Drive the generator directly to cover the live-loop body and CancelledError branch."""
+        import asyncio
+        import contextlib
+        import queue as q_module
+
+        from app.sync_events import SyncEvent
+        from app.webui.routes import sync_events
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        live_q: q_module.Queue = q_module.Queue()
+        live_q.put(SyncEvent(id=1, type="sync.tick", data={"n": 1}, ts=0.0))
+
+        class _StubRequest:
+            def __init__(self, app):
+                self.app = app
+                self.headers = {}
+                self.query_params = {}
+
+            async def is_disconnected(self):
+                return False
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            return_value=(live_q, lambda: None),
+        ):
+
+            async def _drive():
+                stub = _StubRequest(client.app)
+                response = await sync_events(stub)
+                gen = response.body_iterator
+                # Consume retry + hello frames.
+                await gen.__anext__()  # "retry: 3000\n\n"
+                await gen.__anext__()  # "event: sync.hello\n..."
+                # Consume the live event — this drives the loop through the
+                # try/await asyncio.to_thread/get path and the yield event branch.
+                live_frame = await gen.__anext__()
+                assert "sync.tick" in live_frame
+                # Now throw CancelledError to exercise the except-CancelledError clause.
+                with contextlib.suppress(StopAsyncIteration, asyncio.CancelledError):
+                    await gen.athrow(asyncio.CancelledError())
+
+            asyncio.run(_drive())
