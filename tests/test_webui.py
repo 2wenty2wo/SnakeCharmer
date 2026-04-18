@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.config import (
     AppConfig,
+    ConfigError,
     HealthConfig,
     MedusaConfig,
     NotifyConfig,
@@ -2035,8 +2036,8 @@ class TestRouteHelpers:
         request = _FakeRequest(app)
         assert oauth_module._templates(request) is app.state.templates
 
-    def test_get_library_count_does_not_cache_failures(self, tmp_path):
-        """A failed Medusa fetch must not block retries until the success TTL."""
+    def test_get_library_count_caches_failures_briefly(self, tmp_path):
+        """A failed Medusa fetch is cached briefly to avoid repeated timeout probes."""
         client, _, _ = _create_client(tmp_path)
         app = client.app
 
@@ -2046,8 +2047,10 @@ class TestRouteHelpers:
 
         request = _FakeRequest(app)
         prev_cache = webui_routes._LIBRARY_COUNT_CACHE
+        prev_failure_cache = webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT
         try:
             webui_routes._LIBRARY_COUNT_CACHE = None
+            webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = None
             mock_medusa = MagicMock()
             mock_medusa.get_existing_tvdb_ids.side_effect = [
                 requests.ConnectionError("down"),
@@ -2056,15 +2059,22 @@ class TestRouteHelpers:
             with patch("app.webui.routes.MedusaClient") as mock_cls:
                 mock_cls.return_value.__enter__.return_value = mock_medusa
                 assert webui_routes._get_library_count(request) is None
-                assert webui_routes._get_library_count(request) == 2
-            assert mock_medusa.get_existing_tvdb_ids.call_count == 2
+                assert webui_routes._get_library_count(request) is None
+            assert mock_medusa.get_existing_tvdb_ids.call_count == 1
 
+            webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = (
+                time.monotonic() - webui_routes._LIBRARY_COUNT_FAILURE_TTL - 1
+            )
             with patch("app.webui.routes.MedusaClient") as mock_cls2:
                 mock_cls2.return_value.__enter__.return_value = mock_medusa
                 assert webui_routes._get_library_count(request) == 2
             assert mock_medusa.get_existing_tvdb_ids.call_count == 2
+            mock_medusa.get_existing_tvdb_ids.assert_called_with(
+                request_timeout=webui_routes._LIBRARY_COUNT_PROBE_TIMEOUT_SECONDS
+            )
         finally:
             webui_routes._LIBRARY_COUNT_CACHE = prev_cache
+            webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = prev_failure_cache
 
     def test_parse_sources_from_form_skips_missing_type(self):
         form = {
@@ -2114,6 +2124,23 @@ class TestRouteHelpers:
         form = {"source_0_type": "trending"}
         parsed = webui_routes._parse_sources_from_form(form)
         assert "filters" not in parsed[0]
+
+    def test_parse_sources_from_form_rejects_invalid_year_filters(self):
+        form = {
+            "source_0_type": "trending",
+            "source_0_blacklisted_min_year": "20x5",
+            "source_0_blacklisted_max_year": "y2030",
+        }
+        with pytest.raises(ConfigError) as exc:
+            webui_routes._parse_sources_from_form(form)
+        assert (
+            "Source #1: blacklisted_min_year must be a valid integer."
+            in exc.value.errors
+        )
+        assert (
+            "Source #1: blacklisted_max_year must be a valid integer."
+            in exc.value.errors
+        )
 
 
 class TestSyncStatusHistory:

@@ -54,16 +54,19 @@ def _sync_manager(request: Request):
 
 _LIBRARY_COUNT_CACHE: tuple[int, float] | None = None
 _LIBRARY_COUNT_TTL = 300  # 5 minutes
+_LIBRARY_COUNT_FAILURE_CACHE_AT: float | None = None
+_LIBRARY_COUNT_FAILURE_TTL = 30  # 30 seconds
+_LIBRARY_COUNT_PROBE_TIMEOUT_SECONDS = 3.0
 
 
 def _get_library_count(request: Request) -> int | None:
     """Fetch the live library size from Medusa. Returns None on failure.
 
     Successful counts are cached for five minutes to avoid hammering Medusa on
-    every dashboard stats poll. Failed fetches are not cached so a transient
-    outage does not suppress retries until the TTL expires.
+    every dashboard stats poll. Failed fetches are cached briefly so repeated
+    dashboard polls do not block workers during Medusa outages.
     """
-    global _LIBRARY_COUNT_CACHE
+    global _LIBRARY_COUNT_CACHE, _LIBRARY_COUNT_FAILURE_CACHE_AT
     config = _holder(request).get()
     if not config.medusa.url or not config.medusa.api_key:
         return None
@@ -73,15 +76,23 @@ def _get_library_count(request: Request) -> int | None:
         value, cached_at = _LIBRARY_COUNT_CACHE
         if now - cached_at < _LIBRARY_COUNT_TTL:
             return value
+    if _LIBRARY_COUNT_FAILURE_CACHE_AT is not None:
+        if now - _LIBRARY_COUNT_FAILURE_CACHE_AT < _LIBRARY_COUNT_FAILURE_TTL:
+            return None
+        _LIBRARY_COUNT_FAILURE_CACHE_AT = None
 
     try:
         with MedusaClient(config.medusa, max_retries=0, retry_backoff=0.0) as client:
-            result = len(client.get_existing_tvdb_ids())
+            result = len(
+                client.get_existing_tvdb_ids(request_timeout=_LIBRARY_COUNT_PROBE_TIMEOUT_SECONDS)
+            )
     except Exception:
         log.debug("Could not fetch Medusa library count for dashboard")
+        _LIBRARY_COUNT_FAILURE_CACHE_AT = now
         return None
 
     _LIBRARY_COUNT_CACHE = (result, now)
+    _LIBRARY_COUNT_FAILURE_CACHE_AT = None
     return result
 
 
@@ -265,7 +276,17 @@ async def save_trakt(request: Request):
         )
 
     # Parse sources from form
-    sources = _parse_sources_from_form(form)
+    try:
+        sources = _parse_sources_from_form(form)
+    except ConfigError as e:
+        error_html = (
+            '<div class="banner error" role="alert"><strong>Validation errors:</strong><ul>'
+        )
+        for err in e.errors:
+            error_html += f"<li>{escape(err)}</li>"
+        error_html += "</ul></div>"
+        return HTMLResponse(error_html, status_code=422)
+
     config_dict["trakt"]["sources"] = sources
 
     return _save_and_respond(request, config_dict, holder, "trakt")
@@ -939,6 +960,7 @@ def _parse_sources_from_form(form) -> list[dict]:
     indexes = sorted(
         {int(match.group(1)) for key in form if (match := index_pattern.match(key)) is not None}
     )
+    validation_errors: list[str] = []
     for index in indexes:
         source_type = form.get(f"source_{index}_type")
         if source_type is None:
@@ -997,11 +1019,19 @@ def _parse_sources_from_form(form) -> list[dict]:
         if bn:
             filters_opts["blacklisted_networks"] = _split_comma(bn)
         if bmy:
-            with contextlib.suppress(ValueError):
+            try:
                 filters_opts["blacklisted_min_year"] = int(bmy)
+            except ValueError:
+                validation_errors.append(
+                    f"Source #{index + 1}: blacklisted_min_year must be a valid integer."
+                )
         if bmaxy:
-            with contextlib.suppress(ValueError):
+            try:
                 filters_opts["blacklisted_max_year"] = int(bmaxy)
+            except ValueError:
+                validation_errors.append(
+                    f"Source #{index + 1}: blacklisted_max_year must be a valid integer."
+                )
         if btk:
             filters_opts["blacklisted_title_keywords"] = _split_comma(btk)
         if btids:
@@ -1014,6 +1044,9 @@ def _parse_sources_from_form(form) -> list[dict]:
             source_dict["filters"] = filters_opts
 
         sources.append(source_dict)
+
+    if validation_errors:
+        raise ConfigError(validation_errors)
     return sources
 
 

@@ -63,15 +63,19 @@ class MedusaClient(RetryClient):
             retry_backoff=retry_backoff,
         )
 
-    def _fetch_all_series(self) -> list[dict]:
+    def _fetch_all_series(self, request_timeout: float | None = None) -> list[dict]:
         """Return every series from Medusa, following API v2 pagination."""
         all_series: list[dict] = []
         page = 1
         while page <= _MEDUSA_SERIES_MAX_PAGES:
+            request_kwargs = {}
+            if request_timeout is not None:
+                request_kwargs["timeout"] = request_timeout
             resp = self._request(
                 "GET",
                 "/series",
                 params={"limit": _MEDUSA_SERIES_PAGE_LIMIT, "page": page},
+                **request_kwargs,
             )
             batch = resp.json()
             if not batch:
@@ -87,9 +91,9 @@ class MedusaClient(RetryClient):
             )
         return all_series
 
-    def get_existing_tvdb_ids(self) -> set[int]:
+    def get_existing_tvdb_ids(self, request_timeout: float | None = None) -> set[int]:
         """Fetch all existing show TVDB IDs from Medusa."""
-        series_list = self._fetch_all_series()
+        series_list = self._fetch_all_series(request_timeout=request_timeout)
 
         tvdb_ids = set()
         for series in series_list:
