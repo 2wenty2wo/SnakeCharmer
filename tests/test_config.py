@@ -12,6 +12,7 @@ from app.config import (
     WebUIConfig,
     _normalize_notify_urls,
     _normalize_trakt_sources,
+    _parse_show_filters,
     _safe_float,
     _safe_float_non_negative,
     _safe_int,
@@ -1064,3 +1065,62 @@ class TestGetConfigErrorsNumeric:
         config = AppConfig(**kwargs)
         errors = get_config_errors(config)
         assert "webui.port must be between 0 and 65535" in errors
+
+
+class TestLoadConfigErrorPaths:
+    """Cover the sys.exit branches in load_config that are hard to hit otherwise."""
+
+    def test_yaml_parse_error_exits(self, tmp_path, monkeypatch):
+        bad_yaml = tmp_path / "config.yaml"
+        bad_yaml.write_text("key: [\nunclosed bracket")
+
+        monkeypatch.setattr("app.config.sys.exit", lambda code: (_ for _ in ()).throw(SystemExit(code)))
+
+        with pytest.raises(SystemExit) as exc_info:
+            load_config(str(bad_yaml), skip_validate=True)
+        assert exc_info.value.code == 1
+
+    def test_non_dict_yaml_exits(self, tmp_path, monkeypatch):
+        list_yaml = tmp_path / "config.yaml"
+        list_yaml.write_text("- item1\n- item2\n")
+
+        monkeypatch.setattr("app.config.sys.exit", lambda code: (_ for _ in ()).throw(SystemExit(code)))
+
+        with pytest.raises(SystemExit) as exc_info:
+            load_config(str(list_yaml), skip_validate=True)
+        assert exc_info.value.code == 1
+
+
+class TestParseShowFiltersIntOrNone:
+    """Cover the _int_or_none fallback branch in _parse_show_filters."""
+
+    def test_none_value_returns_none(self):
+        filters = _parse_show_filters({"blacklisted_min_year": None})
+        assert filters.blacklisted_min_year is None
+
+    def test_int_value_returns_int(self):
+        filters = _parse_show_filters({"blacklisted_min_year": 2010})
+        assert filters.blacklisted_min_year == 2010
+
+    def test_digit_string_returns_int(self):
+        filters = _parse_show_filters({"blacklisted_min_year": "2010"})
+        assert filters.blacklisted_min_year == 2010
+
+    def test_negative_digit_string_returns_int(self):
+        filters = _parse_show_filters({"blacklisted_min_year": "-5"})
+        assert filters.blacklisted_min_year == -5
+
+    def test_non_digit_string_returns_value_as_is(self):
+        # Exercises the final `return value` fallback at line 377 of config.py.
+        filters = _parse_show_filters({"blacklisted_min_year": "bad"})
+        assert filters.blacklisted_min_year == "bad"
+
+    def test_float_returns_value_as_is(self):
+        # float is not int, not str → hits the fallback branch.
+        filters = _parse_show_filters({"blacklisted_min_year": 2000.5})
+        assert filters.blacklisted_min_year == 2000.5
+
+    def test_bool_returns_value_as_is(self):
+        # bool is a subclass of int but excluded by `not isinstance(value, bool)`.
+        filters = _parse_show_filters({"blacklisted_min_year": True})
+        assert filters.blacklisted_min_year is True

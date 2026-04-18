@@ -3118,3 +3118,248 @@ class TestMalformedInputs:
         )
         assert response.status_code == 200
         assert "Invalid OAuth polling parameters" in response.text
+
+
+# ---------------------------------------------------------------------------
+# _format_sse_event helper
+# ---------------------------------------------------------------------------
+
+
+class TestFormatSseEvent:
+    def test_basic_format(self):
+        from app.sync_events import SyncEvent
+
+        event = SyncEvent(id=5, type="sync.started", data={"run_id": 1}, ts=0.0)
+        result = webui_routes._format_sse_event(event)
+        assert result == 'id: 5\nevent: sync.started\ndata: {"run_id":1}\n\n'
+
+    def test_special_chars_in_data_are_serialized(self):
+        from app.sync_events import SyncEvent
+
+        event = SyncEvent(id=1, type="sync.log", data={"msg": 'he said "hi"'}, ts=0.0)
+        result = webui_routes._format_sse_event(event)
+        assert "sync.log" in result
+        assert "he said" in result
+
+    def test_non_serializable_falls_back_to_str(self):
+        import datetime
+        from app.sync_events import SyncEvent
+
+        dt = datetime.datetime(2024, 1, 1)
+        event = SyncEvent(id=2, type="sync.log", data={"ts": dt}, ts=0.0)
+        result = webui_routes._format_sse_event(event)
+        assert "2024-01-01" in result
+
+
+# ---------------------------------------------------------------------------
+# _get_library_count caching
+# ---------------------------------------------------------------------------
+
+
+class TestGetLibraryCount:
+    @pytest.fixture(autouse=True)
+    def reset_cache(self):
+        """Reset module-level cache globals before every test."""
+        webui_routes._LIBRARY_COUNT_CACHE = None
+        webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = None
+        yield
+        webui_routes._LIBRARY_COUNT_CACHE = None
+        webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = None
+
+    def _mock_request(self, tmp_path, medusa_url="http://localhost:8081"):
+        """Build a minimal mock request whose app state satisfies _get_library_count."""
+        config = _make_config(medusa=MedusaConfig(url=medusa_url, api_key="key"))
+        holder = MagicMock()
+        holder.get.return_value = config
+        req = MagicMock()
+        req.app.state.config_holder = holder
+        return req
+
+    def test_returns_count_on_success(self, tmp_path):
+        req = self._mock_request(tmp_path)
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.return_value = {1, 2, 3}
+            result = webui_routes._get_library_count(req)
+        assert result == 3
+
+    def test_caches_successful_result(self, tmp_path):
+        req = self._mock_request(tmp_path)
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.return_value = {1, 2, 3}
+            first = webui_routes._get_library_count(req)
+            second = webui_routes._get_library_count(req)
+        assert first == second == 3
+        # MedusaClient constructed only once — second call hits cache.
+        assert MockClient.call_count == 1
+
+    def test_returns_cached_value_within_ttl(self, tmp_path):
+        import time as _time
+
+        req = self._mock_request(tmp_path)
+        webui_routes._LIBRARY_COUNT_CACHE = (42, _time.monotonic())
+        result = webui_routes._get_library_count(req)
+        assert result == 42
+
+    def test_cache_refreshes_after_ttl(self, tmp_path):
+        import time as _time
+
+        req = self._mock_request(tmp_path)
+        # Plant a stale cache entry (TTL + 1 seconds old).
+        webui_routes._LIBRARY_COUNT_CACHE = (
+            99,
+            _time.monotonic() - webui_routes._LIBRARY_COUNT_TTL - 1,
+        )
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.return_value = {10, 20}
+            result = webui_routes._get_library_count(req)
+        assert result == 2  # fresh fetch, not the stale 99
+
+    def test_returns_none_on_exception(self, tmp_path):
+        req = self._mock_request(tmp_path)
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.side_effect = Exception("unreachable")
+            result = webui_routes._get_library_count(req)
+        assert result is None
+
+    def test_caches_failure_briefly(self, tmp_path):
+        req = self._mock_request(tmp_path)
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.side_effect = Exception("down")
+            webui_routes._get_library_count(req)
+            # Second call within failure TTL skips Medusa entirely.
+            result = webui_routes._get_library_count(req)
+        assert result is None
+        assert MockClient.call_count == 1
+
+    def test_failure_cache_expires_after_ttl(self, tmp_path):
+        import time as _time
+
+        req = self._mock_request(tmp_path)
+        # Plant a stale failure entry.
+        webui_routes._LIBRARY_COUNT_FAILURE_CACHE_AT = (
+            _time.monotonic() - webui_routes._LIBRARY_COUNT_FAILURE_TTL - 1
+        )
+        with patch("app.webui.routes.MedusaClient") as MockClient:
+            instance = MockClient.return_value.__enter__.return_value
+            instance.get_existing_tvdb_ids.return_value = {7}
+            result = webui_routes._get_library_count(req)
+        assert result == 1
+
+    def test_returns_none_when_no_medusa_url(self, tmp_path):
+        config = _make_config(medusa=MedusaConfig(url="", api_key="key"))
+        holder = MagicMock()
+        holder.get.return_value = config
+        req = MagicMock()
+        req.app.state.config_holder = holder
+        result = webui_routes._get_library_count(req)
+        assert result is None
+
+    def test_returns_none_when_no_medusa_api_key(self, tmp_path):
+        config = _make_config(medusa=MedusaConfig(url="http://localhost:8081", api_key=""))
+        holder = MagicMock()
+        holder.get.return_value = config
+        req = MagicMock()
+        req.app.state.config_holder = holder
+        result = webui_routes._get_library_count(req)
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# sync/events SSE endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestSyncEventsSSE:
+    def test_returns_503_when_no_sync_manager(self, tmp_path):
+        client, _, _ = _create_client(tmp_path)  # no with_sync
+        response = client.get("/sync/events")
+        assert response.status_code == 503
+        assert response.json()["error"] == "Sync manager not available"
+
+    def test_streams_retry_and_hello_events(self, tmp_path):
+        import queue as q_module
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        # Pre-fill a queue with a None sentinel so the stream exits immediately.
+        sentinel_q = q_module.Queue()
+        sentinel_q.put(None)
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            return_value=(sentinel_q, lambda: None),
+        ):
+            response = client.get("/sync/events")
+
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers["content-type"]
+        assert "retry: 3000" in response.text
+        assert "sync.hello" in response.text
+
+    def test_last_event_id_header_forwarded_as_after_id(self, tmp_path):
+        import queue as q_module
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        captured: list[int] = []
+        original_subscribe = client.app.state.sync_manager.broker.subscribe
+
+        def _capturing_subscribe(maxsize=1000, after_id=0):
+            captured.append(after_id)
+            q = q_module.Queue()
+            q.put(None)
+            return q, lambda: None
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            side_effect=_capturing_subscribe,
+        ):
+            client.get("/sync/events", headers={"last-event-id": "42"})
+
+        assert captured == [42]
+
+    def test_invalid_last_event_id_defaults_to_zero(self, tmp_path):
+        import queue as q_module
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+
+        captured: list[int] = []
+
+        def _capturing_subscribe(maxsize=1000, after_id=0):
+            captured.append(after_id)
+            q = q_module.Queue()
+            q.put(None)
+            return q, lambda: None
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            side_effect=_capturing_subscribe,
+        ):
+            client.get("/sync/events", headers={"last-event-id": "not-a-number"})
+
+        assert captured == [0]
+
+    def test_sse_response_includes_proper_headers(self, tmp_path):
+        import queue as q_module
+
+        client, _, _ = _create_client(tmp_path, with_sync=True)
+        sentinel_q = q_module.Queue()
+        sentinel_q.put(None)
+
+        with patch.object(
+            client.app.state.sync_manager.broker,
+            "subscribe",
+            return_value=(sentinel_q, lambda: None),
+        ):
+            response = client.get("/sync/events")
+
+        assert response.headers.get("cache-control") == "no-cache, no-transform"
+        assert response.headers.get("x-accel-buffering") == "no"
